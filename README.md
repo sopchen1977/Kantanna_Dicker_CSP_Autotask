@@ -82,15 +82,12 @@ matching billing period, so it bills correctly on a recurring contract:
 Service names carry the billing type, e.g.
 `Microsoft 365 Business Premium - Annual Commit (Monthly) [CFQ7TTC0LCHC]`.
 
-**Contracts per billing type.** Annual commits get ONE contract with a
-stable name (`CSP - {offer} - {subscription id}`) that is found again on
-every import; if a renewal moves the term end past the contract's end
-date, the contract endDate is extended automatically. Month-to-month
-subscriptions auto-renew at Dicker every cycle, so their contract name
-also carries the billing-cycle start
-(`CSP - {offer} - {subscription id} - {cycle start}`): each monthly CSP
-report creates a **new contract for that cycle** and the previous month's
-contract simply expires on its own end date.
+**One contract per subscription.** Every billing type gets ONE contract
+with a stable name (`CSP - {offer} - {subscription id}`, max 100 chars)
+that is found again on every import. When the new report's billing cycle
+(month-to-month auto-renews at Dicker each cycle) or a renewed annual
+term ends after the contract's current end date, the contract endDate is
+**extended in place** automatically.
 The import stores both monthly figures (`monthly_cost`/`monthly_rrp`, for
 comparison) and per-billing-period figures (`period_cost`/`period_rrp`, what
 Autotask bills). Sell prices in the portal are **per billing period** — per

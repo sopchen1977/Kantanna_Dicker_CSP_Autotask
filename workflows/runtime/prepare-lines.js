@@ -65,14 +65,11 @@ for (const l of rows) {
   if (effectiveDate > contractEnd) effectiveDate = contractEnd;
 
   // REQUIREMENT: the Subscription ID is always part of the contract name.
-  // Month-to-month subscriptions auto-renew in the Dicker portal, and each
-  // CSP report bills a fresh cycle — so their contract name also carries the
-  // billing-cycle start date. A new cycle means a new name, which means a
-  // NEW Autotask contract each month; the previous month's contract simply
-  // expires at its end date. Annual commits keep a stable name so the same
-  // contract is found (and extended) across reports.
-  let contractName = 'CSP - ' + String(l.offer_name || '') + ' - ' + l.subscription_id;
-  if (billingType === 'monthly') contractName += ' - ' + contractStart;
+  // ONE contract per subscription for every billing type: each monthly CSP
+  // report finds the same contract again, and when the new billing cycle
+  // (month-to-month auto-renews at Dicker) or a renewed term ends after
+  // the contract's endDate, the contract end date is extended in place.
+  const contractName = 'CSP - ' + String(l.offer_name || '') + ' - ' + l.subscription_id;
 
   out.push({ json: Object.assign({}, l, {
     line_key: l.subscription_id + '|' + l.stock_code,

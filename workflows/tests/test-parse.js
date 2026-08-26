@@ -125,11 +125,9 @@ const pMtm = prepared.find((i) => i.json.subscription_id === 'SUB-2').json;
 assert.strictEqual(pMtm.service_key, 'MTM:CFQ7TTC0LCHC');
 assert.strictEqual(pMtm.service_period_type, 2);
 assert.ok(pMtm.service_name.includes('Month to Month'));
-// Month-to-month contracts are per-billing-cycle: the cycle start is part of
-// the name, so each new Dicker cycle creates a NEW Autotask contract.
-assert.strictEqual(pMtm.contract_name,
-  'CSP - Microsoft 365 Business Premium - SUB-2 - ' + pMtm.contract_start);
-// Annual contracts keep a stable name (no date suffix)
+// One contract per subscription for every billing type: stable names, so
+// each monthly report finds (and extends) the same contract.
+assert.strictEqual(pMtm.contract_name, 'CSP - Microsoft 365 Business Premium - SUB-2');
 assert.strictEqual(pAnnMo.contract_name, 'CSP - Microsoft 365 Business Premium - SUB-1');
 const pAnnYr = prepared.find((i) => i.json.subscription_id === 'SUB-4').json;
 assert.strictEqual(pAnnYr.service_key, 'ANN-YR:CFQ7TTC0LFLZ');

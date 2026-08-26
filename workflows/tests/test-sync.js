@@ -209,23 +209,19 @@ const cdOk = runNode('contract-decision.js',
   [{ json: { items: [{ id: 7001, contractName: 'CSP - Thing - SUB-A', endDate: '2026-12-28T00:00:00Z' }] } }], nE)[0].json;
 assert.strictEqual(cdOk.need_date_fix, false);
 
-// -- Month-to-month: a new billing cycle means a NEW contract --
+// -- Month-to-month: the next billing cycle EXTENDS the same contract --
 const lineM = Object.assign({}, line, {
   billing_type: 'monthly',
-  contract_name: 'CSP - Thing - SUB-A - 2026-08-22',
+  contract_name: 'CSP - Thing - SUB-A',
   contract_start: '2026-08-22', contract_end: '2026-09-21',
 });
 const nM = { 'Current Line': [{ json: lineM }] };
-// Only last cycle's contract exists -> no exact match -> create a new one
 const cdNewCycle = runNode('contract-decision.js',
-  [{ json: { items: [{ id: 7005, contractName: 'CSP - Thing - SUB-A - 2026-07-22', endDate: '2026-08-21T00:00:00Z' }] } }], nM)[0].json;
-assert.strictEqual(cdNewCycle.need_contract, true, 'new monthly cycle must create a new contract');
-assert.strictEqual(cdNewCycle.need_date_fix, false, 'old monthly contract must NOT be extended');
-// Same cycle re-synced -> exact match found, no duplicate
-const cdSameCycle = runNode('contract-decision.js',
-  [{ json: { items: [{ id: 7006, contractName: 'CSP - Thing - SUB-A - 2026-08-22', endDate: '2026-09-21T00:00:00Z' }] } }], nM)[0].json;
-assert.strictEqual(cdSameCycle.need_contract, false);
-assert.strictEqual(cdSameCycle.contract_id, 7006);
+  [{ json: { items: [{ id: 7005, contractName: 'CSP - Thing - SUB-A', endDate: '2026-08-21T00:00:00Z' }] } }], nM)[0].json;
+assert.strictEqual(cdNewCycle.need_contract, false, 'monthly cycle reuses the same contract');
+assert.strictEqual(cdNewCycle.contract_id, 7005);
+assert.strictEqual(cdNewCycle.need_date_fix, true, 'new cycle end extends the contract');
+assert.strictEqual(cdNewCycle.contract_end_needed, '2026-09-21');
 
 const r3 = runNode('sync-result.js', [{ json: {} }], n3)[0].json;
 console.log('scenario 3 (API errors):', r3.sync_status, '|', r3.sync_message.slice(0, 120));
