@@ -48,8 +48,8 @@ Everything lives in the n8n project **Kantanna Dicker CSP and Autotask**
 
 ## Monthly run
 
-1. Open the **01 · Annuity Import** form (production URL of the form trigger)
-   and upload both files. File detection is by name: one must contain
+1. Open the upload form at
+   `https://gayleai.app.n8n.cloud/form/csp-import` and upload both files. File detection is by name: one must contain
    “Annuity”, the other “Invoice”/“CSP”.
 2. Open the portal: `https://gayleai.app.n8n.cloud/webhook/csp-pricing`.
    - Map any customers flagged **not mapped**.
