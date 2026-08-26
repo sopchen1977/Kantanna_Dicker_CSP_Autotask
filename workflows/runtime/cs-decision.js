@@ -21,6 +21,7 @@ const cs = items.find((c) => Number(c.serviceID) === Number(serviceId)) || null;
 // internalCurrencyUnitPrice / unitPrice, so divide it back out.
 function currentPrice(c) {
   if (c.adjustedPrice !== undefined && c.adjustedPrice !== null) return Number(c.adjustedPrice);
+  if (Number(c.internalCurrencyAdjustedPrice) === 0) return 0; // $0 line ($0 sell)
   const mult = Number(c.internalCurrencyUnitPrice) / Number(c.unitPrice);
   if (c.internalCurrencyAdjustedPrice !== undefined && c.internalCurrencyAdjustedPrice !== null
       && isFinite(mult) && mult > 0) {

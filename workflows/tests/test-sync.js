@@ -124,6 +124,15 @@ const csDiff = runNode('cs-decision.js', [{ json: { items: [
 ] } }], n2)[0].json;
 assert.strictEqual(csDiff.action, 'patch');
 assert.ok(Math.abs(csDiff.old_price - 30) < 0.005, '1200/40 = 30');
+// $0 line at a $0 sell: read-back is all zeros -> no re-patch
+const nZ = { 'Current Line': [{ json: Object.assign({}, line, { effective_sell: 0 }) }],
+  'Contract Decision': n2['Contract Decision'], 'Contract From Create': n2['Contract From Create'],
+  'Record Service': n2['Record Service'] };
+const csZero = runNode('cs-decision.js', [{ json: { items: [
+  { id: 8001, serviceID: 9001, internalCurrencyAdjustedPrice: 0, internalCurrencyUnitPrice: 0, unitPrice: 0 },
+] } }], nZ)[0].json;
+assert.strictEqual(csZero.action, 'none', '$0 price must not re-patch every run');
+assert.strictEqual(csZero.old_price, 0);
 n2['Units Decision'] = runNode('units-decision.js', [{ json: { items: [{ startDate: '2026-08-01', units: 51 }] } }], n2);
 assert.strictEqual(n2['Units Decision'][0].json.plan_count, 0, 'units already match -> no adjustments');
 const r2 = runNode('sync-result.js', [{ json: {} }], n2)[0].json;

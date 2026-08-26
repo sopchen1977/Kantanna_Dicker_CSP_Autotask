@@ -90,7 +90,9 @@ function effSell(l) {
 function effInclude(l) {
   if (l.include === false) return false;
   if (l.include === true) return true;
-  return l.charge_type === 'NCE' && l.status === 'Active' && periodRrp(l) > 0;
+  // $0 lines (e.g. Teams Phone Resource accounts) are included too and
+  // simply sync at a $0 sell price.
+  return l.charge_type === 'NCE' && l.status === 'Active';
 }
 function marginPct(l) {
   var s = effSell(l), c = periodCost(l);

@@ -35,6 +35,10 @@ const annuity = [
     'STOCK CODE': 'P1Y:CFQ7TTC0LFLZ:0002:Y:', 'STOCK DESCRIPTION': 'MS NCE M365 E5 1YR ANNUAL BILL', 'REFERENCE': 'Microsoft 365 E5',
     'QTY': '10.00', 'CHARGE TYPE': 'NCE', 'STATUS': 'Active', 'START USAGE': '01-JAN-2026', 'END USAGE': '01-JAN-2026',
     'REVALUATION PERIOD': '28-DEC-2026', 'UNIT PRICE': '$835.26', 'UNIT RRP': '$1,000.00' },
+  { 'TENANT ID': 'T2', 'TENANT NAME': 'Galilee Solicitors', 'SUBSCRIPTION ID': 'SUB-5',
+    'STOCK CODE': 'P1Y:CFQ7TTC0LH0R:0001:1:', 'STOCK DESCRIPTION': 'MS NCE TEAMS PHONE RESOURCE', 'REFERENCE': 'Microsoft Teams Phone Resource',
+    'QTY': '4.00', 'CHARGE TYPE': 'NCE', 'STATUS': 'Active', 'START USAGE': '20-MAY-2026', 'END USAGE': '20-MAY-2026',
+    'REVALUATION PERIOD': '30-SEP-2026', 'UNIT PRICE': '$0.00', 'UNIT RRP': '$0.00' },
   { 'TENANT ID': 'T9', 'TENANT NAME': 'Some Other Customer', 'SUBSCRIPTION ID': 'SUB-9',
     'STOCK CODE': 'P1Y:XXXX:0001:1:', 'STOCK DESCRIPTION': 'Other', 'REFERENCE': 'Other',
     'QTY': '1.00', 'CHARGE TYPE': 'NCE', 'STATUS': 'Active', 'START USAGE': '', 'END USAGE': '',
@@ -59,8 +63,8 @@ const nodes = {
 };
 const parsed = runNode('parse-lines.js', [{ json: {} }], nodes);
 
-// Pilot filter keeps only Atlas + Galilee
-assert.strictEqual(parsed.length, 4, 'pilot filter should keep 4 lines');
+// Pilot filter keeps only pilot customers
+assert.strictEqual(parsed.length, 5, 'pilot filter should keep 5 lines');
 assert.ok(!parsed.some((i) => i.json.tenant_name === 'Some Other Customer'));
 
 // Billing type 1: Annual Commit paid Monthly (P1Y:...:1:)
@@ -103,7 +107,11 @@ assert.strictEqual(azure.charge_type, 'MODN');
 // prepare-lines: default include rule + subscription id in contract name
 const tableRows = parsed.map((i) => ({ json: Object.assign({}, i.json, { include: null, use_custom_price: null, sell_price: null }) }));
 const prepared = runNode('prepare-lines.js', tableRows, {});
-assert.strictEqual(prepared.length, 3, 'Azure/MODN line must be excluded by default');
+assert.strictEqual(prepared.length, 4, 'Azure/MODN line must be excluded by default; $0 NCE lines stay in');
+// $0 NCE line (Teams Phone Resource) is included and sells at $0
+const pZero = prepared.find((i) => i.json.subscription_id === 'SUB-5').json;
+assert.strictEqual(pZero.effective_sell, 0);
+assert.strictEqual(pZero.period_rrp, 0);
 for (const i of prepared) {
   assert.ok(i.json.contract_name.includes(i.json.subscription_id), 'Subscription ID must be in contract name');
   assert.strictEqual(i.json.effective_sell, i.json.period_rrp, 'default sell price is the per-period RRP');

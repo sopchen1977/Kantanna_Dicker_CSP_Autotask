@@ -1,6 +1,7 @@
 // Decide which lines to sync and precompute everything Autotask needs.
-// Default include rule: NCE + Active + has an RRP. Explicit include/exclude
-// saved from the portal always wins.
+// Default include rule: NCE + Active ($0 lines like Teams Phone Resource
+// accounts sync at a $0 sell price). Explicit include/exclude saved from
+// the portal always wins.
 const rows = $input.all().map((i) => i.json).filter((j) => j.subscription_id);
 const today = new Date().toISOString().slice(0, 10);
 
@@ -34,7 +35,7 @@ for (const l of rows) {
   const periodCost = Number(l.period_cost !== null && l.period_cost !== undefined ? l.period_cost : l.monthly_cost) || 0;
 
   const active = l.status === 'Active';
-  const defInclude = l.charge_type === 'NCE' && active && periodRrp > 0;
+  const defInclude = l.charge_type === 'NCE' && active;
   const inc = l.include === true ? true : (l.include === false ? false : defInclude);
   if (!inc) continue;
 
