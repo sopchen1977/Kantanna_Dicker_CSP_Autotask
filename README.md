@@ -8,9 +8,10 @@ Everything lives in the n8n project **Kantanna Dicker CSP and Autotask**
 (`https://gayleai.app.n8n.cloud`, project id `RGbuWbB4pjqi8VT3`).
 
 > **Pilot scope:** the import currently only keeps lines for
-> **ATLAS OUTSOURCING PTY LTD** and **Galilee Solicitors**. Edit the
-> `PILOT_CUSTOMERS` list at the top of the *Parse Subscription Lines* Code
-> node (workflow 01) to add customers, or make the list empty to import all.
+> **ATLAS OUTSOURCING PTY LTD**, **Galilee Solicitors** and
+> **B E Smart Admin Services**. Edit the `PILOT_CUSTOMERS` list at the top
+> of the *Parse Subscription Lines* Code node (workflow 01) to add
+> customers, or make the list empty to import all.
 
 ## The three workflows
 
