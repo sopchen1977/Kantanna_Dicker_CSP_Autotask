@@ -15,10 +15,25 @@ const resp = $input.first().json || {};
 const items = resp.items || [];
 const cs = items.find((c) => Number(c.serviceID) === Number(serviceId)) || null;
 
+// The current sell price of an existing contract service. The query does
+// not return adjustedPrice — only internalCurrencyAdjustedPrice, which is
+// scaled by the instance's internal-currency factor. That same factor is
+// internalCurrencyUnitPrice / unitPrice, so divide it back out.
+function currentPrice(c) {
+  if (c.adjustedPrice !== undefined && c.adjustedPrice !== null) return Number(c.adjustedPrice);
+  const mult = Number(c.internalCurrencyUnitPrice) / Number(c.unitPrice);
+  if (c.internalCurrencyAdjustedPrice !== undefined && c.internalCurrencyAdjustedPrice !== null
+      && isFinite(mult) && mult > 0) {
+    return Math.round((Number(c.internalCurrencyAdjustedPrice) / mult) * 100) / 100;
+  }
+  return null; // unknown -> re-price to be safe
+}
+
+const oldPrice = cs ? currentPrice(cs) : null;
 let action = 'none';
 if (!cid || !serviceId) action = 'none';
 else if (!cs) action = 'create';
-else if (Math.abs(Number(cs.adjustedPrice || 0) - Number(line.effective_sell)) > 0.005) action = 'patch';
+else if (oldPrice === null || Math.abs(oldPrice - Number(line.effective_sell)) > 0.005) action = 'patch';
 
 return [{ json: {
   line_key: line.line_key,
@@ -26,6 +41,6 @@ return [{ json: {
   contract_id: cid,
   service_id: serviceId,
   cs_id: cs ? cs.id : null,
-  old_price: cs ? Number(cs.adjustedPrice || 0) : null,
+  old_price: oldPrice,
   sell: Number(line.effective_sell),
 } }];

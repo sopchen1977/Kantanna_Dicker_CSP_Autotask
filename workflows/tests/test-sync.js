@@ -111,6 +111,19 @@ n2['CS Decision'] = runNode('cs-decision.js', [{ json: { items: [{ id: 8001, ser
 assert.strictEqual(n2['CS Decision'][0].json.action, 'patch');
 assert.strictEqual(n2['CS Decision'][0].json.contract_id, 7001, 'stale create data must not leak');
 n2['CS After Patch'] = runNode('cs-after-patch.js', [{ json: {} }], n2);
+// The query only returns internalCurrency* fields; the scale factor is
+// internalCurrencyUnitPrice / unitPrice. Same price -> no patch (idempotent).
+const csSame = runNode('cs-decision.js', [{ json: { items: [
+  { id: 8001, serviceID: 9001, internalCurrencyAdjustedPrice: 1382, internalCurrencyUnitPrice: 1382, unitPrice: 34.55 },
+] } }], n2)[0].json;
+assert.strictEqual(csSame.action, 'none', 'unchanged internal-currency price must not re-patch');
+assert.ok(Math.abs(csSame.old_price - 34.55) < 0.005);
+// Different price via internal-currency fields -> patch with the real old price
+const csDiff = runNode('cs-decision.js', [{ json: { items: [
+  { id: 8001, serviceID: 9001, internalCurrencyAdjustedPrice: 1200, internalCurrencyUnitPrice: 1382, unitPrice: 34.55 },
+] } }], n2)[0].json;
+assert.strictEqual(csDiff.action, 'patch');
+assert.ok(Math.abs(csDiff.old_price - 30) < 0.005, '1200/40 = 30');
 n2['Units Decision'] = runNode('units-decision.js', [{ json: { items: [{ startDate: '2026-08-01', units: 51 }] } }], n2);
 assert.strictEqual(n2['Units Decision'][0].json.plan_count, 0, 'units already match -> no adjustments');
 const r2 = runNode('sync-result.js', [{ json: {} }], n2)[0].json;
