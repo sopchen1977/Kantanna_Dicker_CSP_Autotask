@@ -42,6 +42,7 @@ CODE_TOKENS = {
     "__CS_FROM_CREATE__": "cs-from-create.js",
     "__CS_AFTER_PATCH__": "cs-after-patch.js",
     "__UNITS_DECISION__": "units-decision.js",
+    "__SPLIT_PLAN__": "split-plan.js",
     "__ADJUST_RESULT__": "adjust-result.js",
     "__SYNC_RESULT__": "sync-result.js",
     "__SYNC_DONE__": "sync-done.js",

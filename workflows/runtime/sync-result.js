@@ -42,10 +42,11 @@ if (csPatch) {
   else notes.push('price ' + csPatch.old_price + ' -> ' + csPatch.sell
     + (csPatch.effective_date ? ' effective ' + csPatch.effective_date : ''));
 }
-if (units && units.delta !== 0 && csId) {
+if (units && units.plan_count > 0 && csId) {
   const adj = grab('Adjust Result');
   if (adj && adj.adjust_error) errors.push('unit adjustment failed: ' + adj.adjust_error);
-  else notes.push('units ' + units.current_units + ' -> ' + units.target_units);
+  else notes.push('units ' + units.current_units + ' -> ' + units.target_units +
+    ' (' + units.plan_summary + ')');
 }
 if (!serviceId) errors.push('no Autotask service resolved');
 if (!contractId) errors.push('no Autotask contract resolved');

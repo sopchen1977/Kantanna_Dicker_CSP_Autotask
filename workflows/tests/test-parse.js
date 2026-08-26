@@ -42,9 +42,14 @@ const annuity = [
 ];
 const invoice = [
   { 'TENANT NAME': 'ATLAS OUTSOURCING PTY LTD', 'SUBSCRIPTION ID': 'SUB-1', 'STOCK CODE': 'P1Y:CFQ7TTC0LCHC:0002:1:',
+    'USAGE START': '31-JUL-2026', 'USAGE END': '30-AUG-2026', 'QTY': '275', 'UNIT PRICE': '28.19',
     'TERM START': '31-AUG-2025', 'TERM END': '30-AUG-2026' },
   { 'TENANT NAME': 'ATLAS OUTSOURCING PTY LTD', 'SUBSCRIPTION ID': 'SUB-1', 'STOCK CODE': 'P1Y:CFQ7TTC0LCHC:0002:1:',
+    'USAGE START': '13-JUL-2026', 'USAGE END': '30-JUL-2026', 'QTY': '6', 'UNIT PRICE': '16.37',
     'TERM START': '01-JAN-2025', 'TERM END': '31-DEC-2025' },
+  { 'TENANT NAME': 'ATLAS OUTSOURCING PTY LTD', 'SUBSCRIPTION ID': 'SUB-1', 'STOCK CODE': 'P1Y:CFQ7TTC0LCHC:0002:1:',
+    'USAGE START': '27-JUL-2026', 'USAGE END': '30-JUL-2026', 'QTY': '10', 'UNIT PRICE': '3.64',
+    'TERM START': '31-AUG-2025', 'TERM END': '30-AUG-2026' },
 ];
 
 const nodes = {
@@ -70,6 +75,11 @@ assert.ok(Math.abs(bp.period_rrp - 34.55) < 0.001, 'billed monthly -> period pri
 // Latest term wins when the invoice has multiple rows
 assert.strictEqual(bp.term_start, '2025-08-31');
 assert.strictEqual(bp.term_end, '2026-08-30');
+// Invoice lines (incl. pro-rata) captured chronologically for replay
+const invLines = JSON.parse(bp.invoice_lines);
+assert.strictEqual(invLines.length, 3);
+assert.deepStrictEqual(invLines.map((x) => [x.s, x.q]),
+  [['2026-07-13', 6], ['2026-07-27', 10], ['2026-07-31', 275]]);
 
 // Billing type 3: Month to Month (P1M:...:1:)
 const bpMonthly = parsed.find((i) => i.json.subscription_id === 'SUB-2').json;

@@ -541,13 +541,24 @@ const needAdjust = ifElse({
       conditions: {
         options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
         conditions: [
-          { leftValue: expr('{{ $json.delta }}'), operator: { type: 'number', operation: 'notEquals' }, rightValue: 0 },
+          { leftValue: expr('{{ $json.plan_count }}'), operator: { type: 'number', operation: 'gt' }, rightValue: 0 },
           { leftValue: expr('{{ $json.cs_id ?? "" }}'), operator: { type: 'string', operation: 'notEmpty', singleValue: true } }
         ],
         combinator: 'and'
       }
     }
   }
+});
+
+const splitPlan = node({
+  type: 'n8n-nodes-base.code',
+  version: 2,
+  config: {
+    name: 'Split Plan',
+    position: [5250, -120],
+    parameters: { mode: 'runOnceForAllItems', jsCode: __SPLIT_PLAN__ }
+  },
+  output: [{ line_key: '2F295B21|P1Y:CFQ7TTC0LCHC:0002:1:', contract_id: 7001, service_id: 9001, cs_id: 8001, sell: 34.55, change: 259, date: '2025-08-31' }]
 });
 
 const adjustUnits = node({
@@ -564,8 +575,8 @@ const adjustUnits = node({
       genericAuthType: 'httpCustomAuth',
       sendBody: true,
       specifyBody: 'json',
-      jsonBody: expr('{{ JSON.stringify({ contractID: $json.contract_id, serviceID: $json.service_id, unitChange: $json.delta, effectiveDate: $("Current Line").first().json.price_effective_date, adjustedUnitPrice: $json.sell }) }}'),
-      options: {}
+      jsonBody: expr('{{ JSON.stringify({ contractID: $json.contract_id, serviceID: $json.service_id, unitChange: $json.change, effectiveDate: $json.date, adjustedUnitPrice: $json.sell }) }}'),
+      options: { batching: { batch: { batchSize: 1, batchInterval: 400 } } }
     },
     credentials: { httpCustomAuth: newCredential('KantannaAutotask') }
   },
@@ -674,7 +685,7 @@ export default workflow('kantanna-csp-03-sync', '03 · Autotask Sync')
   .add(fetchUnits)
   .to(unitsDecision)
   .to(needAdjust
-    .onTrue(adjustUnits.to(adjustResult.to(syncResult)))
+    .onTrue(splitPlan.to(adjustUnits.to(adjustResult.to(syncResult))))
     .onFalse(syncResult))
   .add(syncResult)
   .to(markSynced)

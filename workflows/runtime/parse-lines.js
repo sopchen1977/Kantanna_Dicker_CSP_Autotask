@@ -49,15 +49,29 @@ function parseStock(code) {
 const annuityRows = $('Extract Annuity Details').all().map((i) => i.json);
 const invoiceRows = $('Extract Invoice Details').all().map((i) => i.json);
 
-// Latest TERM START/END per subscription + stock code from the invoice report.
+// Latest TERM START/END per subscription + stock code from the invoice
+// report, plus every invoice line (usage window + qty + unit price) so the
+// sync can replay quantity changes chronologically, pro-rata items included.
 const terms = {};
+const invByKey = {};
 for (const r of invoiceRows) {
   const key = String(r['SUBSCRIPTION ID'] || '').trim() + '|' + String(r['STOCK CODE'] || '').trim();
   const te = toIso(r['TERM END']);
-  if (!te) continue;
-  if (!terms[key] || te > terms[key].term_end) {
+  if (te && (!terms[key] || te > terms[key].term_end)) {
     terms[key] = { term_start: toIso(r['TERM START']), term_end: te };
   }
+  const us = toIso(r['USAGE START']);
+  if (us) {
+    (invByKey[key] = invByKey[key] || []).push({
+      s: us,
+      e: toIso(r['USAGE END']),
+      q: num(r['QTY']),
+      u: num(r['UNIT PRICE']),
+    });
+  }
+}
+for (const key of Object.keys(invByKey)) {
+  invByKey[key].sort((a, b) => String(a.s).localeCompare(String(b.s)));
 }
 
 const importedAt = new Date().toISOString();
@@ -105,6 +119,7 @@ for (const r of annuityRows) {
     period_rrp: Math.round((unitRrp / s.months) * s.billing_months * 10000) / 10000,
     term_start: t.term_start || '',
     term_end: t.term_end || '',
+    invoice_lines: JSON.stringify(invByKey[subId + '|' + stockCode] || []).slice(0, 4000),
     imported_at: importedAt,
     source_file: sourceFile,
     sync_status: 'pending',
