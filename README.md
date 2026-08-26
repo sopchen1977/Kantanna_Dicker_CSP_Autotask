@@ -41,8 +41,8 @@ Everything lives in the n8n project **Kantanna Dicker CSP and Autotask**
    *Autotask Config* and workflow 02 → *Portal Autotask Config*. Verify with
    `GET https://webservices.autotask.net/atservicesrest/v1.0/zoneInformation?user=<api-user>`
    if API calls come back 404/redirected.
-3. **Set `material_code_id`** in *Autotask Config* — a Material Code (allocation
-   code) id from Autotask, required when the sync creates Services.
+3. **Material code**: already set — Services are created with material code
+   `594` (Cloud and SaaS) via *Autotask Config*.
 4. Check the contract defaults in *Autotask Config*: contract type `7`
    (Recurring Service), status `1` (Active), monthly period.
 

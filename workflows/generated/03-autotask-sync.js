@@ -24,7 +24,7 @@ const autotaskConfig = node({
       assignments: {
         assignments: [
           { id: 'cfg-base-url', name: 'base_url', type: 'string', value: 'https://webservices31.autotask.net/atservicesrest/v1.0' },
-          { id: 'cfg-material-code', name: 'material_code_id', type: 'number', value: 0 },
+          { id: 'cfg-material-code', name: 'material_code_id', type: 'number', value: 594 },
           { id: 'cfg-contract-type', name: 'contract_type', type: 'number', value: 7 },
           { id: 'cfg-contract-status', name: 'contract_status', type: 'number', value: 1 },
           { id: 'cfg-contract-period', name: 'contract_period_type', type: 'string', value: 'm' },
@@ -33,7 +33,7 @@ const autotaskConfig = node({
       }
     }
   },
-  output: [{ base_url: 'https://webservices31.autotask.net/atservicesrest/v1.0', material_code_id: 0, contract_type: 7, contract_status: 1, contract_period_type: 'm', service_period_type: 'm' }]
+  output: [{ base_url: 'https://webservices31.autotask.net/atservicesrest/v1.0', material_code_id: 594, contract_type: 7, contract_status: 1, contract_period_type: 'm', service_period_type: 'm' }]
 });
 
 const fetchSyncLines = node({
