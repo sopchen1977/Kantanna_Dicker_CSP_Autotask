@@ -41,8 +41,9 @@ Everything lives in the n8n project **Kantanna Dicker CSP and Autotask**
    *Autotask Config* and workflow 02 → *Portal Autotask Config*. Verify with
    `GET https://webservices.autotask.net/atservicesrest/v1.0/zoneInformation?user=<api-user>`
    if API calls come back 404/redirected.
-3. **Billing code**: Services are created with `billingCodeID 594`
-   (Cloud and SaaS) via *Autotask Config*. Note the REST API's picklists are
+3. **Billing code**: Services are created with `billingCodeID 29683278`
+   ("Cloud and SaaS" — note the UI shows display number 594, but the API
+   needs the entity ID) via *Autotask Config*. Note the REST API's picklists are
    integers: Service/contract period type 2 = Monthly, 5 = Yearly (confirmed
    via the ww31 `entityInformation/fields` endpoint; see the
    *ZZ · Autotask Field Inspector* utility workflow).
