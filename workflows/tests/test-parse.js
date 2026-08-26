@@ -102,7 +102,7 @@ for (const i of prepared) {
 const pAnnMo = prepared.find((i) => i.json.subscription_id === 'SUB-1').json;
 assert.strictEqual(pAnnMo.service_key, 'ANN-MO:CFQ7TTC0LCHC');
 assert.strictEqual(pAnnMo.service_period_type, 2);
-assert.ok(pAnnMo.service_name.includes('Annual Commit (Monthly)'));
+assert.ok(pAnnMo.service_name.includes('Annual Commit (Billed Monthly)'));
 const pMtm = prepared.find((i) => i.json.subscription_id === 'SUB-2').json;
 assert.strictEqual(pMtm.service_key, 'MTM:CFQ7TTC0LCHC');
 assert.strictEqual(pMtm.service_period_type, 2);
@@ -111,7 +111,7 @@ const pAnnYr = prepared.find((i) => i.json.subscription_id === 'SUB-4').json;
 assert.strictEqual(pAnnYr.service_key, 'ANN-YR:CFQ7TTC0LFLZ');
 assert.strictEqual(pAnnYr.service_period_type, 5, 'upfront billing -> yearly service period (Autotask picklist 5)');
 assert.strictEqual(pAnnYr.effective_sell, 1000);
-assert.ok(pAnnYr.service_name.includes('Annual Commit (Upfront)'));
+assert.ok(pAnnYr.service_name.includes('Annual Commit (Billed Annually)'));
 
 // custom price override wins
 tableRows[0].json.use_custom_price = true;

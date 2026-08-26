@@ -19,8 +19,8 @@ function addMonths(iso, months) {
 //   annual_upfront -> Annual commit, billed annually  (periodType 5)
 //   monthly        -> Month-to-month                  (periodType 2)
 const BILLING = {
-  annual_monthly: { label: 'Annual Commit (Monthly)', period_type: 2, key: 'ANN-MO' },
-  annual_upfront: { label: 'Annual Commit (Upfront)', period_type: 5, key: 'ANN-YR' },
+  annual_monthly: { label: 'Annual Commit (Billed Monthly)', period_type: 2, key: 'ANN-MO' },
+  annual_upfront: { label: 'Annual Commit (Billed Annually)', period_type: 5, key: 'ANN-YR' },
   monthly: { label: 'Month to Month', period_type: 2, key: 'MTM' },
   usage: { label: 'Usage', period_type: 2, key: 'USAGE' },
 };
