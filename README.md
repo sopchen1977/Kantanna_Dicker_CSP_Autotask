@@ -41,8 +41,11 @@ Everything lives in the n8n project **Kantanna Dicker CSP and Autotask**
    *Autotask Config* and workflow 02 → *Portal Autotask Config*. Verify with
    `GET https://webservices.autotask.net/atservicesrest/v1.0/zoneInformation?user=<api-user>`
    if API calls come back 404/redirected.
-3. **Material code**: already set — Services are created with material code
-   `594` (Cloud and SaaS) via *Autotask Config*.
+3. **Billing code**: Services are created with `billingCodeID 594`
+   (Cloud and SaaS) via *Autotask Config*. Note the REST API's picklists are
+   integers: Service/contract period type 2 = Monthly, 5 = Yearly (confirmed
+   via the ww31 `entityInformation/fields` endpoint; see the
+   *ZZ · Autotask Field Inspector* utility workflow).
 4. Check the contract defaults in *Autotask Config*: contract type `7`
    (Recurring Service), status `1` (Active), monthly period.
 
@@ -69,9 +72,9 @@ matching billing period, so it bills correctly on a recurring contract:
 
 | Stock code pattern | Billing type | Service key | Autotask period | Price basis |
 |---|---|---|---|---|
-| `P1Y:{sku}:…:1:` | Annual Commit, paid **Monthly** | `ANN-MO:{sku}` | `m` (monthly) | annual ÷ 12, per month |
-| `P1Y:{sku}:…:Y:` | Annual Commit, paid **Annually (upfront)** | `ANN-YR:{sku}` | `y` (yearly) | full annual amount, per year |
-| `P1M:{sku}:…:1:` | **Month to Month** | `MTM:{sku}` | `m` (monthly) | monthly amount |
+| `P1Y:{sku}:…:1:` | Annual Commit, paid **Monthly** | `ANN-MO:{sku}` | 2 (Monthly) | annual ÷ 12, per month |
+| `P1Y:{sku}:…:Y:` | Annual Commit, paid **Annually (upfront)** | `ANN-YR:{sku}` | 5 (Yearly) | full annual amount, per year |
+| `P1M:{sku}:…:1:` | **Month to Month** | `MTM:{sku}` | 2 (Monthly) | monthly amount |
 | `DZH…` (Azure) | Usage-based | excluded by default | — | — |
 
 Service names carry the billing type, e.g.

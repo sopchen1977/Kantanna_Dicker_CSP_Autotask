@@ -24,16 +24,16 @@ const autotaskConfig = node({
       assignments: {
         assignments: [
           { id: 'cfg-base-url', name: 'base_url', type: 'string', value: 'https://webservices31.autotask.net/atservicesrest/v1.0' },
-          { id: 'cfg-material-code', name: 'material_code_id', type: 'number', value: 594 },
+          { id: 'cfg-billing-code', name: 'billing_code_id', type: 'number', value: 594 },
           { id: 'cfg-contract-type', name: 'contract_type', type: 'number', value: 7 },
           { id: 'cfg-contract-status', name: 'contract_status', type: 'number', value: 1 },
-          { id: 'cfg-contract-period', name: 'contract_period_type', type: 'string', value: 'm' },
-          { id: 'cfg-service-period', name: 'service_period_type', type: 'string', value: 'm' }
+          { id: 'cfg-contract-period', name: 'contract_period_type', type: 'number', value: 2 },
+          { id: 'cfg-service-period', name: 'service_period_type', type: 'number', value: 2 }
         ]
       }
     }
   },
-  output: [{ base_url: 'https://webservices31.autotask.net/atservicesrest/v1.0', material_code_id: 594, contract_type: 7, contract_status: 1, contract_period_type: 'm', service_period_type: 'm' }]
+  output: [{ base_url: 'https://webservices31.autotask.net/atservicesrest/v1.0', billing_code_id: 594, contract_type: 7, contract_status: 1, contract_period_type: 2, service_period_type: 2 }]
 });
 
 const fetchSyncLines = node({
@@ -242,7 +242,7 @@ const createService = node({
       genericAuthType: 'httpCustomAuth',
       sendBody: true,
       specifyBody: 'json',
-      jsonBody: expr('{{ JSON.stringify({ name: $("Current Line").first().json.service_name, description: ("Microsoft CSP subscription service - " + $("Current Line").first().json.billing_label + " - " + $("Current Line").first().json.stock_description).slice(0, 380), unitPrice: $("Current Line").first().json.period_rrp, unitCost: $("Current Line").first().json.period_cost, periodType: $("Current Line").first().json.service_period_type, materialCodeID: Number($("Autotask Config").first().json.material_code_id), isActive: true }) }}'),
+      jsonBody: expr('{{ JSON.stringify({ name: $("Current Line").first().json.service_name, description: ("Microsoft CSP subscription service - " + $("Current Line").first().json.billing_label + " - " + $("Current Line").first().json.stock_description).slice(0, 380), unitPrice: $("Current Line").first().json.period_rrp, unitCost: $("Current Line").first().json.period_cost, periodType: Number($("Current Line").first().json.service_period_type), billingCodeID: Number($("Autotask Config").first().json.billing_code_id), isActive: true }) }}'),
       options: {}
     },
     credentials: { httpCustomAuth: newCredential('KantannaAutotask') }
@@ -363,7 +363,7 @@ const createContract = node({
       genericAuthType: 'httpCustomAuth',
       sendBody: true,
       specifyBody: 'json',
-      jsonBody: expr('{{ JSON.stringify({ companyID: $("Lookup Mapping").first().json.autotask_company_id, contractName: $("Current Line").first().json.contract_name, contractType: Number($("Autotask Config").first().json.contract_type), status: Number($("Autotask Config").first().json.contract_status), startDate: $("Current Line").first().json.contract_start, endDate: $("Current Line").first().json.contract_end, contractPeriodType: $("Autotask Config").first().json.contract_period_type, timeReportingRequiresStartAndStopTimes: false, description: ("Dicker Data CSP subscription " + $("Current Line").first().json.subscription_id + " - " + $("Current Line").first().json.offer_name + ". Managed by the Kantanna n8n automation.").slice(0, 1900) }) }}'),
+      jsonBody: expr('{{ JSON.stringify({ companyID: $("Lookup Mapping").first().json.autotask_company_id, contractName: $("Current Line").first().json.contract_name, contractType: Number($("Autotask Config").first().json.contract_type), status: Number($("Autotask Config").first().json.contract_status), startDate: $("Current Line").first().json.contract_start, endDate: $("Current Line").first().json.contract_end, contractPeriodType: Number($("Autotask Config").first().json.contract_period_type), timeReportingRequiresStartAndStopTimes: 0, description: ("Dicker Data CSP subscription " + $("Current Line").first().json.subscription_id + " - " + $("Current Line").first().json.offer_name + ". Managed by the Kantanna n8n automation.").slice(0, 1900) }) }}'),
       options: {}
     },
     credentials: { httpCustomAuth: newCredential('KantannaAutotask') }
@@ -637,7 +637,7 @@ const markSynced = node({
 });
 
 const noteSync = sticky(
-  '## 03 · Autotask Sync\nPOST /webhook/csp-autotask-sync (the portal Sync button calls this).\nPer included line: resolve company mapping -> ensure Service -> ensure Contract (Subscription ID in the name) -> set sell price on the contract service -> adjust units.\n\n**Before first run, set in "Autotask Config":**\n- base_url: your Autotask zone REST URL\n- material_code_id: a Material Code ID from Autotask (required to create Services)',
+  '## 03 · Autotask Sync\nPOST /webhook/csp-autotask-sync (the portal Sync button calls this).\nPer included line: resolve company mapping -> ensure Service -> ensure Contract (Subscription ID in the name) -> set sell price on the contract service -> adjust units.\n\n**Config ("Autotask Config"):**\n- base_url: Autotask zone REST URL (ww31)\n- billing_code_id: the Autotask Billing (Material) Code for created Services (594 = Cloud and SaaS)',
   [startSync, autotaskConfig],
   { color: 3 }
 );

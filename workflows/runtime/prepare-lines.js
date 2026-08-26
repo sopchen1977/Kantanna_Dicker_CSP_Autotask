@@ -13,14 +13,16 @@ function addMonths(iso, months) {
 
 // Billing-type metadata. The Autotask Service is created with a matching
 // period type, so the contract bills it monthly or annually as appropriate.
-//   annual_monthly -> Annual commit, billed monthly   (Service periodType m)
-//   annual_upfront -> Annual commit, billed annually  (Service periodType y)
-//   monthly        -> Month-to-month                  (Service periodType m)
+// Autotask REST periodType picklist (integers): 2=Monthly, 3=Quarterly,
+// 4=Semi-Annual, 5=Yearly.
+//   annual_monthly -> Annual commit, billed monthly   (periodType 2)
+//   annual_upfront -> Annual commit, billed annually  (periodType 5)
+//   monthly        -> Month-to-month                  (periodType 2)
 const BILLING = {
-  annual_monthly: { label: 'Annual Commit (Monthly)', period_type: 'm', key: 'ANN-MO' },
-  annual_upfront: { label: 'Annual Commit (Upfront)', period_type: 'y', key: 'ANN-YR' },
-  monthly: { label: 'Month to Month', period_type: 'm', key: 'MTM' },
-  usage: { label: 'Usage', period_type: 'm', key: 'USAGE' },
+  annual_monthly: { label: 'Annual Commit (Monthly)', period_type: 2, key: 'ANN-MO' },
+  annual_upfront: { label: 'Annual Commit (Upfront)', period_type: 5, key: 'ANN-YR' },
+  monthly: { label: 'Month to Month', period_type: 2, key: 'MTM' },
+  usage: { label: 'Usage', period_type: 2, key: 'USAGE' },
 };
 
 const out = [];
