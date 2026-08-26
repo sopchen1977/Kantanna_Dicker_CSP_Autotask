@@ -2,7 +2,7 @@
 // "Invoice Details" rows and emit one normalised item per subscription line.
 //
 // ==== CONFIG: pilot customers. Empty array = import every customer. ====
-const PILOT_CUSTOMERS = ['ATLAS OUTSOURCING PTY LTD', 'Galilee Solicitors'];
+const PILOT_CUSTOMERS = ['ATLAS OUTSOURCING PTY LTD', 'Galilee Solicitors', 'B E Smart Admin Services'];
 // =======================================================================
 
 const MONTHS = { JAN: '01', FEB: '02', MAR: '03', APR: '04', MAY: '05', JUN: '06',
