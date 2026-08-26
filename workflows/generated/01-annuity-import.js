@@ -7,7 +7,6 @@ const uploadForm = trigger({
     name: 'Monthly Import Form',
     position: [-380, 0],
     parameters: {
-      path: 'csp-import',
       formTitle: 'Dicker Data CSP Monthly Import',
       formDescription: 'Upload this month’s Annuity Information export and CSP Invoice Report (.xlsx). Only the DETAILS / Invoice Details tabs are read.',
       formFields: {

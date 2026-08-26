@@ -276,6 +276,31 @@ const respondCompanies = node({
   config: { name: 'Respond Companies', position: [580, 480], parameters: { respondWith: 'firstIncomingItem', options: {} } }
 });
 
+const importRedirect = trigger({
+  type: 'n8n-nodes-base.webhook',
+  version: 2.1,
+  config: {
+    name: 'Import Redirect',
+    position: [-380, 720],
+    parameters: { httpMethod: 'GET', path: 'csp-import', responseMode: 'responseNode', options: {} }
+  },
+  output: [{ headers: {}, query: {} }]
+});
+
+const redirectToForm = node({
+  type: 'n8n-nodes-base.respondToWebhook',
+  version: 1.5,
+  config: {
+    name: 'Redirect To Form',
+    position: [-140, 720],
+    parameters: {
+      respondWith: 'redirect',
+      redirectURL: 'https://gayleai.app.n8n.cloud/form/5c4bd81e-8556-4639-835f-4de4a7faefb3',
+      options: {}
+    }
+  }
+});
+
 const notePortal = sticky(
   '## 02 · Pricing Portal\nOpen GET /webhook/csp-pricing in a browser.\n- Sell price defaults to the monthly RRP from the annuity file; tick Custom to override per line.\n- Map each Dicker tenant to an Autotask company before syncing.\n- The Sync button POSTs to workflow 03 (path csp-autotask-sync).\n\nSet your Autotask zone URL in "Portal Autotask Config".',
   [portalPage, fetchLines],
@@ -301,4 +326,6 @@ export default workflow('kantanna-csp-02-portal', '02 · CSP Pricing Portal')
   .to(queryCompanies)
   .to(companiesResponse)
   .to(respondCompanies)
+  .add(importRedirect)
+  .to(redirectToForm)
   .add(notePortal);
