@@ -242,7 +242,7 @@ const createService = node({
       genericAuthType: 'httpCustomAuth',
       sendBody: true,
       specifyBody: 'json',
-      jsonBody: expr('{{ JSON.stringify({ name: $("Current Line").first().json.service_name, description: ("Microsoft CSP subscription service - " + $("Current Line").first().json.billing_label + " - " + $("Current Line").first().json.stock_description).slice(0, 380), unitPrice: $("Current Line").first().json.period_rrp, unitCost: $("Current Line").first().json.period_cost, periodType: Number($("Current Line").first().json.service_period_type), billingCodeID: Number($("Autotask Config").first().json.billing_code_id), isActive: true }) }}'),
+      jsonBody: expr('{{ JSON.stringify({ name: $("Current Line").first().json.service_name, description: ("Microsoft CSP subscription service - " + $("Current Line").first().json.billing_label + " - " + $("Current Line").first().json.stock_description).slice(0, 380), sku: String($("Current Line").first().json.service_key || "").slice(0, 50), unitPrice: $("Current Line").first().json.period_rrp, unitCost: $("Current Line").first().json.period_cost, periodType: Number($("Current Line").first().json.service_period_type), billingCodeID: Number($("Autotask Config").first().json.billing_code_id), isActive: true }) }}'),
       options: {}
     },
     credentials: { httpCustomAuth: newCredential('KantannaAutotask') }
