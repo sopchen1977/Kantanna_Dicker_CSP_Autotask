@@ -39,7 +39,8 @@ if (csCreate) {
 }
 if (csPatch) {
   if (csPatch.patch_error) errors.push('price update failed: ' + csPatch.patch_error);
-  else notes.push('price ' + csPatch.old_price + ' -> ' + csPatch.sell);
+  else notes.push('price ' + csPatch.old_price + ' -> ' + csPatch.sell
+    + (csPatch.effective_date ? ' effective ' + csPatch.effective_date : ''));
 }
 if (units && units.delta !== 0 && csId) {
   const adj = grab('Adjust Result');

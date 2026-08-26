@@ -32,6 +32,8 @@
   input[type=number] { width:92px; padding:4px 6px; border:1px solid var(--line); border-radius:6px; font:inherit; text-align:right; }
   input[type=number]:disabled { background:#f1f5f9; color:var(--muted); }
   input[type=text] { padding:6px 8px; border:1px solid var(--line); border-radius:6px; font:inherit; width:260px; }
+  input[type=date] { padding:4px 6px; border:1px solid var(--line); border-radius:6px; font:inherit; width:135px; }
+  input[type=date]:disabled { background:#f1f5f9; color:var(--muted); }
   .btn { padding:8px 16px; border-radius:7px; border:1px solid var(--line); background:#fff; cursor:pointer; font:inherit; font-size:13.5px; }
   .btn.primary { background:var(--brand); border-color:var(--brand); color:#fff; }
   .btn.sync { background:#15803d; border-color:#15803d; color:#fff; }
@@ -72,17 +74,26 @@ var MAPPINGS = {};
 (DATA.mappings || []).forEach(function (m) { MAPPINGS[(m.tenant_name || '').toLowerCase()] = m; });
 
 function fmt(n) { return (Number(n) || 0).toFixed(2); }
+function periodRrp(l) { return Number(l.period_rrp !== null && l.period_rrp !== undefined ? l.period_rrp : l.monthly_rrp) || 0; }
+function periodCost(l) { return Number(l.period_cost !== null && l.period_cost !== undefined ? l.period_cost : l.monthly_cost) || 0; }
+function periodSuffix(l) { return l.billing_months === 12 ? '/yr' : '/mo'; }
+function billingLabel(l) {
+  if (l.billing_type === 'annual_upfront') return 'Annual · Upfront';
+  if (l.billing_type === 'annual_monthly') return 'Annual · Monthly';
+  if (l.billing_type === 'usage') return 'Usage';
+  return 'Month to Month';
+}
 function effSell(l) {
   return (l.use_custom_price && l.sell_price !== null && l.sell_price !== undefined && l.sell_price !== '')
-    ? Number(l.sell_price) : Number(l.monthly_rrp || 0);
+    ? Number(l.sell_price) : periodRrp(l);
 }
 function effInclude(l) {
   if (l.include === false) return false;
   if (l.include === true) return true;
-  return l.charge_type === 'NCE' && l.status === 'Active' && Number(l.monthly_rrp) > 0;
+  return l.charge_type === 'NCE' && l.status === 'Active' && periodRrp(l) > 0;
 }
 function marginPct(l) {
-  var s = effSell(l), c = Number(l.monthly_cost || 0);
+  var s = effSell(l), c = periodCost(l);
   if (!s) return null;
   return ((s - c) / s) * 100;
 }
@@ -127,9 +138,9 @@ function render() {
     card.appendChild(head);
 
     var table = document.createElement('table');
-    table.innerHTML = '<thead><tr><th>Incl.</th><th>Offer</th><th>Subscription ID</th>' +
-      '<th class="num">Qty</th><th class="num">Cost /mo</th><th class="num">RRP /mo</th>' +
-      '<th>Custom</th><th class="num">Sell /mo</th><th class="num">Margin</th><th>Status</th></tr></thead>';
+    table.innerHTML = '<thead><tr><th>Incl.</th><th>Offer</th><th>Billing</th><th>Subscription ID</th>' +
+      '<th class="num">Qty</th><th class="num">Cost</th><th class="num">RRP</th>' +
+      '<th>Custom</th><th class="num">Sell</th><th title="Date the price change takes effect in Autotask">From</th><th class="num">Margin</th><th>Status</th></tr></thead>';
     var tbody = document.createElement('tbody');
     byCustomer[name].forEach(function (l) { tbody.appendChild(buildRow(l)); });
     table.appendChild(tbody);
@@ -149,16 +160,20 @@ function buildRow(l) {
 
   var offer = document.createElement('td');
   offer.innerHTML = escapeHtml(l.offer_name || '') +
-    ' <span class="mono">' + escapeHtml(l.sku || '') + (l.term_months > 1 ? ' · ' + l.term_months + 'mo term' : ' · monthly') + '</span>';
+    ' <span class="mono">' + escapeHtml(l.sku || '') + '</span>';
   tr.appendChild(offer);
+
+  var billing = document.createElement('td');
+  billing.innerHTML = '<span class="badge">' + escapeHtml(billingLabel(l)) + '</span>';
+  tr.appendChild(billing);
 
   var sid = document.createElement('td');
   sid.innerHTML = '<span class="mono" title="' + escapeHtml(l.subscription_id) + '">' + escapeHtml(String(l.subscription_id).slice(0, 8)) + '…</span>';
   tr.appendChild(sid);
 
   tr.appendChild(tdText(l.qty, 'num'));
-  tr.appendChild(tdText(fmt(l.monthly_cost), 'num'));
-  tr.appendChild(tdText(fmt(l.monthly_rrp), 'num'));
+  tr.appendChild(tdText(fmt(periodCost(l)) + periodSuffix(l), 'num'));
+  tr.appendChild(tdText(fmt(periodRrp(l)) + periodSuffix(l), 'num'));
 
   var custom = document.createElement('input');
   custom.type = 'checkbox';
@@ -169,7 +184,16 @@ function buildRow(l) {
   sell.type = 'number'; sell.step = '0.01'; sell.min = '0';
   sell.value = fmt(effSell(l));
   sell.disabled = !l.use_custom_price;
+  sell.title = 'Sell price per billing period (' + periodSuffix(l).slice(1) + ')';
   tr.appendChild(td(sell, 'num'));
+
+  var effDate = document.createElement('input');
+  effDate.type = 'date';
+  effDate.value = /^\d{4}-\d{2}-\d{2}$/.test(l.price_effective_date || '') ? l.price_effective_date : new Date().toISOString().slice(0, 10);
+  effDate.title = 'Price/unit changes take effect in Autotask from this date';
+  effDate.onchange = function () { l.price_effective_date = effDate.value; l._dirty = true; };
+  l.price_effective_date = effDate.value;
+  tr.appendChild(td(effDate));
 
   var margin = document.createElement('td');
   margin.className = 'num';
@@ -184,7 +208,7 @@ function buildRow(l) {
 
   custom.onchange = function () {
     l.use_custom_price = custom.checked; l._dirty = true;
-    if (!custom.checked) { l.sell_price = null; sell.value = fmt(l.monthly_rrp); sell.disabled = true; }
+    if (!custom.checked) { l.sell_price = null; sell.value = fmt(periodRrp(l)); sell.disabled = true; }
     else { sell.disabled = false; l.sell_price = Number(sell.value); sell.focus(); }
     refreshMargin();
   };
@@ -250,8 +274,9 @@ function saveAll(btn) {
     return {
       subscription_id: l.subscription_id, stock_code: l.stock_code,
       use_custom_price: !!l.use_custom_price,
-      sell_price: l.use_custom_price ? Number(l.sell_price !== null && l.sell_price !== undefined ? l.sell_price : l.monthly_rrp) : null,
-      include: effInclude(l)
+      sell_price: l.use_custom_price ? Number(l.sell_price !== null && l.sell_price !== undefined ? l.sell_price : periodRrp(l)) : null,
+      include: effInclude(l),
+      price_effective_date: l.price_effective_date || ''
     };
   });
   fetch(BASE + '/csp-pricing-save', {

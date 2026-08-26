@@ -22,16 +22,28 @@ function num(v) {
   return isNaN(n) ? 0 : n;
 }
 
-// "P1Y:CFQ7TTC0LCHC:0002:1:" -> term P1Y (12 months), sku CFQ7TTC0LCHC
-// "DZH318Z0BPS6:0001" (Azure) -> sku DZH318Z0BPS6, monthly
+// Stock code format: {term}:{sku}:{variant}:{billing}:
+//   "P1Y:CFQ7TTC0LCHC:0002:1:" -> annual commit, billed monthly
+//   "P1Y:CFQ7TTC0LFLZ:0002:Y:" -> annual commit, billed annually upfront
+//   "P1M:CFQ7TTC0LHSF:0001:1:" -> month-to-month
+//   "DZH318Z0BPS6:0001" (Azure) -> usage-based
 function parseStock(code) {
   const parts = String(code || '').split(':');
   if (/^P\d+[YM]$/i.test(parts[0] || '')) {
     const n = parseInt(parts[0].slice(1, -1), 10) || 1;
     const months = /y/i.test(parts[0].slice(-1)) ? n * 12 : n;
-    return { sku: parts[1] || parts[0], term: parts[0].toUpperCase(), months: months };
+    const billingMonths = String(parts[3] || '').toUpperCase() === 'Y' ? 12 : 1;
+    let billingType = 'monthly';
+    if (months > 1) billingType = billingMonths === 12 ? 'annual_upfront' : 'annual_monthly';
+    return {
+      sku: parts[1] || parts[0],
+      term: parts[0].toUpperCase(),
+      months: months,
+      billing_months: billingMonths,
+      billing_type: billingType,
+    };
   }
-  return { sku: parts[0] || '', term: '', months: 1 };
+  return { sku: parts[0] || '', term: '', months: 1, billing_months: 1, billing_type: 'usage' };
 }
 
 const annuityRows = $('Extract Annuity Details').all().map((i) => i.json);
@@ -83,8 +95,14 @@ for (const r of annuityRows) {
     usage_start: toIso(r['START USAGE']),
     usage_end: toIso(r['END USAGE']),
     term_months: s.months,
+    billing_months: s.billing_months,
+    billing_type: s.billing_type,
     monthly_cost: Math.round((unitCost / s.months) * 10000) / 10000,
     monthly_rrp: Math.round((unitRrp / s.months) * 10000) / 10000,
+    // Price per billing period: monthly slice for monthly billing,
+    // the full per-term amount for annual-upfront billing.
+    period_cost: Math.round((unitCost / s.months) * s.billing_months * 10000) / 10000,
+    period_rrp: Math.round((unitRrp / s.months) * s.billing_months * 10000) / 10000,
     term_start: t.term_start || '',
     term_end: t.term_end || '',
     imported_at: importedAt,

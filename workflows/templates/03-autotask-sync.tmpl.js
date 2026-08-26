@@ -23,7 +23,7 @@ const autotaskConfig = node({
       includeOtherFields: false,
       assignments: {
         assignments: [
-          { id: 'cfg-base-url', name: 'base_url', type: 'string', value: 'https://webservices16.autotask.net/atservicesrest/v1.0' },
+          { id: 'cfg-base-url', name: 'base_url', type: 'string', value: 'https://webservices31.autotask.net/atservicesrest/v1.0' },
           { id: 'cfg-material-code', name: 'material_code_id', type: 'number', value: 0 },
           { id: 'cfg-contract-type', name: 'contract_type', type: 'number', value: 7 },
           { id: 'cfg-contract-status', name: 'contract_status', type: 'number', value: 1 },
@@ -33,7 +33,7 @@ const autotaskConfig = node({
       }
     }
   },
-  output: [{ base_url: 'https://webservices16.autotask.net/atservicesrest/v1.0', material_code_id: 0, contract_type: 7, contract_status: 1, contract_period_type: 'm', service_period_type: 'm' }]
+  output: [{ base_url: 'https://webservices31.autotask.net/atservicesrest/v1.0', material_code_id: 0, contract_type: 7, contract_status: 1, contract_period_type: 'm', service_period_type: 'm' }]
 });
 
 const fetchSyncLines = node({
@@ -242,7 +242,7 @@ const createService = node({
       genericAuthType: 'httpCustomAuth',
       sendBody: true,
       specifyBody: 'json',
-      jsonBody: expr('{{ JSON.stringify({ name: $("Current Line").first().json.service_name, description: ("Microsoft CSP subscription service - " + $("Current Line").first().json.stock_description).slice(0, 380), unitPrice: $("Current Line").first().json.monthly_rrp, unitCost: $("Current Line").first().json.monthly_cost, periodType: $("Autotask Config").first().json.service_period_type, materialCodeID: Number($("Autotask Config").first().json.material_code_id), isActive: true }) }}'),
+      jsonBody: expr('{{ JSON.stringify({ name: $("Current Line").first().json.service_name, description: ("Microsoft CSP subscription service - " + $("Current Line").first().json.billing_label + " - " + $("Current Line").first().json.stock_description).slice(0, 380), unitPrice: $("Current Line").first().json.period_rrp, unitCost: $("Current Line").first().json.period_cost, periodType: $("Current Line").first().json.service_period_type, materialCodeID: Number($("Autotask Config").first().json.material_code_id), isActive: true }) }}'),
       options: {}
     },
     credentials: { httpCustomAuth: newCredential('KantannaAutotask') }
@@ -284,7 +284,7 @@ const recordService = node({
           sku: expr("{{ $('Current Line').first().json.service_key }}"),
           service_name: expr("{{ $('Current Line').first().json.service_name }}"),
           autotask_service_id: expr('{{ $json.service_id }}'),
-          unit_rrp: expr("{{ $('Current Line').first().json.monthly_rrp }}")
+          unit_rrp: expr("{{ $('Current Line').first().json.period_rrp }}")
         },
         schema: [
           { id: 'sku', displayName: 'sku', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: true },
@@ -474,13 +474,13 @@ const patchCS = node({
     position: [4260, 20],
     onError: 'continueRegularOutput',
     parameters: {
-      method: 'PATCH',
-      url: expr("{{ $('Autotask Config').first().json.base_url }}/Contracts/{{ $json.contract_id }}/Services"),
+      method: 'POST',
+      url: expr("{{ $('Autotask Config').first().json.base_url }}/Contracts/{{ $json.contract_id }}/ServiceAdjustments"),
       authentication: 'genericCredentialType',
       genericAuthType: 'httpCustomAuth',
       sendBody: true,
       specifyBody: 'json',
-      jsonBody: expr('{{ JSON.stringify({ id: $json.cs_id, contractID: $json.contract_id, adjustedPrice: $json.sell }) }}'),
+      jsonBody: expr('{{ JSON.stringify({ contractID: $json.contract_id, serviceID: $json.service_id, unitChange: 0, adjustedUnitPrice: $json.sell, effectiveDate: $("Current Line").first().json.price_effective_date }) }}'),
       options: {}
     },
     credentials: { httpCustomAuth: newCredential('KantannaAutotask') }
@@ -564,7 +564,7 @@ const adjustUnits = node({
       genericAuthType: 'httpCustomAuth',
       sendBody: true,
       specifyBody: 'json',
-      jsonBody: expr('{{ JSON.stringify({ contractID: $json.contract_id, serviceID: $json.service_id, unitChange: $json.delta, effectiveDate: $("Current Line").first().json.today, adjustedUnitPrice: $json.sell }) }}'),
+      jsonBody: expr('{{ JSON.stringify({ contractID: $json.contract_id, serviceID: $json.service_id, unitChange: $json.delta, effectiveDate: $("Current Line").first().json.price_effective_date, adjustedUnitPrice: $json.sell }) }}'),
       options: {}
     },
     credentials: { httpCustomAuth: newCredential('KantannaAutotask') }

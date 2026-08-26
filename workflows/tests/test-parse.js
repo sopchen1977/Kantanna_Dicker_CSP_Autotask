@@ -31,6 +31,10 @@ const annuity = [
     'STOCK CODE': 'DZH318Z0BPS6:0001', 'STOCK DESCRIPTION': 'Microsoft Azure Plan', 'REFERENCE': 'Azure plan',
     'QTY': '1.00', 'CHARGE TYPE': 'MODN', 'STATUS': 'Active', 'START USAGE': '', 'END USAGE': '',
     'REVALUATION PERIOD': '', 'UNIT PRICE': '$0.00', 'UNIT RRP': '$0.00' },
+  { 'TENANT ID': 'T2', 'TENANT NAME': 'Galilee Solicitors', 'SUBSCRIPTION ID': 'SUB-4',
+    'STOCK CODE': 'P1Y:CFQ7TTC0LFLZ:0002:Y:', 'STOCK DESCRIPTION': 'MS NCE M365 E5 1YR ANNUAL BILL', 'REFERENCE': 'Microsoft 365 E5',
+    'QTY': '10.00', 'CHARGE TYPE': 'NCE', 'STATUS': 'Active', 'START USAGE': '01-JAN-2026', 'END USAGE': '01-JAN-2026',
+    'REVALUATION PERIOD': '', 'UNIT PRICE': '$835.26', 'UNIT RRP': '$1,000.00' },
   { 'TENANT ID': 'T9', 'TENANT NAME': 'Some Other Customer', 'SUBSCRIPTION ID': 'SUB-9',
     'STOCK CODE': 'P1Y:XXXX:0001:1:', 'STOCK DESCRIPTION': 'Other', 'REFERENCE': 'Other',
     'QTY': '1.00', 'CHARGE TYPE': 'NCE', 'STATUS': 'Active', 'START USAGE': '', 'END USAGE': '',
@@ -51,34 +55,63 @@ const nodes = {
 const parsed = runNode('parse-lines.js', [{ json: {} }], nodes);
 
 // Pilot filter keeps only Atlas + Galilee
-assert.strictEqual(parsed.length, 3, 'pilot filter should keep 3 lines');
+assert.strictEqual(parsed.length, 4, 'pilot filter should keep 4 lines');
 assert.ok(!parsed.some((i) => i.json.tenant_name === 'Some Other Customer'));
 
+// Billing type 1: Annual Commit paid Monthly (P1Y:...:1:)
 const bp = parsed.find((i) => i.json.subscription_id === 'SUB-1').json;
 assert.strictEqual(bp.sku, 'CFQ7TTC0LCHC');
 assert.strictEqual(bp.term_months, 12);
+assert.strictEqual(bp.billing_type, 'annual_monthly');
+assert.strictEqual(bp.billing_months, 1);
 assert.strictEqual(bp.qty, 275);
 assert.ok(Math.abs(bp.monthly_rrp - 34.55) < 0.001, 'annual RRP must convert to monthly');
+assert.ok(Math.abs(bp.period_rrp - 34.55) < 0.001, 'billed monthly -> period price is monthly');
 // Latest term wins when the invoice has multiple rows
 assert.strictEqual(bp.term_start, '2025-08-31');
 assert.strictEqual(bp.term_end, '2026-08-30');
 
+// Billing type 3: Month to Month (P1M:...:1:)
 const bpMonthly = parsed.find((i) => i.json.subscription_id === 'SUB-2').json;
 assert.strictEqual(bpMonthly.term_months, 1);
+assert.strictEqual(bpMonthly.billing_type, 'monthly');
 assert.ok(Math.abs(bpMonthly.monthly_rrp - 39.48) < 0.001);
+assert.ok(Math.abs(bpMonthly.period_rrp - 39.48) < 0.001);
+
+// Billing type 2: Annual Commit paid Annually upfront (P1Y:...:Y:)
+const e5 = parsed.find((i) => i.json.subscription_id === 'SUB-4').json;
+assert.strictEqual(e5.billing_type, 'annual_upfront');
+assert.strictEqual(e5.billing_months, 12);
+assert.ok(Math.abs(e5.period_rrp - 1000) < 0.001, 'upfront billing -> period price is full annual');
+assert.ok(Math.abs(e5.monthly_rrp - 1000 / 12) < 0.001);
 
 const azure = parsed.find((i) => i.json.subscription_id === 'SUB-3').json;
 assert.strictEqual(azure.sku, 'DZH318Z0BPS6');
+assert.strictEqual(azure.billing_type, 'usage');
 assert.strictEqual(azure.charge_type, 'MODN');
 
 // prepare-lines: default include rule + subscription id in contract name
 const tableRows = parsed.map((i) => ({ json: Object.assign({}, i.json, { include: null, use_custom_price: null, sell_price: null }) }));
 const prepared = runNode('prepare-lines.js', tableRows, {});
-assert.strictEqual(prepared.length, 2, 'Azure/MODN line must be excluded by default');
+assert.strictEqual(prepared.length, 3, 'Azure/MODN line must be excluded by default');
 for (const i of prepared) {
   assert.ok(i.json.contract_name.includes(i.json.subscription_id), 'Subscription ID must be in contract name');
-  assert.strictEqual(i.json.effective_sell, i.json.monthly_rrp, 'default sell price is monthly RRP');
+  assert.strictEqual(i.json.effective_sell, i.json.period_rrp, 'default sell price is the per-period RRP');
 }
+// Each billing type creates a distinct service with the right period type
+const pAnnMo = prepared.find((i) => i.json.subscription_id === 'SUB-1').json;
+assert.strictEqual(pAnnMo.service_key, 'ANN-MO:CFQ7TTC0LCHC');
+assert.strictEqual(pAnnMo.service_period_type, 'm');
+assert.ok(pAnnMo.service_name.includes('Annual Commit (Monthly)'));
+const pMtm = prepared.find((i) => i.json.subscription_id === 'SUB-2').json;
+assert.strictEqual(pMtm.service_key, 'MTM:CFQ7TTC0LCHC');
+assert.strictEqual(pMtm.service_period_type, 'm');
+assert.ok(pMtm.service_name.includes('Month to Month'));
+const pAnnYr = prepared.find((i) => i.json.subscription_id === 'SUB-4').json;
+assert.strictEqual(pAnnYr.service_key, 'ANN-YR:CFQ7TTC0LFLZ');
+assert.strictEqual(pAnnYr.service_period_type, 'y', 'upfront billing -> yearly service period');
+assert.strictEqual(pAnnYr.effective_sell, 1000);
+assert.ok(pAnnYr.service_name.includes('Annual Commit (Upfront)'));
 
 // custom price override wins
 tableRows[0].json.use_custom_price = true;

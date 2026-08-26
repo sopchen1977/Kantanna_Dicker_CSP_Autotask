@@ -36,10 +36,11 @@ Everything lives in the n8n project **Kantanna Dicker CSP and Autotask**
    and select it on every HTTP Request node (they currently show a
    `KantannaAutotask` placeholder). The credential must send the three
    Autotask REST headers: `ApiIntegrationCode`, `UserName`, `Secret`.
-2. **Set the Autotask zone URL.** In workflow 03 → *Autotask Config* node
-   (and workflow 02 → *Portal Autotask Config*), set `base_url` to your zone,
-   e.g. `https://webservicesXX.autotask.net/atservicesrest/v1.0`. Find your
-   zone with `GET https://webservices.autotask.net/atservicesrest/v1.0/zoneInformation?user=<api-user>`.
+2. **Autotask zone.** Already set to ww31
+   (`https://webservices31.autotask.net/atservicesrest/v1.0`) in workflow 03 →
+   *Autotask Config* and workflow 02 → *Portal Autotask Config*. Verify with
+   `GET https://webservices.autotask.net/atservicesrest/v1.0/zoneInformation?user=<api-user>`
+   if API calls come back 404/redirected.
 3. **Set `material_code_id`** in *Autotask Config* — a Material Code (allocation
    code) id from Autotask, required when the sync creates Services.
 4. Check the contract defaults in *Autotask Config*: contract type `7`
@@ -59,13 +60,34 @@ Everything lives in the n8n project **Kantanna Dicker CSP and Autotask**
 3. Refresh the portal to see per-line results (contract id, actions taken, or
    the exact Autotask error).
 
-### Pricing model
+### Billing types & pricing model
 
-The annuity file lists per-term prices (P1Y = annual). The import converts
-everything to **per-unit per-month** (`monthly_cost`, `monthly_rrp`) so
-Autotask recurring-service contracts bill monthly. A P1Y and P1M variant of
-the same SKU become **different** Autotask Services (different monthly price),
-keyed `P1Y:CFQ7TTC0LCHC` vs `P1M:CFQ7TTC0LCHC`.
+The 4th segment of the Dicker stock code encodes the billing plan, giving the
+three CSP billing types. Each becomes its **own Autotask Service** with a
+matching billing period, so it bills correctly on a recurring contract:
+
+| Stock code pattern | Billing type | Service key | Autotask period | Price basis |
+|---|---|---|---|---|
+| `P1Y:{sku}:…:1:` | Annual Commit, paid **Monthly** | `ANN-MO:{sku}` | `m` (monthly) | annual ÷ 12, per month |
+| `P1Y:{sku}:…:Y:` | Annual Commit, paid **Annually (upfront)** | `ANN-YR:{sku}` | `y` (yearly) | full annual amount, per year |
+| `P1M:{sku}:…:1:` | **Month to Month** | `MTM:{sku}` | `m` (monthly) | monthly amount |
+| `DZH…` (Azure) | Usage-based | excluded by default | — | — |
+
+Service names carry the billing type, e.g.
+`Microsoft 365 Business Premium - Annual Commit (Monthly) [CFQ7TTC0LCHC]`.
+The import stores both monthly figures (`monthly_cost`/`monthly_rrp`, for
+comparison) and per-billing-period figures (`period_cost`/`period_rrp`, what
+Autotask bills). Sell prices in the portal are **per billing period** — per
+month for monthly-billed lines, per year for annual-upfront lines — and
+default to the per-period RRP.
+
+### Price-change effective dates
+
+Each portal line has a **From** date (defaults to today), matching how
+Autotask handles contract price changes. On sync, price changes and unit
+changes are pushed as Contract Service Adjustments with that
+`effectiveDate`, so a price change can be scheduled for e.g. the start of
+next month.
 
 ## Repository layout
 

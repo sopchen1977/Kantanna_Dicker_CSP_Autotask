@@ -121,12 +121,14 @@ const updatePricing = node({
         value: {
           use_custom_price: expr('{{ $json.use_custom_price }}'),
           sell_price: expr('{{ $json.sell_price }}'),
-          include: expr('{{ $json.include }}')
+          include: expr('{{ $json.include }}'),
+          price_effective_date: expr('{{ $json.price_effective_date }}')
         },
         schema: [
           { id: 'use_custom_price', displayName: 'use_custom_price', required: false, defaultMatch: false, display: true, type: 'boolean', canBeUsedToMatch: false },
           { id: 'sell_price', displayName: 'sell_price', required: false, defaultMatch: false, display: true, type: 'number', canBeUsedToMatch: false },
-          { id: 'include', displayName: 'include', required: false, defaultMatch: false, display: true, type: 'boolean', canBeUsedToMatch: false }
+          { id: 'include', displayName: 'include', required: false, defaultMatch: false, display: true, type: 'boolean', canBeUsedToMatch: false },
+          { id: 'price_effective_date', displayName: 'price_effective_date', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false }
         ]
       },
       options: {}
@@ -227,12 +229,12 @@ const portalConfig = node({
       includeOtherFields: true,
       assignments: {
         assignments: [
-          { id: 'cfg-base-url', name: 'base_url', type: 'string', value: 'https://webservices16.autotask.net/atservicesrest/v1.0' }
+          { id: 'cfg-base-url', name: 'base_url', type: 'string', value: 'https://webservices31.autotask.net/atservicesrest/v1.0' }
         ]
       }
     }
   },
-  output: [{ base_url: 'https://webservices16.autotask.net/atservicesrest/v1.0', query: { q: 'galilee' } }]
+  output: [{ base_url: 'https://webservices31.autotask.net/atservicesrest/v1.0', query: { q: 'galilee' } }]
 });
 
 const queryCompanies = node({
