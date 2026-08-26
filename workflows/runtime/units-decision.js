@@ -1,10 +1,13 @@
 // Input: Autotask ContractServiceUnits/query response. Build a CHRONOLOGICAL
 // unit-adjustment plan that mirrors the Dicker CSP invoice report:
-//   1. the pre-existing base quantity, effective from contract start
-//   2. each pro-rata addition/removal at its USAGE START date
-//   3. a final correction (if needed) at the main full-cycle line's date
-// ending at the imported quantity. This matches how Autotask expects
-// contract quantities to be built up over time.
+//   1. each pro-rata addition/removal FIRST, at its USAGE START date
+//      (these occur before the full-cycle line in the report)
+//   2. then a final adjustment up to the imported quantity at the main
+//      full-cycle line's USAGE START date
+// e.g. Atlas M365 BP: +6 @13-Jul, +10 @27-Jul, +259 @31-Jul = 275.
+// Units only ever exist from dates shown in the report, so Autotask never
+// back-bills earlier periods. This matches how Autotask expects contract
+// quantities to be built up over time.
 const line = $('Current Line').first().json;
 
 // Recover the contract-service identifiers from whichever branch ran for
@@ -40,14 +43,9 @@ const mainDate = mainLines.length
 
 const plan = [];
 if (current === 0 && invLines.length) {
-  // Fresh contract service: replay the report. Base = what existed before
-  // the pro-rata changes this cycle.
-  const base = target - prorata.reduce((s, x) => s + Number(x.q || 0), 0);
+  // Fresh contract service: pro-rata items first, in date order, then
+  // adjust up to the full quantity at the main line's date.
   let running = 0;
-  if (base > 0) {
-    plan.push({ change: base, date: line.contract_start || mainDate });
-    running = base;
-  }
   for (const p of prorata) {
     const q = Number(p.q || 0);
     if (q !== 0) { plan.push({ change: q, date: p.s }); running += q; }

@@ -58,16 +58,16 @@ nodes['CS From Create'] = runNode('cs-from-create.js', [{ json: { itemId: 8001 }
 assert.strictEqual(nodes['CS From Create'][0].json.cs_id, 8001);
 
 nodes['Units Decision'] = runNode('units-decision.js', [{ json: { items: [] } }], nodes);
-// Fresh contract: replay the CSP report chronologically -> base 45, +4, +2
+// Fresh contract: pro-rata first in date order, then adjust up to target
 const plan1 = nodes['Units Decision'][0].json.plan;
 assert.deepStrictEqual(plan1.map((p) => [p.change, p.date]),
-  [[45, '2025-12-29'], [4, '2026-07-13'], [2, '2026-07-27']]);
+  [[4, '2026-07-13'], [2, '2026-07-27'], [45, '2026-07-31']]);
 assert.strictEqual(nodes['Units Decision'][0].json.cs_id, 8001);
 
 const split = runNode('split-plan.js', nodes['Units Decision'], nodes);
 assert.strictEqual(split.length, 3);
-assert.strictEqual(split[0].json.change, 45);
-assert.strictEqual(split[2].json.date, '2026-07-27');
+assert.strictEqual(split[0].json.change, 4);
+assert.strictEqual(split[2].json.date, '2026-07-31');
 
 nodes['Adjust Result'] = runNode('adjust-result.js',
   [{ json: { itemId: 6001 } }, { json: { itemId: 6002 } }, { json: { itemId: 6003 } }], nodes);
@@ -77,7 +77,7 @@ assert.strictEqual(nodes['Adjust Result'][0].json.adjust_error, '');
 const result = runNode('sync-result.js', [{ json: {} }], nodes)[0].json;
 console.log('scenario 1 (all created):', result.sync_status, '|', result.sync_message);
 assert.strictEqual(result.sync_status, 'synced');
-assert.ok(result.sync_message.includes('+45 @2025-12-29'), 'message should show the chronological plan');
+assert.ok(result.sync_message.includes('+4 @2026-07-13') && result.sync_message.includes('+45 @2026-07-31'), 'message should show the chronological plan');
 assert.strictEqual(result.autotask_contract_id, 7001);
 assert.strictEqual(result.autotask_service_id, 9001);
 assert.strictEqual(result.autotask_contract_service_id, 8001);
