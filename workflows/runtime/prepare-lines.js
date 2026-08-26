@@ -83,7 +83,7 @@ for (const l of rows) {
     service_period_type: billing.period_type,
     period_rrp: periodRrp,
     period_cost: periodCost,
-    contract_name: contractName.slice(0, 250),
+    contract_name: contractName.slice(0, 100), // Autotask contractName max length
     effective_sell: Math.round(effectiveSell * 100) / 100,
     contract_start: contractStart,
     contract_end: contractEnd,
