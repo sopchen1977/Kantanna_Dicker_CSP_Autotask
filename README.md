@@ -88,15 +88,18 @@ default to the per-period RRP.
 
 ### Quantity history replays the CSP report
 
-Contract quantities are built up chronologically, exactly how Autotask
-expects: for a new contract service the sync posts each pro-rata item from
-the CSP Invoice Report FIRST, in date order at its USAGE START date, then
-adjusts up to the annuity quantity at the main full-cycle line's date
-(e.g. Atlas M365 BP: +6 @ 13-Jul, +10 @ 27-Jul, +259 @ 31-Jul = 275).
-Units only ever exist from dates shown in the report, so Autotask never
+The sync first derives each subscription's BILLING CYCLE from all of its
+CSP invoice lines (distinct from the subscription term): cycle end = the
+latest USAGE END; the cycle line = the earliest-starting line with that
+end, giving the cycle start and the cycle quantity. Every other line is a
+pro-rata change effective at its own USAGE START. Contract quantities are
+then built up chronologically, exactly how Autotask expects: pro-rata
+items first in date order, the cycle quantity at cycle start, then a
+final correction to the annuity quantity (e.g. Atlas M365 BP: +6 @
+13-Jul, +10 @ 27-Jul, +259 @ 31-Jul = 275; cycle 31-Jul..30-Aug). Units
+only ever exist from dates shown in the report, so Autotask never
 back-bills earlier periods. For contracts that already have unit history,
-a single delta is posted, dated at the report's main-cycle usage start —
-never "today".
+a single delta is posted, dated at the cycle start — never "today".
 Adjustments are posted oldest-first, one at a time (Autotask's 3-thread
 API limit).
 

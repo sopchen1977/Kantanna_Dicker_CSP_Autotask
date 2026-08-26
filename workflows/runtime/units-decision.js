@@ -1,13 +1,16 @@
 // Input: Autotask ContractServiceUnits/query response. Build a CHRONOLOGICAL
-// unit-adjustment plan that mirrors the Dicker CSP invoice report:
-//   1. each pro-rata addition/removal FIRST, at its USAGE START date
-//      (these occur before the full-cycle line in the report)
-//   2. then a final adjustment up to the imported quantity at the main
-//      full-cycle line's USAGE START date
-// e.g. Atlas M365 BP: +6 @13-Jul, +10 @27-Jul, +259 @31-Jul = 275.
-// Units only ever exist from dates shown in the report, so Autotask never
-// back-bills earlier periods. This matches how Autotask expects contract
-// quantities to be built up over time.
+// unit-adjustment plan by first understanding the BILLING CYCLE from the
+// CSP invoice lines (distinct from the subscription term):
+//   - cycle end   = latest USAGE END across this subscription's lines
+//   - cycle line  = earliest-starting line with that end; its USAGE START
+//                   is the cycle start and its qty is the cycle quantity
+//   - other lines = pro-rata changes (before or within the cycle), each
+//                   effective at its own USAGE START
+// The plan applies pro-rata changes in date order, sets the cycle quantity
+// at cycle start, and finally corrects to the annuity quantity if needed.
+// e.g. Atlas M365 BP: +6 @13-Jul, +10 @27-Jul, +259 @31-Jul (cycle start)
+// = 275. Units never exist before dates shown in the report, so Autotask
+// does not back-bill earlier periods.
 const line = $('Current Line').first().json;
 
 // Recover the contract-service identifiers from whichever branch ran for
@@ -35,25 +38,52 @@ const target = Number(line.qty || 0);
 let invLines = [];
 try { invLines = JSON.parse(line.invoice_lines || '[]'); } catch (e) { /* no invoice detail */ }
 invLines = invLines.filter((x) => x && x.s).sort((a, b) => String(a.s).localeCompare(String(b.s)));
-const mainLines = invLines.filter((x) => Number(x.q) === target);
-const prorata = invLines.filter((x) => Number(x.q) !== target);
-const mainDate = mainLines.length
-  ? mainLines[mainLines.length - 1].s
-  : (line.price_effective_date || line.today);
 
 const plan = [];
-if (current === 0 && invLines.length) {
-  // Fresh contract service: pro-rata items first, in date order, then
-  // adjust up to the full quantity at the main line's date.
-  let running = 0;
-  for (const p of prorata) {
-    const q = Number(p.q || 0);
-    if (q !== 0) { plan.push({ change: q, date: p.s }); running += q; }
+let cycleStart = '';
+let cycleEnd = '';
+
+if (invLines.length) {
+  // Identify the billing cycle.
+  for (const x of invLines) {
+    if (String(x.e || '') > cycleEnd) cycleEnd = String(x.e || '');
   }
-  if (running !== target) plan.push({ change: target - running, date: mainDate });
+  const enders = invLines.filter((x) => String(x.e || '') === cycleEnd);
+  cycleStart = String(enders[0].s);
+  for (const x of enders) {
+    if (String(x.s) < cycleStart) cycleStart = String(x.s);
+  }
+  const cycleLines = enders.filter((x) => String(x.s) === cycleStart);
+  const cycleQty = cycleLines.reduce((s, x) => s + Number(x.q || 0), 0);
+  const prorata = invLines.filter((x) => cycleLines.indexOf(x) === -1);
+
+  // Chronological events: pro-rata increments at their usage start, the
+  // cycle quantity set at cycle start ('set' sorts after adds on a tie).
+  const events = [];
+  for (const p of prorata) events.push({ type: 'add', q: Number(p.q || 0), date: String(p.s) });
+  events.push({ type: 'set', q: cycleQty, date: cycleStart });
+  events.sort((a, b) => (a.date === b.date
+    ? (a.type === 'set' ? 1 : -1)
+    : a.date.localeCompare(b.date)));
+
+  let running = current;
+  let lastDate = cycleStart;
+  if (current === 0) {
+    // Fresh contract service: replay the cycle.
+    for (const ev of events) {
+      const change = ev.type === 'set' ? ev.q - running : ev.q;
+      if (change !== 0) { plan.push({ change: change, date: ev.date }); running += change; }
+      if (ev.date > lastDate) lastDate = ev.date;
+    }
+  }
+  // Correct to the annuity quantity (also the single-delta path when the
+  // contract already has unit history).
+  if (running !== target) {
+    plan.push({ change: target - running, date: lastDate || line.price_effective_date || line.today });
+  }
 } else if (target !== current) {
-  // Contract already has unit history: single delta, dated per the report.
-  plan.push({ change: target - current, date: mainDate });
+  // No invoice detail available: single delta at the portal's From date.
+  plan.push({ change: target - current, date: line.price_effective_date || line.today });
 }
 
 return [{ json: {
@@ -64,6 +94,8 @@ return [{ json: {
   sell: carried.sell,
   current_units: current,
   target_units: target,
+  cycle_start: cycleStart,
+  cycle_end: cycleEnd,
   plan: plan,
   plan_count: plan.length,
   plan_summary: plan.map((p) => (p.change > 0 ? '+' : '') + p.change + ' @' + p.date).join(', '),

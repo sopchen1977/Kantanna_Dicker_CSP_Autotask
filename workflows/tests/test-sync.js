@@ -62,6 +62,9 @@ nodes['Units Decision'] = runNode('units-decision.js', [{ json: { items: [] } }]
 const plan1 = nodes['Units Decision'][0].json.plan;
 assert.deepStrictEqual(plan1.map((p) => [p.change, p.date]),
   [[4, '2026-07-13'], [2, '2026-07-27'], [45, '2026-07-31']]);
+// Billing cycle derived from the invoice lines (not the subscription term)
+assert.strictEqual(nodes['Units Decision'][0].json.cycle_start, '2026-07-31');
+assert.strictEqual(nodes['Units Decision'][0].json.cycle_end, '2026-08-30');
 assert.strictEqual(nodes['Units Decision'][0].json.cs_id, 8001);
 
 const split = runNode('split-plan.js', nodes['Units Decision'], nodes);
@@ -115,7 +118,34 @@ n3['Units Decision'] = runNode('units-decision.js', [{ json: { items: [] } }], n
 // existing history with different count -> single delta dated per the report
 const n4 = { 'Current Line': [{ json: line }], 'CS Decision': [{ json: { line_key: line.line_key, contract_id: 7001, service_id: 9001, cs_id: 8001, sell: 34.55 } }] };
 const ud4 = runNode('units-decision.js', [{ json: { items: [{ startDate: '2026-06-01', units: 45 }] } }], n4)[0].json;
-assert.deepStrictEqual(ud4.plan, [{ change: 6, date: '2026-07-31' }], 'existing units -> one delta at the main line usage start');
+assert.deepStrictEqual(ud4.plan, [{ change: 6, date: '2026-07-31' }], 'existing units -> one delta at the billing cycle start');
+
+// -- Cycle-understanding edge cases --
+// (a) In-cycle addition: change made AFTER cycle start, pro-rated to cycle end
+const lineB = Object.assign({}, line, {
+  qty: 54,
+  invoice_lines: JSON.stringify([
+    { s: '2026-07-31', e: '2026-08-30', q: 51, u: 29.37 },
+    { s: '2026-08-10', e: '2026-08-30', q: 3, u: 19.58 },
+  ]),
+});
+const nB = { 'Current Line': [{ json: lineB }], 'CS Decision': [{ json: { line_key: lineB.line_key, contract_id: 7001, service_id: 9001, cs_id: 8001, sell: 34.55 } }] };
+const udB = runNode('units-decision.js', [{ json: { items: [] } }], nB)[0].json;
+assert.deepStrictEqual(udB.plan.map((p) => [p.change, p.date]),
+  [[51, '2026-07-31'], [3, '2026-08-10']], 'in-cycle addition applies after the cycle quantity');
+
+// (b) Pro-rata qty coincidentally equals the cycle qty (old heuristic broke here)
+const lineC = Object.assign({}, line, {
+  qty: 2,
+  invoice_lines: JSON.stringify([
+    { s: '2026-07-20', e: '2026-07-30', q: 1, u: 5 },
+    { s: '2026-07-31', e: '2026-08-30', q: 2, u: 29.37 },
+  ]),
+});
+const nC = { 'Current Line': [{ json: lineC }], 'CS Decision': [{ json: { line_key: lineC.line_key, contract_id: 7001, service_id: 9001, cs_id: 8001, sell: 34.55 } }] };
+const udC = runNode('units-decision.js', [{ json: { items: [] } }], nC)[0].json;
+assert.deepStrictEqual(udC.plan.map((p) => [p.change, p.date]),
+  [[1, '2026-07-20'], [1, '2026-07-31']], 'cycle line identified by its window, not by qty match');
 const r3 = runNode('sync-result.js', [{ json: {} }], n3)[0].json;
 console.log('scenario 3 (API errors):', r3.sync_status, '|', r3.sync_message.slice(0, 120));
 assert.strictEqual(r3.sync_status, 'error');
