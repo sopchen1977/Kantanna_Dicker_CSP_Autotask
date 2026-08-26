@@ -7,7 +7,16 @@
 const line = $('Current Line').first().json;
 const resp = $input.first().json || {};
 const items = resp.items || [];
-const found = items.length ? items[0] : null;
+
+// Match the EXACT expected contract name. Month-to-month contract names
+// carry the billing-cycle start date, so a new Dicker cycle finds no match
+// and a fresh contract is created for that month (the old one expires on
+// its own end date). Annual contracts have a stable name; for them an
+// inexact legacy match is tolerated so a hand-edited name doesn't cause a
+// duplicate contract.
+const wanted = String(line.contract_name || '').trim();
+let found = items.find((c) => String(c.contractName || '').trim() === wanted) || null;
+if (!found && line.billing_type !== 'monthly' && items.length) found = items[0];
 const neededEnd = String(line.contract_end || '');
 const foundEnd = found ? String(found.endDate || '').slice(0, 10) : '';
 return [{ json: {
