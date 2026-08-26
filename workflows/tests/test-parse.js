@@ -34,7 +34,7 @@ const annuity = [
   { 'TENANT ID': 'T2', 'TENANT NAME': 'Galilee Solicitors', 'SUBSCRIPTION ID': 'SUB-4',
     'STOCK CODE': 'P1Y:CFQ7TTC0LFLZ:0002:Y:', 'STOCK DESCRIPTION': 'MS NCE M365 E5 1YR ANNUAL BILL', 'REFERENCE': 'Microsoft 365 E5',
     'QTY': '10.00', 'CHARGE TYPE': 'NCE', 'STATUS': 'Active', 'START USAGE': '01-JAN-2026', 'END USAGE': '01-JAN-2026',
-    'REVALUATION PERIOD': '', 'UNIT PRICE': '$835.26', 'UNIT RRP': '$1,000.00' },
+    'REVALUATION PERIOD': '28-DEC-2026', 'UNIT PRICE': '$835.26', 'UNIT RRP': '$1,000.00' },
   { 'TENANT ID': 'T9', 'TENANT NAME': 'Some Other Customer', 'SUBSCRIPTION ID': 'SUB-9',
     'STOCK CODE': 'P1Y:XXXX:0001:1:', 'STOCK DESCRIPTION': 'Other', 'REFERENCE': 'Other',
     'QTY': '1.00', 'CHARGE TYPE': 'NCE', 'STATUS': 'Active', 'START USAGE': '', 'END USAGE': '',
@@ -122,6 +122,13 @@ assert.strictEqual(pAnnYr.service_key, 'ANN-YR:CFQ7TTC0LFLZ');
 assert.strictEqual(pAnnYr.service_period_type, 5, 'upfront billing -> yearly service period (Autotask picklist 5)');
 assert.strictEqual(pAnnYr.effective_sell, 1000);
 assert.ok(pAnnYr.service_name.includes('Annual Commit (Billed Annually)'));
+// No invoice rows -> contract window falls back to the revaluation period,
+// not usage start + 12 months (which could date the contract years back)
+assert.strictEqual(pAnnYr.contract_end, '2026-12-28');
+assert.strictEqual(pAnnYr.contract_start, '2025-12-28');
+assert.ok(pAnnYr.price_effective_date >= pAnnYr.contract_start
+  && pAnnYr.price_effective_date <= pAnnYr.contract_end,
+  'effective date must be clamped into the contract window');
 
 // custom price override wins
 tableRows[0].json.use_custom_price = true;

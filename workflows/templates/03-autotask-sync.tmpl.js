@@ -329,7 +329,7 @@ const contractDecision = node({
     position: [2720, 20],
     parameters: { mode: 'runOnceForAllItems', jsCode: __CONTRACT_DECISION__ }
   },
-  output: [{ line_key: '2F295B21|P1Y:CFQ7TTC0LCHC:0002:1:', contract_id: null, need_contract: true, query_error: '' }]
+  output: [{ line_key: '2F295B21|P1Y:CFQ7TTC0LCHC:0002:1:', contract_id: null, need_contract: true, need_date_fix: false, contract_end_needed: '2026-12-28', contract_end_found: '', query_error: '' }]
 });
 
 const needContract = ifElse({
@@ -380,6 +380,61 @@ const contractFromCreate = node({
     parameters: { mode: 'runOnceForAllItems', jsCode: __CONTRACT_FROM_CREATE__ }
   },
   output: [{ line_key: '2F295B21|P1Y:CFQ7TTC0LCHC:0002:1:', contract_id: 7001, contract_created: true, create_error: '' }]
+});
+
+// An existing contract whose endDate predates this import's term end would
+// make Autotask reject every adjustment dated after it ("effectiveDate must
+// be between the start date and end date of the Contract"), so extend it
+// first. Happens on annual renewals and on contracts created before the
+// term dates were known.
+const needDateFix = ifElse({
+  version: 2.2,
+  config: {
+    name: 'Extend Contract Dates?',
+    position: [3160, 160],
+    parameters: {
+      conditions: {
+        options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+        conditions: [
+          { leftValue: expr('{{ $json.need_date_fix }}'), operator: { type: 'boolean', operation: 'true', singleValue: true } }
+        ],
+        combinator: 'and'
+      }
+    }
+  }
+});
+
+const extendContract = node({
+  type: 'n8n-nodes-base.httpRequest',
+  version: 4.5,
+  config: {
+    name: 'Extend Contract',
+    position: [3380, 160],
+    onError: 'continueRegularOutput',
+    parameters: {
+      method: 'PATCH',
+      url: expr("{{ $('Autotask Config').first().json.base_url }}/Contracts"),
+      authentication: 'genericCredentialType',
+      genericAuthType: 'httpCustomAuth',
+      sendBody: true,
+      specifyBody: 'json',
+      jsonBody: expr('{{ JSON.stringify({ id: $json.contract_id, endDate: $json.contract_end_needed }) }}'),
+      options: {}
+    },
+    credentials: { httpCustomAuth: newCredential('KantannaAutotask') }
+  },
+  output: [{ itemId: 7001 }]
+});
+
+const contractExtended = node({
+  type: 'n8n-nodes-base.code',
+  version: 2,
+  config: {
+    name: 'Contract Extended',
+    position: [3580, 160],
+    parameters: { mode: 'runOnceForAllItems', jsCode: __CONTRACT_EXTENDED__ }
+  },
+  output: [{ line_key: '2F295B21|P1Y:CFQ7TTC0LCHC:0002:1:', contract_id: 7001, extended_from: '2024-08-17', extended_to: '2026-12-28', extend_error: '' }]
 });
 
 const fetchContractServices = node({
@@ -675,7 +730,9 @@ export default workflow('kantanna-csp-03-sync', '03 · Autotask Sync')
   .to(contractDecision)
   .to(needContract
     .onTrue(createContract.to(contractFromCreate.to(fetchContractServices)))
-    .onFalse(fetchContractServices))
+    .onFalse(needDateFix
+      .onTrue(extendContract.to(contractExtended.to(fetchContractServices)))
+      .onFalse(fetchContractServices)))
   .add(fetchContractServices)
   .to(csDecision)
   .to(csRoute

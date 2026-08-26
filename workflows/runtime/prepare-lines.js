@@ -45,12 +45,23 @@ for (const l of rows) {
       ? Number(l.sell_price)
       : periodRrp;
 
-  const contractStart = l.term_start || l.usage_start || today;
-  const contractEnd = l.term_end || addMonths(contractStart, l.term_months || 12) || contractStart;
+  // Contract window. Lines without invoice rows (e.g. annual-upfront plans
+  // billed once a year) have no TERM dates, so fall back to the annuity's
+  // REVALUATION PERIOD (the current term's renewal date) before guessing
+  // from the original usage start — that could date the contract years back
+  // and Autotask rejects adjustments outside the contract window.
+  const iso = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : '');
+  let contractStart = iso(l.term_start);
+  let contractEnd = iso(l.term_end) || iso(l.revaluation_period);
+  if (!contractStart && contractEnd) contractStart = addMonths(contractEnd, -(l.term_months || 12));
+  if (!contractStart) contractStart = iso(l.usage_start) || today;
+  if (!contractEnd) contractEnd = addMonths(contractStart, l.term_months || 12) || contractStart;
   // Autotask-style "effective from" date for price/unit changes,
-  // chosen per line in the pricing portal. Defaults to today.
-  const effectiveDate = /^\d{4}-\d{2}-\d{2}$/.test(String(l.price_effective_date || ''))
-    ? String(l.price_effective_date) : today;
+  // chosen per line in the pricing portal. Defaults to today, clamped
+  // into the contract window (Autotask rejects dates outside it).
+  let effectiveDate = iso(l.price_effective_date) || today;
+  if (effectiveDate < contractStart) effectiveDate = contractStart;
+  if (effectiveDate > contractEnd) effectiveDate = contractEnd;
 
   out.push({ json: Object.assign({}, l, {
     line_key: l.subscription_id + '|' + l.stock_code,

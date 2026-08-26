@@ -137,5 +137,11 @@ the matching `workflows/generated/*.js` file.
   adjust the JSON body in the corresponding HTTP node.
 - The sync webhook responds immediately (`onReceived`) and runs in the
   background; refresh the portal to see progress.
-- Contract start/end dates come from the invoice report’s TERM START/END
-  (falling back to usage start + term length).
+- Contract start/end dates come from the invoice report’s TERM START/END,
+  falling back to the annuity’s REVALUATION PERIOD (current term’s renewal
+  date), then usage start + term length. Adjustment/effective dates are
+  clamped into the contract window, and an existing contract whose endDate
+  predates the current term end is extended automatically (Autotask rejects
+  adjustments dated outside the contract window).
+- A successful `ContractServiceAdjustments` POST returns `itemId: null` —
+  the sync treats “no error in the response” as success.

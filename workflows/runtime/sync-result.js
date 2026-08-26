@@ -14,6 +14,7 @@ const svcDec = grab('Service Decision');
 const svcCreated = grab('Service From Create');
 const conDec = grab('Contract Decision');
 const conCreated = grab('Contract From Create');
+const conExtended = grab('Contract Extended');
 const csCreate = grab('CS From Create');
 const csPatch = grab('CS After Patch');
 const csDec = grab('CS Decision');
@@ -32,6 +33,10 @@ if (svcCreated) {
 if (conCreated) {
   if (conCreated.contract_id) notes.push('contract created #' + conCreated.contract_id);
   else errors.push('contract create failed: ' + (conCreated.create_error || 'unknown'));
+}
+if (conExtended) {
+  if (conExtended.extend_error) errors.push('contract end-date extension failed: ' + conExtended.extend_error);
+  else notes.push('contract end extended ' + conExtended.extended_from + ' -> ' + conExtended.extended_to);
 }
 if (csCreate) {
   if (csCreate.cs_id) notes.push('service added to contract @ ' + csCreate.sell);

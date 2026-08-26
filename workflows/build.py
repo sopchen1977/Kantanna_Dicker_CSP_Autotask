@@ -38,6 +38,7 @@ CODE_TOKENS = {
     "__SERVICE_FROM_CREATE__": "service-from-create.js",
     "__CONTRACT_DECISION__": "contract-decision.js",
     "__CONTRACT_FROM_CREATE__": "contract-from-create.js",
+    "__CONTRACT_EXTENDED__": "contract-extended.js",
     "__CS_DECISION__": "cs-decision.js",
     "__CS_FROM_CREATE__": "cs-from-create.js",
     "__CS_AFTER_PATCH__": "cs-after-patch.js",

@@ -1,8 +1,8 @@
-// Input: one Autotask service-adjustment response per planned change.
-// A successful ContractServiceAdjustments POST returns { itemId: null }
-// (adjustments are write-only in the Autotask REST API), so success is
-// "the response carries no error", not a non-null itemId.
+// Input: Autotask PATCH /Contracts response after extending an existing
+// contract's endDate. Restores the ids Fetch Contract Services needs.
 const line = $('Current Line').first().json;
+const dec = $('Contract Decision').first().json;
+const resp = $input.first().json || {};
 
 function autotaskError(r) {
   const d = r.details || {};
@@ -14,15 +14,10 @@ function autotaskError(r) {
   return 'unknown';
 }
 
-const errors = [];
-let ok = 0;
-for (const i of $input.all()) {
-  const r = i.json || {};
-  if (r.error || r.errors) errors.push(autotaskError(r).slice(0, 200));
-  else ok++;
-}
 return [{ json: {
   line_key: line.line_key,
-  adjust_ok_count: ok,
-  adjust_error: errors.join('; ').slice(0, 300),
+  contract_id: dec.contract_id,
+  extended_from: dec.contract_end_found,
+  extended_to: dec.contract_end_needed,
+  extend_error: (resp.error || resp.errors) ? autotaskError(resp).slice(0, 300) : '',
 } }];

@@ -72,10 +72,23 @@ assert.strictEqual(split.length, 3);
 assert.strictEqual(split[0].json.change, 4);
 assert.strictEqual(split[2].json.date, '2026-07-31');
 
+// A successful ServiceAdjustments POST returns itemId: null — must count as OK
 nodes['Adjust Result'] = runNode('adjust-result.js',
-  [{ json: { itemId: 6001 } }, { json: { itemId: 6002 } }, { json: { itemId: 6003 } }], nodes);
+  [{ json: { itemId: null } }, { json: { itemId: null } }, { json: { itemId: null } }], nodes);
 assert.strictEqual(nodes['Adjust Result'][0].json.adjust_ok_count, 3);
 assert.strictEqual(nodes['Adjust Result'][0].json.adjust_error, '');
+
+// ...and a failed one carries the Autotask message from the error details
+const adjErr = runNode('adjust-result.js', [
+  { json: { itemId: null } },
+  { json: {
+    error: { message: '500 - "{\\"errors\\":[...]}"', status: 500 },
+    details: { httpCode: '500', description: 'The service was not able to process your request',
+      body: { errors: ['ContractServiceAdjustment effectiveDate must be between the start date and end date of the Contract referenced by contractID.'] } },
+  } },
+], nodes)[0].json;
+assert.strictEqual(adjErr.adjust_ok_count, 1);
+assert.ok(adjErr.adjust_error.includes('effectiveDate must be between'), 'real Autotask error must surface');
 
 const result = runNode('sync-result.js', [{ json: {} }], nodes)[0].json;
 console.log('scenario 1 (all created):', result.sync_status, '|', result.sync_message);
@@ -146,6 +159,34 @@ const nC = { 'Current Line': [{ json: lineC }], 'CS Decision': [{ json: { line_k
 const udC = runNode('units-decision.js', [{ json: { items: [] } }], nC)[0].json;
 assert.deepStrictEqual(udC.plan.map((p) => [p.change, p.date]),
   [[1, '2026-07-20'], [1, '2026-07-31']], 'cycle line identified by its window, not by qty match');
+// (c) Adjustment dates are clamped into the contract window
+const lineD = Object.assign({}, line, {
+  qty: 1, invoice_lines: '[]',
+  contract_start: '2025-12-29', contract_end: '2026-12-28',
+  price_effective_date: '2027-03-01',
+});
+const nD = { 'Current Line': [{ json: lineD }], 'CS Decision': [{ json: { line_key: lineD.line_key, contract_id: 7001, service_id: 9001, cs_id: 8001, sell: 34.55 } }] };
+const udD = runNode('units-decision.js', [{ json: { items: [] } }], nD)[0].json;
+assert.deepStrictEqual(udD.plan, [{ change: 1, date: '2026-12-28' }],
+  'a date past the contract end must clamp to the contract end');
+
+// -- Existing contract whose endDate predates the current term -> extend it
+const nE = { 'Current Line': [{ json: line }] };
+const cdE = runNode('contract-decision.js',
+  [{ json: { items: [{ id: 7001, contractName: 'CSP - Thing - SUB-A', endDate: '2024-08-17T00:00:00Z' }] } }], nE)[0].json;
+assert.strictEqual(cdE.need_contract, false);
+assert.strictEqual(cdE.need_date_fix, true, 'stale contract endDate must trigger an extension');
+assert.strictEqual(cdE.contract_end_needed, '2026-12-28');
+assert.strictEqual(cdE.contract_end_found, '2024-08-17');
+nE['Contract Decision'] = [{ json: cdE }];
+const ceE = runNode('contract-extended.js', [{ json: { itemId: null } }], nE)[0].json;
+assert.strictEqual(ceE.contract_id, 7001);
+assert.strictEqual(ceE.extend_error, '');
+// ...and a contract that already reaches the term end needs no fix
+const cdOk = runNode('contract-decision.js',
+  [{ json: { items: [{ id: 7001, contractName: 'CSP - Thing - SUB-A', endDate: '2026-12-28T00:00:00Z' }] } }], nE)[0].json;
+assert.strictEqual(cdOk.need_date_fix, false);
+
 const r3 = runNode('sync-result.js', [{ json: {} }], n3)[0].json;
 console.log('scenario 3 (API errors):', r3.sync_status, '|', r3.sync_message.slice(0, 120));
 assert.strictEqual(r3.sync_status, 'error');

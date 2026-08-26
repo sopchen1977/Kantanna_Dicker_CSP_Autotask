@@ -35,6 +35,16 @@ if (items.length) {
 }
 const target = Number(line.qty || 0);
 
+// Autotask rejects adjustments dated outside the contract window.
+const cStart = String(line.contract_start || '');
+const cEnd = String(line.contract_end || '');
+function clampDate(d) {
+  let v = String(d || '');
+  if (cStart && v < cStart) v = cStart;
+  if (cEnd && v > cEnd) v = cEnd;
+  return v;
+}
+
 let invLines = [];
 try { invLines = JSON.parse(line.invoice_lines || '[]'); } catch (e) { /* no invoice detail */ }
 invLines = invLines.filter((x) => x && x.s).sort((a, b) => String(a.s).localeCompare(String(b.s)));
@@ -72,18 +82,18 @@ if (invLines.length) {
     // Fresh contract service: replay the cycle.
     for (const ev of events) {
       const change = ev.type === 'set' ? ev.q - running : ev.q;
-      if (change !== 0) { plan.push({ change: change, date: ev.date }); running += change; }
+      if (change !== 0) { plan.push({ change: change, date: clampDate(ev.date) }); running += change; }
       if (ev.date > lastDate) lastDate = ev.date;
     }
   }
   // Correct to the annuity quantity (also the single-delta path when the
   // contract already has unit history).
   if (running !== target) {
-    plan.push({ change: target - running, date: lastDate || line.price_effective_date || line.today });
+    plan.push({ change: target - running, date: clampDate(lastDate || line.price_effective_date || line.today) });
   }
 } else if (target !== current) {
   // No invoice detail available: single delta at the portal's From date.
-  plan.push({ change: target - current, date: line.price_effective_date || line.today });
+  plan.push({ change: target - current, date: clampDate(line.price_effective_date || line.today) });
 }
 
 return [{ json: {
