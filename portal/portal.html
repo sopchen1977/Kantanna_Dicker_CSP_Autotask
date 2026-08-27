@@ -454,9 +454,8 @@ function saveMapping(tenantName, company) {
   }).then(function () { location.reload(); });
 }
 
-function saveAll(btn) {
-  btn.disabled = true;
-  var payload = LINES.map(function (l) {
+function savePayload() {
+  return LINES.map(function (l) {
     return {
       subscription_id: l.subscription_id, stock_code: l.stock_code,
       use_custom_price: !!l.use_custom_price,
@@ -465,20 +464,35 @@ function saveAll(btn) {
       price_effective_date: l.price_effective_date || ''
     };
   });
-  fetch(BASE + '/csp-pricing-save', {
+}
+
+function doSave() {
+  return fetch(BASE + '/csp-pricing-save', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ lines: payload })
-  }).then(function (r) { return r.json(); })
+    body: JSON.stringify({ lines: savePayload() })
+  }).then(function (r) { return r.json(); });
+}
+
+function saveAll(btn) {
+  btn.disabled = true;
+  doSave()
     .then(function (res) { setMsg('Saved ' + (res.updated || 0) + ' lines.'); btn.disabled = false; })
     .catch(function (e) { setMsg('Save failed: ' + e.message); btn.disabled = false; });
 }
 
+// Sync ALWAYS saves the on-screen prices first, so what you see is what
+// gets pushed to Autotask.
 function syncNow(btn) {
-  if (!confirm('Save prices first if you changed anything.\n\nPush included lines to Autotask now? Contracts and services will be created/updated.')) return;
+  if (!confirm('Push included lines to Autotask now?\n\nPrices on screen are saved automatically, then contracts and services are created/updated.')) return;
   btn.disabled = true;
-  fetch(BASE + '/csp-autotask-sync', { method: 'POST' })
-    .then(function () { setMsg('Sync started. Refresh in a minute to see per-line results.'); btn.disabled = false; })
-    .catch(function (e) { setMsg('Could not start sync: ' + e.message); btn.disabled = false; });
+  setMsg('Saving prices…');
+  doSave()
+    .then(function (res) {
+      setMsg('Saved ' + (res.updated || 0) + ' lines. Starting sync…');
+      return fetch(BASE + '/csp-autotask-sync', { method: 'POST' });
+    })
+    .then(function () { setMsg('Sync running — takes ~2–3 minutes for all lines. Refresh after that to see results.'); btn.disabled = false; })
+    .catch(function (e) { setMsg('Sync could not start: ' + e.message); btn.disabled = false; });
 }
 
 function setMsg(t) { document.getElementById('msg').textContent = t; }
