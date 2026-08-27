@@ -33,12 +33,30 @@ const annuity = [
     'REVALUATION PERIOD': '', 'UNIT PRICE': '$0.00', 'UNIT RRP': '$0.00' },
   { 'TENANT ID': 'T2', 'TENANT NAME': 'Galilee Solicitors', 'SUBSCRIPTION ID': 'SUB-4',
     'STOCK CODE': 'P1Y:CFQ7TTC0LFLZ:0002:Y:', 'STOCK DESCRIPTION': 'MS NCE M365 E5 1YR ANNUAL BILL', 'REFERENCE': 'Microsoft 365 E5',
-    'QTY': '10.00', 'CHARGE TYPE': 'NCE', 'STATUS': 'Active', 'START USAGE': '01-JAN-2026', 'END USAGE': '01-JAN-2026',
+    'QTY': '10.00', 'CHARGE TYPE': 'NCE', 'STATUS': 'Active', 'START USAGE': '17-AUG-2023', 'END USAGE': '17-AUG-2023',
     'REVALUATION PERIOD': '28-DEC-2026', 'UNIT PRICE': '$835.26', 'UNIT RRP': '$1,000.00' },
   { 'TENANT ID': 'T2', 'TENANT NAME': 'Galilee Solicitors', 'SUBSCRIPTION ID': 'SUB-5',
     'STOCK CODE': 'P1Y:CFQ7TTC0LH0R:0001:1:', 'STOCK DESCRIPTION': 'MS NCE TEAMS PHONE RESOURCE', 'REFERENCE': 'Microsoft Teams Phone Resource',
     'QTY': '4.00', 'CHARGE TYPE': 'NCE', 'STATUS': 'Active', 'START USAGE': '20-MAY-2026', 'END USAGE': '20-MAY-2026',
     'REVALUATION PERIOD': '30-SEP-2026', 'UNIT PRICE': '$0.00', 'UNIT RRP': '$0.00' },
+  // Month-to-month that has auto-renewed since the invoice was raised:
+  // REVALUATION PERIOD is a cycle past the invoiced TERM END.
+  { 'TENANT ID': 'T2', 'TENANT NAME': 'Galilee Solicitors', 'SUBSCRIPTION ID': 'SUB-6',
+    'STOCK CODE': 'P1M:CFQ7TTC0LH0L:0001:1:', 'STOCK DESCRIPTION': 'MS NCE EXCHANGE ONLINE KIOSK', 'REFERENCE': 'Exchange Online Kiosk',
+    'QTY': '1.00', 'CHARGE TYPE': 'NCE', 'STATUS': 'Active', 'START USAGE': '11-NOV-2025', 'END USAGE': '11-NOV-2025',
+    'REVALUATION PERIOD': '31-AUG-2026', 'UNIT PRICE': '$3.00', 'UNIT RRP': '$4.00' },
+  // Three-year-old annual subscription: START USAGE is 2023, but the
+  // current term is the one the invoice reports.
+  { 'TENANT ID': 'T2', 'TENANT NAME': 'Galilee Solicitors', 'SUBSCRIPTION ID': 'SUB-7',
+    'STOCK CODE': 'P1Y:CFQ7TTC0HD32:0002:1:', 'STOCK DESCRIPTION': 'MS NCE VISIO PLAN 2 1YR', 'REFERENCE': 'Visio Plan 2',
+    'QTY': '3.00', 'CHARGE TYPE': 'NCE', 'STATUS': 'Active', 'START USAGE': '29-JUL-2023', 'END USAGE': '28-AUG-2023',
+    'REVALUATION PERIOD': '28-DEC-2026', 'UNIT PRICE': '$100.00', 'UNIT RRP': '$120.00' },
+  // Month-to-month expiring on a month end: the derived cycle start must
+  // not overflow into the following month.
+  { 'TENANT ID': 'T2', 'TENANT NAME': 'Galilee Solicitors', 'SUBSCRIPTION ID': 'SUB-8',
+    'STOCK CODE': 'P1M:CFQ7TTC0LH16:0001:1:', 'STOCK DESCRIPTION': 'MS NCE M365 BUSINESS STD 1MTH', 'REFERENCE': 'Microsoft 365 Business Standard',
+    'QTY': '5.00', 'CHARGE TYPE': 'NCE', 'STATUS': 'Active', 'START USAGE': '31-MAY-2025', 'END USAGE': '31-MAY-2025',
+    'REVALUATION PERIOD': '31-MAR-2027', 'UNIT PRICE': '$20.00', 'UNIT RRP': '$25.00' },
   { 'TENANT ID': 'T9', 'TENANT NAME': 'Some Other Customer', 'SUBSCRIPTION ID': 'SUB-9',
     'STOCK CODE': 'P1Y:XXXX:0001:1:', 'STOCK DESCRIPTION': 'Other', 'REFERENCE': 'Other',
     'QTY': '1.00', 'CHARGE TYPE': 'NCE', 'STATUS': 'Active', 'START USAGE': '', 'END USAGE': '',
@@ -54,6 +72,12 @@ const invoice = [
   { 'TENANT NAME': 'ATLAS OUTSOURCING PTY LTD', 'SUBSCRIPTION ID': 'SUB-1', 'STOCK CODE': 'P1Y:CFQ7TTC0LCHC:0002:1:',
     'USAGE START': '27-JUL-2026', 'USAGE END': '30-JUL-2026', 'QTY': '10', 'UNIT PRICE': '3.64',
     'TERM START': '31-AUG-2025', 'TERM END': '30-AUG-2026' },
+  { 'TENANT NAME': 'Galilee Solicitors', 'SUBSCRIPTION ID': 'SUB-6', 'STOCK CODE': 'P1M:CFQ7TTC0LH0L:0001:1:',
+    'USAGE START': '01-JUL-2026', 'USAGE END': '31-JUL-2026', 'QTY': '1', 'UNIT PRICE': '3.00',
+    'TERM START': '01-JUL-2026', 'TERM END': '31-JUL-2026' },
+  { 'TENANT NAME': 'Galilee Solicitors', 'SUBSCRIPTION ID': 'SUB-7', 'STOCK CODE': 'P1Y:CFQ7TTC0HD32:0002:1:',
+    'USAGE START': '29-JUL-2026', 'USAGE END': '28-AUG-2026', 'QTY': '3', 'UNIT PRICE': '8.33',
+    'TERM START': '29-DEC-2025', 'TERM END': '28-DEC-2026' },
 ];
 
 const nodes = {
@@ -64,7 +88,7 @@ const nodes = {
 const parsed = runNode('parse-lines.js', [{ json: {} }], nodes);
 
 // Pilot filter keeps only pilot customers
-assert.strictEqual(parsed.length, 5, 'pilot filter should keep 5 lines');
+assert.strictEqual(parsed.length, 8, 'pilot filter should keep 8 lines');
 assert.ok(!parsed.some((i) => i.json.tenant_name === 'Some Other Customer'));
 
 // Billing type 1: Annual Commit paid Monthly (P1Y:...:1:)
@@ -107,7 +131,7 @@ assert.strictEqual(azure.charge_type, 'MODN');
 // prepare-lines: default include rule + subscription id in contract name
 const tableRows = parsed.map((i) => ({ json: Object.assign({}, i.json, { include: null, use_custom_price: null, sell_price: null }) }));
 const prepared = runNode('prepare-lines.js', tableRows, {});
-assert.strictEqual(prepared.length, 4, 'Azure/MODN line must be excluded by default; $0 NCE lines stay in');
+assert.strictEqual(prepared.length, 7, 'Azure/MODN line must be excluded by default; $0 NCE lines stay in');
 // $0 NCE line (Teams Phone Resource) is included and sells at $0
 const pZero = prepared.find((i) => i.json.subscription_id === 'SUB-5').json;
 assert.strictEqual(pZero.effective_sell, 0);
@@ -134,13 +158,63 @@ assert.strictEqual(pAnnYr.service_key, 'ANN-YR:CFQ7TTC0LFLZ');
 assert.strictEqual(pAnnYr.service_period_type, 5, 'upfront billing -> yearly service period (Autotask picklist 5)');
 assert.strictEqual(pAnnYr.effective_sell, 1000);
 assert.ok(pAnnYr.service_name.includes('Annual Commit (Billed Annually)'));
-// No invoice rows -> contract window falls back to the revaluation period,
-// not usage start + 12 months (which could date the contract years back)
+// ---- Contract window --------------------------------------------------
+// The annuity report's START USAGE is when the subscription FIRST started,
+// never the current term. REVALUATION PERIOD is the current expiry, and the
+// term runs back from it by the subscription type (P1Y = 12, P1M = 1).
+
+// Annual-upfront line: billed once a year, so no invoice rows this month.
+// The window comes from REVALUATION PERIOD, NOT from the 2023 START USAGE.
+assert.strictEqual(pAnnYr.contract_window_source, 'revaluation');
 assert.strictEqual(pAnnYr.contract_end, '2026-12-28');
-assert.strictEqual(pAnnYr.contract_start, '2025-12-28');
+assert.strictEqual(pAnnYr.contract_start, '2025-12-29');
+assert.strictEqual(pAnnYr.first_started, '2023-08-17');
 assert.ok(pAnnYr.price_effective_date >= pAnnYr.contract_start
   && pAnnYr.price_effective_date <= pAnnYr.contract_end,
   'effective date must be clamped into the contract window');
+
+// Three-year-old annual subscription with an invoiced current term: the
+// invoice TERM START wins (it survives co-terming), 2023 is ignored.
+const pOld = prepared.find((i) => i.json.subscription_id === 'SUB-7').json;
+assert.strictEqual(pOld.contract_window_source, 'invoice');
+assert.strictEqual(pOld.contract_start, '2025-12-29');
+assert.strictEqual(pOld.contract_end, '2026-12-28');
+assert.strictEqual(pOld.first_started, '2023-07-29');
+
+// Month-to-month that auto-renewed since the invoice: REVALUATION PERIOD is
+// a cycle past the invoiced TERM END, so the contract runs to the new
+// expiry. The start still reaches back over the invoice line being replayed.
+const pRenewed = prepared.find((i) => i.json.subscription_id === 'SUB-6').json;
+assert.strictEqual(pRenewed.contract_window_source, 'renewed');
+assert.strictEqual(pRenewed.contract_end, '2026-08-31', 'renewal extends to the revaluation period');
+assert.strictEqual(pRenewed.contract_start, '2026-07-01', 'window reaches the invoice line it replays');
+
+// Month-end arithmetic must clamp, not overflow: 31-MAR minus one month is
+// 28-FEB, so the cycle starts 01-MAR (not 04-MAR).
+const pMonthEnd = prepared.find((i) => i.json.subscription_id === 'SUB-8').json;
+assert.strictEqual(pMonthEnd.contract_start, '2027-03-01');
+assert.strictEqual(pMonthEnd.contract_end, '2027-03-31');
+
+// Atlas: co-termed annual with invoice rows -> invoice term, widened back
+// over the earliest pro-rata usage line only if it predates the term.
+assert.strictEqual(pAnnMo.contract_start, '2025-08-31');
+assert.strictEqual(pAnnMo.contract_end, '2026-08-30');
+
+// A co-termed subscription with no invoice row: the inferred 12-month term
+// would start before the subscription existed, so START USAGE raises it.
+const pCoterm = prepared.find((i) => i.json.subscription_id === 'SUB-5').json;
+assert.strictEqual(pCoterm.contract_window_source, 'revaluation');
+assert.strictEqual(pCoterm.contract_start, '2026-05-21', 'START USAGE + 1 beats revaluation - 12 months');
+assert.strictEqual(pCoterm.contract_end, '2026-09-30');
+
+// START USAGE is never allowed to drag a contract back before its term.
+for (const i of prepared) {
+  const j = i.json;
+  if (j.first_started && j.contract_start && j.contract_window_source === 'revaluation') {
+    assert.ok(j.contract_start > j.first_started,
+      'inferred window must start after the subscription first started');
+  }
+}
 
 // custom price override wins
 tableRows[0].json.use_custom_price = true;

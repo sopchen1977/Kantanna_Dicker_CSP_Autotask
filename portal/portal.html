@@ -119,22 +119,57 @@ function effInclude(l) {
   // simply sync at a $0 sell price.
   return l.charge_type === 'NCE' && l.status === 'Active';
 }
+// Calendar-safe month arithmetic: clamp to the last day of the target
+// month rather than overflowing (31-MAR minus a month is 28-FEB).
 function addMonthsIso(iso, months) {
   var d = new Date(iso + 'T00:00:00Z');
   if (isNaN(d.getTime())) return '';
+  var day = d.getUTCDate();
+  d.setUTCDate(1);
   d.setUTCMonth(d.getUTCMonth() + months);
+  var last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  d.setUTCDate(Math.min(day, last));
   return d.toISOString().slice(0, 10);
 }
-// Same contract-window derivation as the sync (Prepare Lines): term dates
-// from the invoice report, falling back to the revaluation period, then
-// usage start + term length.
+function addDaysIso(iso, days) {
+  var d = new Date(iso + 'T00:00:00Z');
+  if (isNaN(d.getTime())) return '';
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+// Same contract-window derivation as the sync (Prepare Lines). REVALUATION
+// PERIOD is the subscription's current expiry; the term is inferred back
+// from it by subscription type. The invoice report's TERM START is more
+// precise for the same term (co-termed subscriptions), but once REVALUATION
+// PERIOD is past the invoiced TERM END the subscription has renewed / rolled
+// to the next cycle. START USAGE is the ORIGINAL start and is never used.
 function contractWindow(l) {
   var ok = function (v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : ''; };
-  var start = ok(l.term_start);
-  var end = ok(l.term_end) || ok(l.revaluation_period);
-  if (!start && end) start = addMonthsIso(end, -(l.term_months || 12));
-  if (!start) start = ok(l.usage_start);
-  if (!end && start) end = addMonthsIso(start, l.term_months || 12);
+  var max = function (a, b) { return a && b ? (a > b ? a : b) : (a || b); };
+  var months = Number(l.term_months) || 12;
+  var invStart = ok(l.term_start), invEnd = ok(l.term_end), reval = ok(l.revaluation_period);
+  var inferred = reval ? addDaysIso(addMonthsIso(reval, -months), 1) : '';
+  var start = '', end = '';
+  if (reval && invEnd && reval > invEnd) {
+    start = max(addDaysIso(invEnd, 1), inferred); end = reval;
+  } else if (invStart && invEnd) {
+    start = invStart; end = max(invEnd, reval);
+  } else if (reval) {
+    // No invoice row this month: START USAGE (the day before the original
+    // term began) raises the inferred start for co-termed subscriptions.
+    var su = ok(l.usage_start);
+    start = max(inferred, su ? addDaysIso(su, 1) : '');
+    end = reval;
+    if (start > end) start = inferred;
+  }
+  if (!start) start = invStart;
+  if (!end && start) end = addMonthsIso(start, months);
+  var inv = [];
+  try { inv = JSON.parse(l.invoice_lines || '[]'); } catch (e) {}
+  for (var i = 0; i < inv.length; i++) {
+    var s = ok(inv[i] && inv[i].s);
+    if (s && start && s < start) start = s;
+  }
   return { start: start, end: end };
 }
 function marginPct(l) {
@@ -184,8 +219,8 @@ function render() {
 
     var table = document.createElement('table');
     table.innerHTML = '<thead><tr><th>Incl.</th><th>Offer</th><th>Billing</th><th>Subscription ID</th>' +
-      '<th title="Contract/subscription term (current billing period for month-to-month)">Start</th>' +
-      '<th title="Contract/subscription term (current billing period for month-to-month)">End</th>' +
+      '<th title="Start of the CURRENT term (month-to-month: the current billing cycle). Hover the date for when the subscription first started.">Start</th>' +
+      '<th title="End of the current term — the annuity report&#39;s REVALUATION PERIOD. Renewals extend the Autotask contract to this date.">End</th>' +
       '<th class="num">Qty</th><th class="num">Cost</th><th class="num">RRP</th>' +
       '<th title="Tick to change the contract price; unticked, the contract keeps its current price">Edit price</th><th class="num">Sell</th><th title="Date the price change takes effect in Autotask">From</th><th class="num">Margin</th><th>Status</th></tr></thead>';
     var tbody = document.createElement('tbody');
@@ -316,7 +351,14 @@ function buildRow(l) {
 
   var win = contractWindow(l);
   var tdStart = document.createElement('td');
-  tdStart.innerHTML = win.start ? '<span class="mono">' + escapeHtml(win.start) + '</span>' : '<span class="muted">—</span>';
+  // START USAGE is the subscription's ORIGINAL start, not this term's, so
+  // it is shown only as a tooltip alongside the derived current term.
+  var firstStarted = /^\d{4}-\d{2}-\d{2}$/.test(String(l.usage_start || '')) ? String(l.usage_start) : '';
+  var startTitle = 'Current term start' +
+    (firstStarted && firstStarted !== win.start ? ' · first started ' + firstStarted : '');
+  tdStart.innerHTML = win.start
+    ? '<span class="mono" title="' + escapeHtml(startTitle) + '">' + escapeHtml(win.start) + '</span>'
+    : '<span class="muted">—</span>';
   tr.appendChild(tdStart);
   var tdEnd = document.createElement('td');
   tdEnd.innerHTML = win.end ? '<span class="mono">' + escapeHtml(win.end) + '</span>' : '<span class="muted">—</span>';

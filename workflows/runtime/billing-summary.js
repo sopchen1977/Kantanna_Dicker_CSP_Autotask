@@ -21,7 +21,11 @@ function iso(v) { return String(v || '').slice(0, 10); }
 function addMonths(isoDate, months) {
   const d = new Date(isoDate + 'T00:00:00Z');
   if (isNaN(d.getTime())) return '';
+  const day = d.getUTCDate();
+  d.setUTCDate(1);
   d.setUTCMonth(d.getUTCMonth() + months);
+  const last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  d.setUTCDate(Math.min(day, last));
   return d.toISOString().slice(0, 10);
 }
 function amount(b) {
