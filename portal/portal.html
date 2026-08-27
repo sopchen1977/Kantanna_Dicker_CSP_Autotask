@@ -102,9 +102,15 @@ function billingLabel(l) {
   if (l.billing_type === 'usage') return 'Usage';
   return 'Month to Month';
 }
+// The line's CURRENT contract price (read back from Autotask on the last
+// sync); RRP only as the default for lines with no contract service yet.
+function currentPrice(l) {
+  return (l.contract_price !== null && l.contract_price !== undefined && l.contract_price !== '')
+    ? Number(l.contract_price) : periodRrp(l);
+}
 function effSell(l) {
   return (l.use_custom_price && l.sell_price !== null && l.sell_price !== undefined && l.sell_price !== '')
-    ? Number(l.sell_price) : periodRrp(l);
+    ? Number(l.sell_price) : currentPrice(l);
 }
 function effInclude(l) {
   if (l.include === false) return false;
@@ -181,7 +187,7 @@ function render() {
       '<th title="Contract/subscription term (current billing period for month-to-month)">Start</th>' +
       '<th title="Contract/subscription term (current billing period for month-to-month)">End</th>' +
       '<th class="num">Qty</th><th class="num">Cost</th><th class="num">RRP</th>' +
-      '<th>Custom</th><th class="num">Sell</th><th title="Date the price change takes effect in Autotask">From</th><th class="num">Margin</th><th>Status</th></tr></thead>';
+      '<th title="Tick to change the contract price; unticked, the contract keeps its current price">Edit price</th><th class="num">Sell</th><th title="Date the price change takes effect in Autotask">From</th><th class="num">Margin</th><th>Status</th></tr></thead>';
     var tbody = document.createElement('tbody');
     byCustomer[name].forEach(function (l) {
       tbody.appendChild(buildRow(l));
@@ -323,6 +329,7 @@ function buildRow(l) {
   var custom = document.createElement('input');
   custom.type = 'checkbox';
   custom.checked = !!l.use_custom_price;
+  custom.title = 'Tick to change the contract price';
   tr.appendChild(td(custom));
 
   var sell = document.createElement('input');
@@ -390,7 +397,9 @@ function buildRow(l) {
   custom.onchange = function () {
     l.use_custom_price = custom.checked; l._dirty = true;
     if (!custom.checked) {
-      l.sell_price = null; sell.value = fmt(periodRrp(l)); sell.disabled = true;
+      // Unticking does NOT change anything in Autotask: the contract keeps
+      // its current price, which is what we show.
+      l.sell_price = null; sell.value = fmt(currentPrice(l)); sell.disabled = true;
       effDate.value = new Date().toISOString().slice(0, 10);
       l.price_effective_date = effDate.value;
       effDate.disabled = true;

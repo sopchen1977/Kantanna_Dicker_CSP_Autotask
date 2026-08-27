@@ -724,7 +724,8 @@ const markSynced = node({
           autotask_contract_id: expr('{{ $json.autotask_contract_id }}'),
           autotask_contract_service_id: expr('{{ $json.autotask_contract_service_id }}'),
           billing_last: expr('{{ $json.billing_last }}'),
-          billing_next: expr('{{ $json.billing_next }}')
+          billing_next: expr('{{ $json.billing_next }}'),
+          contract_price: expr('{{ $json.contract_price }}')
         },
         schema: [
           { id: 'sync_status', displayName: 'sync_status', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false },
@@ -733,7 +734,8 @@ const markSynced = node({
           { id: 'autotask_contract_id', displayName: 'autotask_contract_id', required: false, defaultMatch: false, display: true, type: 'number', canBeUsedToMatch: false },
           { id: 'autotask_contract_service_id', displayName: 'autotask_contract_service_id', required: false, defaultMatch: false, display: true, type: 'number', canBeUsedToMatch: false },
           { id: 'billing_last', displayName: 'billing_last', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false },
-          { id: 'billing_next', displayName: 'billing_next', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false }
+          { id: 'billing_next', displayName: 'billing_next', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false },
+          { id: 'contract_price', displayName: 'contract_price', required: false, defaultMatch: false, display: true, type: 'number', canBeUsedToMatch: false }
         ]
       },
       options: {}

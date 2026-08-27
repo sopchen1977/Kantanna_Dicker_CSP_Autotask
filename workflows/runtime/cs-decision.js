@@ -31,10 +31,15 @@ function currentPrice(c) {
 }
 
 const oldPrice = cs ? currentPrice(cs) : null;
+// Re-price ONLY when the user explicitly set a price in the portal
+// ("Edit price" ticked). Otherwise the contract keeps its current price —
+// unticking never reverts anything to RRP.
+const editing = line.use_custom_price === true;
+const target = Number(line.effective_sell);
 let action = 'none';
 if (!cid || !serviceId) action = 'none';
 else if (!cs) action = 'create';
-else if (oldPrice === null || Math.abs(oldPrice - Number(line.effective_sell)) > 0.005) action = 'patch';
+else if (editing && (oldPrice === null || Math.abs(oldPrice - target) > 0.005)) action = 'patch';
 
 return [{ json: {
   line_key: line.line_key,
@@ -43,5 +48,7 @@ return [{ json: {
   service_id: serviceId,
   cs_id: cs ? cs.id : null,
   old_price: oldPrice,
-  sell: Number(line.effective_sell),
+  // The price carried into unit adjustments: the price being set when
+  // editing/creating, otherwise the contract's existing price.
+  sell: action === 'none' && oldPrice !== null ? oldPrice : target,
 } }];

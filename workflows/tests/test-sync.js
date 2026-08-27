@@ -98,8 +98,10 @@ assert.strictEqual(result.autotask_contract_id, 7001);
 assert.strictEqual(result.autotask_service_id, 9001);
 assert.strictEqual(result.autotask_contract_service_id, 8001);
 
-// -- Scenario 2: everything exists, price differs -> patch; units match
-const n2 = { 'Current Line': [{ json: line }] };
+// -- Scenario 2: everything exists, user is EDITING the price -> patch;
+//    units match. (Re-pricing only happens with 'Edit price' ticked.)
+const lineEdit = Object.assign({}, line, { use_custom_price: true, sell_price: 34.55 });
+const n2 = { 'Current Line': [{ json: lineEdit }] };
 n2['Service Decision'] = runNode('service-decision.js', [{ json: { items: [{ id: 9001, name: line.service_name }] } }], n2);
 assert.strictEqual(n2['Service Decision'][0].json.need_service, false);
 n2['Record Service'] = [{ json: { sku: 'P1Y:SKU1', autotask_service_id: 9001 } }];
@@ -124,8 +126,18 @@ const csDiff = runNode('cs-decision.js', [{ json: { items: [
 ] } }], n2)[0].json;
 assert.strictEqual(csDiff.action, 'patch');
 assert.ok(Math.abs(csDiff.old_price - 30) < 0.005, '1200/40 = 30');
+// NOT editing: a differing price must be left alone (no revert to RRP),
+// and the contract's current price is carried for unit adjustments.
+const nNoEdit = { 'Current Line': [{ json: line }],
+  'Contract Decision': n2['Contract Decision'], 'Contract From Create': n2['Contract From Create'],
+  'Record Service': n2['Record Service'] };
+const csNoEdit = runNode('cs-decision.js', [{ json: { items: [
+  { id: 8001, serviceID: 9001, adjustedPrice: 30 },
+] } }], nNoEdit)[0].json;
+assert.strictEqual(csNoEdit.action, 'none', 'without Edit price ticked the contract price stays as is');
+assert.strictEqual(csNoEdit.sell, 30, 'unit adjustments carry the existing contract price');
 // $0 line at a $0 sell: read-back is all zeros -> no re-patch
-const nZ = { 'Current Line': [{ json: Object.assign({}, line, { effective_sell: 0 }) }],
+const nZ = { 'Current Line': [{ json: Object.assign({}, line, { effective_sell: 0, use_custom_price: true, sell_price: 0 }) }],
   'Contract Decision': n2['Contract Decision'], 'Contract From Create': n2['Contract From Create'],
   'Record Service': n2['Record Service'] };
 const csZero = runNode('cs-decision.js', [{ json: { items: [
@@ -139,6 +151,7 @@ const r2 = runNode('sync-result.js', [{ json: {} }], n2)[0].json;
 console.log('scenario 2 (patch price):', r2.sync_status, '|', r2.sync_message);
 assert.strictEqual(r2.sync_status, 'synced');
 assert.ok(r2.sync_message.includes('price 30 -> 34.55'));
+assert.strictEqual(r2.contract_price, 34.55, 'patched price becomes the stored contract price');
 
 // -- Scenario 3: Autotask error on create -> error status
 const n3 = { 'Current Line': [{ json: line }] };
