@@ -172,7 +172,7 @@ function contractWindow(l) {
   var max = function (a, b) { return a && b ? (a > b ? a : b) : (a || b); };
   var months = Number(l.term_months) || 12;
   var invStart = ok(l.term_start), invEnd = ok(l.term_end), reval = ok(l.revaluation_period);
-  var inferred = reval ? addDaysIso(addMonthsIso(reval, -months), 1) : '';
+  var inferred = reval ? addMonthsIso(addDaysIso(reval, 1), -months) : '';
   var start = '', end = '';
   if (reval && invEnd && reval > invEnd) {
     start = max(addDaysIso(invEnd, 1), inferred); end = reval;
@@ -188,13 +188,41 @@ function contractWindow(l) {
   }
   if (!start) start = invStart;
   if (!end && start) end = addMonthsIso(start, months);
-  var inv = [];
-  try { inv = JSON.parse(l.invoice_lines || '[]'); } catch (e) {}
-  for (var i = 0; i < inv.length; i++) {
-    var s = ok(inv[i] && inv[i].s);
-    if (s && start && s < start) start = s;
-  }
   return { start: start, end: end };
+}
+// Earliest USAGE START among the invoice lines the sync replays as unit
+// adjustments; the contract has to reach back that far.
+function earliestUsageIso(l) {
+  var inv = [];
+  try { inv = JSON.parse(l.invoice_lines || '[]'); } catch (e) { return ''; }
+  var first = '';
+  for (var i = 0; i < inv.length; i++) {
+    var s = String((inv[i] && inv[i].s) || '');
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s) && (!first || s < first)) first = s;
+  }
+  return first;
+}
+var MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+var BILLING_SHORT = { annual_monthly: 'Annual Commit Monthly', annual_upfront: 'Annual Commit Yearly',
+  monthly: 'Month to Month', usage: 'Usage' };
+// The Autotask contract belongs to the CO-TERM GROUP, not the subscription:
+// one per customer + billing type + anniversary. Autotask steps its billing
+// periods from the contract start date, and Dicker bills every co-termed
+// subscription on the group's anchor day, so they have to be the same date.
+// Mirrors the same derivation as the sync (Prepare Lines).
+function groupContract(l) {
+  var w = contractWindow(l);
+  var months = Number(l.term_months) || 12;
+  var end = w.end;
+  if (!end) return { name: '', start: '', end: '' };
+  var start = addMonthsIso(addDaysIso(end, 1), -months);
+  var d = new Date(start + 'T00:00:00Z');
+  var anchor = isNaN(d.getTime()) ? start
+    : (months === 12 ? d.getUTCDate() + ' ' + MONTH_ABBR[d.getUTCMonth()] : 'day ' + d.getUTCDate());
+  var short = BILLING_SHORT[l.billing_type] || 'Month to Month';
+  var firstUsage = earliestUsageIso(l);
+  if (firstUsage && firstUsage < start) start = firstUsage;
+  return { name: 'CSP - ' + short + ' - ' + anchor, start: start, end: end };
 }
 function marginPct(l) {
   var s = effSell(l), c = periodCost(l);
@@ -242,13 +270,21 @@ function render() {
     card.appendChild(head);
 
     var table = document.createElement('table');
-    table.innerHTML = '<thead><tr><th>Incl.</th><th>Offer</th><th>Billing</th><th>Subscription ID</th>' +
+    table.innerHTML = '<thead><tr><th>Incl.</th><th>Offer</th><th>Billing</th>' +
+      '<th title="The Autotask contract this line bills on. Every subscription co-termed to the same anniversary shares one contract, so they Approve &amp; Post together.">Contract</th>' +
+      '<th>Subscription ID</th>' +
       '<th title="Start of the CURRENT term (month-to-month: the current billing cycle). Hover the date for when the subscription first started.">Start</th>' +
       '<th title="End of the current term — the annuity report&#39;s REVALUATION PERIOD. Renewals extend the Autotask contract to this date.">End</th>' +
       '<th class="num">Qty</th><th class="num">Cost</th><th class="num">RRP</th>' +
       '<th title="Tick to change the contract price; unticked, the contract keeps its current price">Edit price</th><th class="num">Sell</th><th title="Date the price change takes effect in Autotask">From</th><th class="num">Margin</th><th>Status</th></tr></thead>';
     var tbody = document.createElement('tbody');
-    byCustomer[name].forEach(function (l) {
+    // Order by the contract they share, so an Approve & Post run reads as
+    // one block per contract rather than scattered lines.
+    byCustomer[name].slice().sort(function (a, b) {
+      var ga = groupContract(a).name, gb = groupContract(b).name;
+      if (ga !== gb) return ga < gb ? -1 : 1;
+      return String(a.offer_name || '').localeCompare(String(b.offer_name || ''));
+    }).forEach(function (l) {
       tbody.appendChild(buildRow(l));
       tbody.appendChild(buildBillingRow(l));
     });
@@ -292,7 +328,7 @@ function pendingItems(l) {
   });
   if (!items.length) {
     var months = l.billing_months === 12 ? 12 : 1;
-    var nextS = lastPosted ? addMonthsIso(lastPosted, months) : (cycleStart || contractWindow(l).start || '');
+    var nextS = lastPosted ? addMonthsIso(lastPosted, months) : (cycleStart || groupContract(l).start || '');
     if (nextS) items.push({ s: nextS, e: '', q: Number(l.qty || 0), type: 'next cycle',
       amount: Math.round(Number(l.qty || 0) * sell * 100) / 100 });
   }
@@ -312,7 +348,7 @@ function buildBillingRow(l) {
   tr.className = 'subrow';
   tr.appendChild(document.createElement('td'));
   var td1 = document.createElement('td');
-  td1.colSpan = 13;
+  td1.colSpan = 14;
 
   var box = document.createElement('div');
   var lastTxt = l.billing_last || '';
@@ -371,7 +407,7 @@ function buildRow(l) {
   if (ci.coterm) {
     var mths = Math.round((ci.days / 365) * 12 * 10) / 10;
     cotermBadge = '<span class="badge coterm" title="Co-termed: this term is ' + ci.days +
-      ' days (' + mths + ' months), aligned to the customer&#39;s other subscriptions. ' +
+      ' days (' + mths + ' months), aligned to the customer&#39;s other subscriptions and billing on their shared contract. ' +
       (l.billing_type === 'annual_upfront'
         ? 'The upfront charge is pro-rated to ' + (ci.factor * 100).toFixed(1) + '% of the annual price, as Dicker invoices it.'
         : 'The monthly rate is unchanged - there are simply fewer charges before it renews for a full year.') +
@@ -379,6 +415,15 @@ function buildRow(l) {
   }
   billing.innerHTML = '<span class="badge">' + escapeHtml(billingLabel(l)) + '</span>' + cotermBadge;
   tr.appendChild(billing);
+
+  var grp = groupContract(l);
+  var tdGroup = document.createElement('td');
+  tdGroup.innerHTML = grp.name
+    ? '<span class="small" title="' + escapeHtml('Contract runs ' + grp.start + ' to ' + grp.end +
+        '. Autotask bills every service on it against this window.') + '">' + escapeHtml(grp.name) + '</span>' +
+      (l.autotask_contract_id ? '<div class="mono small">#' + escapeHtml(String(l.autotask_contract_id)) + '</div>' : '')
+    : '<span class="muted">—</span>';
+  tr.appendChild(tdGroup);
 
   var sid = document.createElement('td');
   sid.innerHTML = '<span class="mono" title="' + escapeHtml(l.subscription_id) + '">' + escapeHtml(String(l.subscription_id).slice(0, 8)) + '…</span>';
@@ -450,7 +495,7 @@ function buildRow(l) {
   }, 'Set to the next Approve & Post billing start date'));
   picks.appendChild(document.createTextNode(' · '));
   picks.appendChild(mkPick('contract start', function () {
-    return contractWindow(l).start;
+    return groupContract(l).start;
   }, 'Set to the contract start date'));
   dateCell.appendChild(picks);
   function updatePicks() {
@@ -489,7 +534,6 @@ function buildRow(l) {
   var status = document.createElement('td');
   var badge = '<span class="badge ' + escapeHtml(l.sync_status || 'pending') + '">' + escapeHtml(l.sync_status || 'pending') + '</span>';
   var extra = '';
-  if (l.autotask_contract_id) extra += '<div class="mono small">Contract #' + l.autotask_contract_id + '</div>';
   if (l.sync_message) extra += '<div class="muted small">' + escapeHtml(String(l.sync_message).slice(0, 120)) + '</div>';
   status.innerHTML = badge + extra;
   tr.appendChild(status);

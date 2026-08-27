@@ -252,6 +252,25 @@ const bs1 = runNode('billing-summary.js', [{ json: { items: [
 ] } }], nBill)[0].json;
 assert.strictEqual(bs1.billing_last, '2026-07-31 · $1762.05 · invoiced');
 assert.ok(bs1.billing_next.startsWith('2026-08-31 · '), 'next charge is one period after the last posted');
+
+// A co-term group contract carries every member's billing, so items belonging
+// to the OTHER services on the contract must not be counted against this line.
+const nBillGroup = { 'Current Line': [{ json: line }],
+  'Units Decision': [{ json: { line_key: line.line_key, contract_id: 7001, cs_id: 8001, service_id: 650,
+    plan: [], plan_count: 0, cycle_start: '2026-07-31' } }] };
+const bsGroup = runNode('billing-summary.js', [{ json: { items: [
+  { itemDate: '2026-07-31T00:00:00Z', totalAmount: 1762.05, invoiceID: 901, contractServiceID: 8001, serviceID: 650 },
+  { itemDate: '2026-08-31T00:00:00Z', totalAmount: 99999, invoiceID: 902, contractServiceID: 8002, serviceID: 651 },
+] } }], nBillGroup)[0].json;
+assert.strictEqual(bsGroup.billing_last, '2026-07-31 · $1762.05 · invoiced',
+  'another service on the shared contract must not become this line\'s last posted');
+// Falls back to serviceID when the API omits contractServiceID.
+const bsGroup2 = runNode('billing-summary.js', [{ json: { items: [
+  { itemDate: '2026-07-31T00:00:00Z', totalAmount: 1762.05, serviceID: 650 },
+  { itemDate: '2026-08-31T00:00:00Z', totalAmount: 99999, serviceID: 651 },
+] } }], nBillGroup)[0].json;
+assert.strictEqual(bsGroup2.billing_last, '2026-07-31 · $1762.05 · posted');
+
 nBill['Billing Summary'] = [{ json: bs1 }];
 
 const r3 = runNode('sync-result.js', [{ json: {} }], n3)[0].json;

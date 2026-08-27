@@ -59,11 +59,14 @@ function earliestUsage(json) {
 //   annual_upfront -> Annual commit, billed annually  (periodType 5)
 //   monthly        -> Month-to-month                  (periodType 2)
 const BILLING = {
-  annual_monthly: { label: 'Annual Commit (Billed Monthly)', period_type: 2, key: 'ANN-MO' },
-  annual_upfront: { label: 'Annual Commit (Billed Annually)', period_type: 5, key: 'ANN-YR' },
-  monthly: { label: 'Month to Month', period_type: 2, key: 'MTM' },
-  usage: { label: 'Usage', period_type: 2, key: 'USAGE' },
+  annual_monthly: { label: 'Annual Commit (Billed Monthly)', short: 'Annual Commit Monthly', period_type: 2, key: 'ANN-MO' },
+  annual_upfront: { label: 'Annual Commit (Billed Annually)', short: 'Annual Commit Yearly', period_type: 5, key: 'ANN-YR' },
+  monthly: { label: 'Month to Month', short: 'Month to Month', period_type: 2, key: 'MTM' },
+  usage: { label: 'Usage', short: 'Usage', period_type: 2, key: 'USAGE' },
 };
+
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const out = [];
 for (const l of rows) {
@@ -78,7 +81,12 @@ for (const l of rows) {
   const inc = l.include === true ? true : (l.include === false ? false : defInclude);
   if (!inc) continue;
 
-  const serviceKey = billing.key + ':' + (l.sku || 'CSP');
+  // The variant matters: CFQ7TTC0LCHC:0002 (Business Premium) and
+  // :001J (Defender Suite) share a SKU root but are different products,
+  // and inside one shared contract they must be different services.
+  // Read straight off the stock code so no re-import is needed.
+  const variant = String(l.stock_code || '').split(':')[2] || '';
+  const serviceKey = billing.key + ':' + (l.sku || 'CSP') + (variant ? ':' + variant : '');
 
   // ---- Contract window -------------------------------------------------
   // The annuity report's START USAGE / END USAGE are when the subscription
@@ -100,18 +108,22 @@ for (const l of rows) {
   const invStart = iso(l.term_start);
   const invEnd = iso(l.term_end);
   const reval = iso(l.revaluation_period);
-  const inferredStart = reval ? addDays(addMonths(reval, -termMonths), 1) : '';
+  // A cycle runs [start .. reval], so the next one opens on reval + 1 day.
+  // Stepping a whole term back from THAT is exact for every month length;
+  // stepping back from reval and adding a day is not (28-FEB minus one month
+  // plus a day lands on 29-JAN instead of 01-FEB).
+  const inferredStart = reval ? addMonths(addDays(reval, 1), -termMonths) : '';
 
-  let contractStart = '';
-  let contractEnd = '';
+  let memberStart = '';
+  let memberEnd = '';
   let windowSource = '';
   if (reval && invEnd && reval > invEnd) {
-    contractStart = maxDate(addDays(invEnd, 1), inferredStart);
-    contractEnd = reval;
+    memberStart = maxDate(addDays(invEnd, 1), inferredStart);
+    memberEnd = reval;
     windowSource = 'renewed';
   } else if (invStart && invEnd) {
-    contractStart = invStart;
-    contractEnd = maxDate(invEnd, reval);
+    memberStart = invStart;
+    memberEnd = maxDate(invEnd, reval);
     windowSource = 'invoice';
   } else if (reval) {
     // No invoice row this month (annual-upfront plans are only invoiced
@@ -121,13 +133,13 @@ for (const l of rows) {
     // START USAGE as the day BEFORE the term begins, hence the +1.
     // Across the August 2026 reports this reproduces the invoice's own
     // TERM START for 68 of 70 comparable lines.
-    contractStart = maxDate(inferredStart, addDays(iso(l.usage_start), 1));
-    contractEnd = reval;
-    if (contractStart > contractEnd) contractStart = inferredStart;
+    memberStart = maxDate(inferredStart, addDays(iso(l.usage_start), 1));
+    memberEnd = reval;
+    if (memberStart > memberEnd) memberStart = inferredStart;
     windowSource = 'revaluation';
   }
-  if (!contractStart) { contractStart = invStart || today; windowSource = windowSource || 'unknown'; }
-  if (!contractEnd) contractEnd = addMonths(contractStart, termMonths) || contractStart;
+  if (!memberStart) { memberStart = invStart || today; windowSource = windowSource || 'unknown'; }
+  if (!memberEnd) memberEnd = addMonths(memberStart, termMonths) || memberStart;
 
   // ---- Co-terming ------------------------------------------------------
   // Microsoft aligns a new annual subscription to an existing anniversary,
@@ -141,7 +153,7 @@ for (const l of rows) {
   //     unit x 0.7452, exactly the day ratio - so the period price has to be
   //     scaled or the contract bills a full year for a part-year term.
   // Measured before the window is widened for replayed invoice lines.
-  const termDays = dayCount(contractStart, contractEnd);
+  const termDays = dayCount(memberStart, memberEnd);
   const termFactor = termMonths === 12 && termDays > 0
     ? Math.min(Math.round((termDays / 365) * 10000) / 10000, 1) : 1;
   const isCoterm = termFactor < 0.99;
@@ -149,9 +161,37 @@ for (const l of rows) {
   const periodRrpTerm = Math.round(periodRrp * scale * 100) / 100;
   const periodCostTerm = Math.round(periodCost * scale * 100) / 100;
 
+  // ---- The co-term group contract ---------------------------------------
+  // Autotask generates its billing periods by stepping from the CONTRACT
+  // START DATE, while Dicker bills a co-termed subscription on the group's
+  // anchor day (verified: 14 of 14 co-termed lines invoice on the group
+  // anchor, none on their own term start). Dating a contract from the
+  // subscription's own start therefore puts Autotask on the wrong grid.
+  //
+  // So the contract belongs to the CO-TERM GROUP, not the subscription:
+  // one contract per customer + billing type + anniversary, holding every
+  // subscription that shares that renewal date. Its window is a pure
+  // function of the anniversary and the term length, so every member of a
+  // group computes an identical window and the first line to reach Autotask
+  // creates it.
+  const groupEnd = memberEnd;
+  const groupStart = addMonths(addDays(groupEnd, 1), -termMonths) || memberStart;
+  const anchor = new Date(groupStart + 'T00:00:00Z');
+  const anchorLabel = isNaN(anchor.getTime()) ? groupStart
+    : (termMonths === 12
+      ? anchor.getUTCDate() + ' ' + MONTH_ABBR[anchor.getUTCMonth()]
+      : 'day ' + anchor.getUTCDate());
+
+  let contractStart = groupStart;
+  const contractEnd = groupEnd;
   // Reach back over the invoice lines this run replays as unit adjustments.
   const firstUsage = earliestUsage(l.invoice_lines);
   if (firstUsage && firstUsage < contractStart) contractStart = firstUsage;
+
+  // Where this subscription's units begin inside the shared contract.
+  // Autotask pro-rates the first period when this falls mid-cycle, which is
+  // exactly how Dicker bills a newly co-termed subscription.
+  const serviceEffective = maxDate(memberStart, contractStart) || contractStart;
   // Sell price is per billing period (per month, or per term for upfront,
   // pro-rated when the term is a co-termed stub). An explicit portal price
   // is used exactly as typed.
@@ -167,12 +207,14 @@ for (const l of rows) {
   if (effectiveDate < contractStart) effectiveDate = contractStart;
   if (effectiveDate > contractEnd) effectiveDate = contractEnd;
 
-  // REQUIREMENT: the Subscription ID is always part of the contract name.
-  // ONE contract per subscription for every billing type: each monthly CSP
-  // report finds the same contract again, and when the new billing cycle
-  // (month-to-month auto-renews at Dicker) or a renewed term ends after
-  // the contract's endDate, the contract end date is extended in place.
-  const contractName = 'CSP - ' + String(l.offer_name || '') + ' - ' + l.subscription_id;
+  // The contract name identifies the GROUP, and must stay stable across
+  // renewals - so it carries the anchor's month/day (annual) or day of
+  // month (month-to-month), never the year. A renewal extends the same
+  // contract's end date rather than creating a new one.
+  // The Subscription ID now rides on the contract SERVICE's invoice
+  // description, so it still reaches the invoice line the customer sees.
+  const contractName = 'CSP - ' + billing.short + ' - ' + anchorLabel;
+  const groupKey = String(l.tenant_name || '') + '|' + billing.key + '|' + anchorLabel;
 
   out.push({ json: Object.assign({}, l, {
     line_key: l.subscription_id + '|' + l.stock_code,
@@ -187,10 +229,18 @@ for (const l of rows) {
     full_period_rrp: periodRrp,
     full_period_cost: periodCost,
     contract_name: contractName.slice(0, 100), // Autotask contractName max length
+    contract_group_key: groupKey,
+    contract_anchor: anchorLabel,
+    service_invoice_description:
+      (String(l.offer_name || '') + ' - sub ' + l.subscription_id).slice(0, 100),
     effective_sell: Math.round(effectiveSell * 100) / 100,
     contract_start: contractStart,
     contract_end: contractEnd,
     contract_window_source: windowSource,
+    // This subscription's OWN term inside the shared contract.
+    member_start: memberStart,
+    member_end: memberEnd,
+    service_effective_date: serviceEffective,
     term_days: termDays,
     term_factor: termFactor,
     is_coterm: isCoterm,

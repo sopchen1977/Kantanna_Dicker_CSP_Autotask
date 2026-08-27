@@ -92,8 +92,15 @@ if (invLines.length) {
     plan.push({ change: target - running, date: clampDate(lastDate || line.price_effective_date || line.today) });
   }
 } else if (target !== current) {
-  // No invoice detail available: single delta at the portal's From date.
-  plan.push({ change: target - current, date: clampDate(line.price_effective_date || line.today) });
+  // No invoice detail available (annual-upfront plans are invoiced once a
+  // year). A service being added for the first time starts at the
+  // subscription's own term start, so Autotask pro-rates the opening period
+  // when that falls mid-cycle in the shared co-term contract - the same
+  // shape Dicker bills. An existing service moves at the portal's From date.
+  const startDate = current === 0
+    ? (line.service_effective_date || line.price_effective_date || line.today)
+    : (line.price_effective_date || line.today);
+  plan.push({ change: target - current, date: clampDate(startDate) });
 }
 
 return [{ json: {

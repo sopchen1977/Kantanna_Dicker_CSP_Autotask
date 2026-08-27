@@ -26,7 +26,7 @@ const annuity = [
   { 'TENANT ID': 'T2', 'TENANT NAME': 'Galilee Solicitors', 'SUBSCRIPTION ID': 'SUB-2',
     'STOCK CODE': 'P1M:CFQ7TTC0LCHC:0002:1:', 'STOCK DESCRIPTION': 'MS NCE M365 BP 1MTH', 'REFERENCE': 'Microsoft 365 Business Premium',
     'QTY': '27.00', 'CHARGE TYPE': 'NCE', 'STATUS': 'Active', 'START USAGE': '18-DEC-2025', 'END USAGE': '18-DEC-2025',
-    'REVALUATION PERIOD': '', 'UNIT PRICE': '$33.56', 'UNIT RRP': '$39.48' },
+    'REVALUATION PERIOD': '31-AUG-2026', 'UNIT PRICE': '$33.56', 'UNIT RRP': '$39.48' },
   { 'TENANT ID': 'T2', 'TENANT NAME': 'Galilee Solicitors', 'SUBSCRIPTION ID': 'SUB-3',
     'STOCK CODE': 'DZH318Z0BPS6:0001', 'STOCK DESCRIPTION': 'Microsoft Azure Plan', 'REFERENCE': 'Azure plan',
     'QTY': '1.00', 'CHARGE TYPE': 'MODN', 'STATUS': 'Active', 'START USAGE': '', 'END USAGE': '',
@@ -152,24 +152,34 @@ const pZero = prepared.find((i) => i.json.subscription_id === 'SUB-5').json;
 assert.strictEqual(pZero.effective_sell, 0);
 assert.strictEqual(pZero.period_rrp, 0);
 for (const i of prepared) {
-  assert.ok(i.json.contract_name.includes(i.json.subscription_id), 'Subscription ID must be in contract name');
+  // The contract now belongs to the co-term GROUP, so the Subscription ID
+  // rides on the service line instead of the contract name.
+  assert.ok(i.json.service_invoice_description.includes(i.json.subscription_id),
+    'Subscription ID must reach the invoice line');
+  assert.ok(!/\d{4}/.test(i.json.contract_name.replace(/CSP - /, '')),
+    'contract name must not carry a year, or renewals would fork a new contract');
+  assert.ok(i.json.contract_name.length <= 100);
   assert.strictEqual(i.json.effective_sell, i.json.period_rrp, 'default sell price is the per-period RRP');
 }
 // Each billing type creates a distinct service with the right period type
 const pAnnMo = prepared.find((i) => i.json.subscription_id === 'SUB-1').json;
-assert.strictEqual(pAnnMo.service_key, 'ANN-MO:CFQ7TTC0LCHC');
 assert.strictEqual(pAnnMo.service_period_type, 2);
 assert.ok(pAnnMo.service_name.includes('Annual Commit (Billed Monthly)'));
 const pMtm = prepared.find((i) => i.json.subscription_id === 'SUB-2').json;
-assert.strictEqual(pMtm.service_key, 'MTM:CFQ7TTC0LCHC');
 assert.strictEqual(pMtm.service_period_type, 2);
 assert.ok(pMtm.service_name.includes('Month to Month'));
-// One contract per subscription for every billing type: stable names, so
-// each monthly report finds (and extends) the same contract.
-assert.strictEqual(pMtm.contract_name, 'CSP - Microsoft 365 Business Premium - SUB-2');
-assert.strictEqual(pAnnMo.contract_name, 'CSP - Microsoft 365 Business Premium - SUB-1');
+// ---- Co-term group contracts ------------------------------------------
+// Autotask steps its billing periods from the CONTRACT START DATE, while
+// Dicker bills a co-termed subscription on its GROUP's anchor day. So the
+// contract is the group: one per customer + billing type + anniversary,
+// named from the anchor's month/day (never the year, or a renewal would
+// fork a new contract).
+assert.strictEqual(pAnnMo.contract_name, 'CSP - Annual Commit Monthly - 31 Aug');
+assert.strictEqual(pAnnMo.contract_start, '2025-08-31', 'grid anchored on the 31st, as Dicker invoices');
+assert.strictEqual(pAnnMo.contract_end, '2026-08-30');
+assert.strictEqual(pMtm.contract_name, 'CSP - Month to Month - day 1');
 const pAnnYr = prepared.find((i) => i.json.subscription_id === 'SUB-4').json;
-assert.strictEqual(pAnnYr.service_key, 'ANN-YR:CFQ7TTC0LFLZ');
+assert.strictEqual(pAnnYr.service_key, 'ANN-YR:CFQ7TTC0LFLZ:0002');
 assert.strictEqual(pAnnYr.service_period_type, 5, 'upfront billing -> yearly service period (Autotask picklist 5)');
 assert.strictEqual(pAnnYr.effective_sell, 1000);
 assert.ok(pAnnYr.service_name.includes('Annual Commit (Billed Annually)'));
@@ -181,8 +191,8 @@ assert.ok(pAnnYr.service_name.includes('Annual Commit (Billed Annually)'));
 // Annual-upfront line: billed once a year, so no invoice rows this month.
 // The window comes from REVALUATION PERIOD, NOT from the 2023 START USAGE.
 assert.strictEqual(pAnnYr.contract_window_source, 'revaluation');
-assert.strictEqual(pAnnYr.contract_end, '2026-12-28');
-assert.strictEqual(pAnnYr.contract_start, '2025-12-29');
+assert.strictEqual(pAnnYr.member_end, '2026-12-28');
+assert.strictEqual(pAnnYr.member_start, '2025-12-29');
 assert.strictEqual(pAnnYr.first_started, '2023-08-17');
 assert.ok(pAnnYr.price_effective_date >= pAnnYr.contract_start
   && pAnnYr.price_effective_date <= pAnnYr.contract_end,
@@ -192,8 +202,8 @@ assert.ok(pAnnYr.price_effective_date >= pAnnYr.contract_start
 // invoice TERM START wins (it survives co-terming), 2023 is ignored.
 const pOld = prepared.find((i) => i.json.subscription_id === 'SUB-7').json;
 assert.strictEqual(pOld.contract_window_source, 'invoice');
-assert.strictEqual(pOld.contract_start, '2025-12-29');
-assert.strictEqual(pOld.contract_end, '2026-12-28');
+assert.strictEqual(pOld.member_start, '2025-12-29');
+assert.strictEqual(pOld.member_end, '2026-12-28');
 assert.strictEqual(pOld.first_started, '2023-07-29');
 
 // Month-to-month that auto-renewed since the invoice: REVALUATION PERIOD is
@@ -201,32 +211,33 @@ assert.strictEqual(pOld.first_started, '2023-07-29');
 // expiry. The start still reaches back over the invoice line being replayed.
 const pRenewed = prepared.find((i) => i.json.subscription_id === 'SUB-6').json;
 assert.strictEqual(pRenewed.contract_window_source, 'renewed');
+assert.strictEqual(pRenewed.member_start, '2026-08-01');
 assert.strictEqual(pRenewed.contract_end, '2026-08-31', 'renewal extends to the revaluation period');
 assert.strictEqual(pRenewed.contract_start, '2026-07-01', 'window reaches the invoice line it replays');
+assert.strictEqual(pRenewed.contract_name, 'CSP - Month to Month - day 1');
 
 // Month-end arithmetic must clamp, not overflow: 31-MAR minus one month is
 // 28-FEB, so the cycle starts 01-MAR (not 04-MAR).
 const pMonthEnd = prepared.find((i) => i.json.subscription_id === 'SUB-8').json;
 assert.strictEqual(pMonthEnd.contract_start, '2027-03-01');
 assert.strictEqual(pMonthEnd.contract_end, '2027-03-31');
+// A month-end monthly cycle always anchors on day 1, in every month length -
+// otherwise February would fork the group onto a "day 29" contract.
+assert.strictEqual(pMonthEnd.contract_name, 'CSP - Month to Month - day 1');
 
-// Atlas: co-termed annual with invoice rows -> invoice term, widened back
-// over the earliest pro-rata usage line only if it predates the term.
-assert.strictEqual(pAnnMo.contract_start, '2025-08-31');
-assert.strictEqual(pAnnMo.contract_end, '2026-08-30');
 
 // A co-termed subscription with no invoice row: the inferred 12-month term
 // would start before the subscription existed, so START USAGE raises it.
 const pCoterm = prepared.find((i) => i.json.subscription_id === 'SUB-5').json;
 assert.strictEqual(pCoterm.contract_window_source, 'revaluation');
-assert.strictEqual(pCoterm.contract_start, '2026-05-21', 'START USAGE + 1 beats revaluation - 12 months');
-assert.strictEqual(pCoterm.contract_end, '2026-09-30');
+assert.strictEqual(pCoterm.member_start, '2026-05-21', 'START USAGE + 1 beats revaluation - 12 months');
+assert.strictEqual(pCoterm.member_end, '2026-09-30');
 
 // START USAGE is never allowed to drag a contract back before its term.
 for (const i of prepared) {
   const j = i.json;
-  if (j.first_started && j.contract_start && j.contract_window_source === 'revaluation') {
-    assert.ok(j.contract_start > j.first_started,
+  if (j.first_started && j.member_start && j.contract_window_source === 'revaluation') {
+    assert.ok(j.member_start > j.first_started,
       'inferred window must start after the subscription first started');
   }
 }
@@ -240,8 +251,9 @@ for (const i of prepared) {
 // as Dicker invoices it (verified live: a 272/365-day window bills x0.7452).
 const pCotermYr = prepared.find((i) => i.json.subscription_id === 'SUB-10').json;
 assert.strictEqual(pCotermYr.billing_type, 'annual_upfront');
-assert.strictEqual(pCotermYr.contract_start, '2026-05-14');
-assert.strictEqual(pCotermYr.contract_end, '2026-12-28');
+assert.strictEqual(pCotermYr.member_start, '2026-05-14');
+assert.strictEqual(pCotermYr.member_end, '2026-12-28');
+assert.strictEqual(pCotermYr.contract_name, 'CSP - Annual Commit Yearly - 29 Dec');
 assert.strictEqual(pCotermYr.term_days, 229);
 assert.strictEqual(pCotermYr.term_factor, 0.6274);
 assert.strictEqual(pCotermYr.is_coterm, true);
@@ -268,6 +280,36 @@ assert.strictEqual(pAnnYr.is_coterm, false, 'revaluation-derived annual term is 
 assert.strictEqual(pAnnYr.period_rrp, 1000);
 // Month-to-month never co-terms.
 assert.strictEqual(pRenewed.is_coterm, false);
+
+// Every member of a group derives an identical contract window, so whichever
+// line reaches Autotask first creates it and the rest find it.
+const galilee = prepared.filter((i) => i.json.tenant_name === 'Galilee Solicitors').map((i) => i.json);
+const annMoGroup = galilee.filter((j) => j.contract_name === 'CSP - Annual Commit Monthly - 29 Dec');
+assert.ok(annMoGroup.length >= 2, 'Galilee annual-monthly lines share one contract');
+for (const j of annMoGroup) {
+  assert.strictEqual(j.contract_start, '2025-12-29');
+  assert.strictEqual(j.contract_end, '2026-12-28');
+  assert.strictEqual(j.contract_group_key, annMoGroup[0].contract_group_key);
+}
+// Billing types never share a contract - Autotask period types differ.
+const annYrGroup = galilee.filter((j) => j.billing_type === 'annual_upfront');
+assert.strictEqual(annYrGroup[0].contract_name, 'CSP - Annual Commit Yearly - 29 Dec');
+assert.notStrictEqual(annYrGroup[0].contract_name, annMoGroup[0].contract_name);
+
+// A co-termed member's units start at ITS OWN term start, mid-cycle inside
+// the shared contract, which is where Autotask pro-rates the opening period.
+assert.strictEqual(pCotermMo.service_effective_date, '2026-05-14');
+assert.strictEqual(pCotermMo.contract_start, '2025-12-29');
+assert.ok(pCotermMo.service_effective_date > pCotermMo.contract_start);
+// A full-term member starts with the contract.
+assert.strictEqual(pOld.service_effective_date, pOld.contract_start);
+
+// Products sharing a SKU root must stay distinct services inside one shared
+// contract: CFQ7TTC0LCHC:0002 is Business Premium, :001J is Defender Suite.
+assert.strictEqual(pAnnMo.service_key, 'ANN-MO:CFQ7TTC0LCHC:0002');
+assert.strictEqual(pMtm.service_key, 'MTM:CFQ7TTC0LCHC:0002');
+const keys = prepared.map((i) => i.json.service_key);
+assert.strictEqual(new Set(keys).size, keys.length, 'service keys must be unique per line here');
 
 // custom price override wins
 tableRows[0].json.use_custom_price = true;

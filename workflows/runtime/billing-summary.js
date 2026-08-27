@@ -15,7 +15,20 @@ function grab(name) {
 const ud = grab('Units Decision') || {};
 
 const resp = $input.first().json || {};
-const items = resp.items || [];
+// The contract is shared by every subscription that co-terms to the same
+// anniversary, so its billing items cover the whole group. Keep only the
+// ones belonging to THIS line's contract service.
+const csId = ud.cs_id !== undefined && ud.cs_id !== null ? Number(ud.cs_id) : null;
+const svcId = ud.service_id !== undefined && ud.service_id !== null ? Number(ud.service_id) : null;
+const items = (resp.items || []).filter((b) => {
+  if (csId !== null && b.contractServiceID !== undefined && b.contractServiceID !== null) {
+    return Number(b.contractServiceID) === csId;
+  }
+  if (svcId !== null && b.serviceID !== undefined && b.serviceID !== null) {
+    return Number(b.serviceID) === svcId;
+  }
+  return true;
+});
 
 function iso(v) { return String(v || '').slice(0, 10); }
 function addMonths(isoDate, months) {
