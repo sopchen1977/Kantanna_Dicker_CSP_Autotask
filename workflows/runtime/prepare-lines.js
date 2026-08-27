@@ -28,6 +28,15 @@ function addDays(iso, days) {
 
 const maxDate = (a, b) => (a && b ? (a > b ? a : b) : (a || b));
 
+// Inclusive day count between two ISO dates (a term of 31-AUG-25 ->
+// 30-AUG-26 is 365 days).
+function dayCount(from, to) {
+  const a = new Date(from + 'T00:00:00Z');
+  const b = new Date(to + 'T00:00:00Z');
+  if (isNaN(a.getTime()) || isNaN(b.getTime())) return 0;
+  return Math.round((b - a) / 86400000) + 1;
+}
+
 // Earliest USAGE START across the invoice lines that get replayed as unit
 // adjustments. The contract window has to reach back that far or Autotask
 // rejects the adjustment.
@@ -70,11 +79,6 @@ for (const l of rows) {
   if (!inc) continue;
 
   const serviceKey = billing.key + ':' + (l.sku || 'CSP');
-  // Sell price is per billing period (per month, or per year for upfront).
-  const effectiveSell =
-    l.use_custom_price && l.sell_price !== null && l.sell_price !== undefined
-      ? Number(l.sell_price)
-      : periodRrp;
 
   // ---- Contract window -------------------------------------------------
   // The annuity report's START USAGE / END USAGE are when the subscription
@@ -124,9 +128,38 @@ for (const l of rows) {
   }
   if (!contractStart) { contractStart = invStart || today; windowSource = windowSource || 'unknown'; }
   if (!contractEnd) contractEnd = addMonths(contractStart, termMonths) || contractStart;
+
+  // ---- Co-terming ------------------------------------------------------
+  // Microsoft aligns a new annual subscription to an existing anniversary,
+  // so its CURRENT term is shorter than the full 12-month commitment (Atlas
+  // Entra ID P2: 03-MAR-26 -> 30-AUG-26, 181 days). Dicker still reports the
+  // full 12-month UNIT PRICE / UNIT RRP on every such line.
+  //   - Billed monthly: the monthly rate is unchanged (unit / 12); the stub
+  //     just means fewer monthly charges before it renews for a full year.
+  //   - Billed annually upfront: the single charge IS pro-rated on days.
+  //     Verified against the invoice report - a 272-of-365-day window bills
+  //     unit x 0.7452, exactly the day ratio - so the period price has to be
+  //     scaled or the contract bills a full year for a part-year term.
+  // Measured before the window is widened for replayed invoice lines.
+  const termDays = dayCount(contractStart, contractEnd);
+  const termFactor = termMonths === 12 && termDays > 0
+    ? Math.min(Math.round((termDays / 365) * 10000) / 10000, 1) : 1;
+  const isCoterm = termFactor < 0.99;
+  const scale = isCoterm && billingType === 'annual_upfront' ? termFactor : 1;
+  const periodRrpTerm = Math.round(periodRrp * scale * 100) / 100;
+  const periodCostTerm = Math.round(periodCost * scale * 100) / 100;
+
   // Reach back over the invoice lines this run replays as unit adjustments.
   const firstUsage = earliestUsage(l.invoice_lines);
   if (firstUsage && firstUsage < contractStart) contractStart = firstUsage;
+  // Sell price is per billing period (per month, or per term for upfront,
+  // pro-rated when the term is a co-termed stub). An explicit portal price
+  // is used exactly as typed.
+  const effectiveSell =
+    l.use_custom_price && l.sell_price !== null && l.sell_price !== undefined
+      ? Number(l.sell_price)
+      : periodRrpTerm;
+
   // Autotask-style "effective from" date for price/unit changes,
   // chosen per line in the pricing portal. Defaults to today, clamped
   // into the contract window (Autotask rejects dates outside it).
@@ -148,13 +181,19 @@ for (const l of rows) {
     service_key: serviceKey,
     service_name: (String(l.offer_name || 'CSP Service') + ' - ' + billing.label + ' [' + (l.sku || 'CSP') + ']').slice(0, 100),
     service_period_type: billing.period_type,
-    period_rrp: periodRrp,
-    period_cost: periodCost,
+    period_rrp: periodRrpTerm,
+    period_cost: periodCostTerm,
+    // Full 12-month list prices, kept for reference when a term is a stub.
+    full_period_rrp: periodRrp,
+    full_period_cost: periodCost,
     contract_name: contractName.slice(0, 100), // Autotask contractName max length
     effective_sell: Math.round(effectiveSell * 100) / 100,
     contract_start: contractStart,
     contract_end: contractEnd,
     contract_window_source: windowSource,
+    term_days: termDays,
+    term_factor: termFactor,
+    is_coterm: isCoterm,
     // START USAGE is the subscription's original start, kept for display
     // only — never used to date the contract.
     first_started: iso(l.usage_start),

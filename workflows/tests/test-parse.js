@@ -57,6 +57,18 @@ const annuity = [
     'STOCK CODE': 'P1M:CFQ7TTC0LH16:0001:1:', 'STOCK DESCRIPTION': 'MS NCE M365 BUSINESS STD 1MTH', 'REFERENCE': 'Microsoft 365 Business Standard',
     'QTY': '5.00', 'CHARGE TYPE': 'NCE', 'STATUS': 'Active', 'START USAGE': '31-MAY-2025', 'END USAGE': '31-MAY-2025',
     'REVALUATION PERIOD': '31-MAR-2027', 'UNIT PRICE': '$20.00', 'UNIT RRP': '$25.00' },
+  // Co-termed annual BILLED ANNUALLY: bought mid-year and aligned to the
+  // customer's 28-DEC anniversary, so the current term is a 229-day stub.
+  { 'TENANT ID': 'T2', 'TENANT NAME': 'Galilee Solicitors', 'SUBSCRIPTION ID': 'SUB-10',
+    'STOCK CODE': 'P1Y:CFQ7TTC0LH16:0001:Y:', 'STOCK DESCRIPTION': 'MS NCE M365 BUSINESS STD 1YR ANNUAL BILL', 'REFERENCE': 'Microsoft 365 Business Standard',
+    'QTY': '2.00', 'CHARGE TYPE': 'NCE', 'STATUS': 'Active', 'START USAGE': '13-MAY-2026', 'END USAGE': '13-MAY-2026',
+    'REVALUATION PERIOD': '28-DEC-2026', 'UNIT PRICE': '$1,000.00', 'UNIT RRP': '$1,200.00' },
+  // Co-termed annual BILLED MONTHLY, same 229-day stub: the monthly rate
+  // must NOT be pro-rated.
+  { 'TENANT ID': 'T2', 'TENANT NAME': 'Galilee Solicitors', 'SUBSCRIPTION ID': 'SUB-11',
+    'STOCK CODE': 'P1Y:CFQ7TTC0LSGZ:0001:1:', 'STOCK DESCRIPTION': 'MS NCE POWER AUTOMATE PREMIUM 1YR COMMIT', 'REFERENCE': 'Power Automate Premium',
+    'QTY': '1.00', 'CHARGE TYPE': 'NCE', 'STATUS': 'Active', 'START USAGE': '13-MAY-2026', 'END USAGE': '13-MAY-2026',
+    'REVALUATION PERIOD': '28-DEC-2026', 'UNIT PRICE': '$239.90', 'UNIT RRP': '$282.24' },
   { 'TENANT ID': 'T9', 'TENANT NAME': 'Some Other Customer', 'SUBSCRIPTION ID': 'SUB-9',
     'STOCK CODE': 'P1Y:XXXX:0001:1:', 'STOCK DESCRIPTION': 'Other', 'REFERENCE': 'Other',
     'QTY': '1.00', 'CHARGE TYPE': 'NCE', 'STATUS': 'Active', 'START USAGE': '', 'END USAGE': '',
@@ -78,6 +90,9 @@ const invoice = [
   { 'TENANT NAME': 'Galilee Solicitors', 'SUBSCRIPTION ID': 'SUB-7', 'STOCK CODE': 'P1Y:CFQ7TTC0HD32:0002:1:',
     'USAGE START': '29-JUL-2026', 'USAGE END': '28-AUG-2026', 'QTY': '3', 'UNIT PRICE': '8.33',
     'TERM START': '29-DEC-2025', 'TERM END': '28-DEC-2026' },
+  { 'TENANT NAME': 'Galilee Solicitors', 'SUBSCRIPTION ID': 'SUB-11', 'STOCK CODE': 'P1Y:CFQ7TTC0LSGZ:0001:1:',
+    'USAGE START': '29-JUL-2026', 'USAGE END': '28-AUG-2026', 'QTY': '1', 'UNIT PRICE': '19.99',
+    'TERM START': '14-MAY-2026', 'TERM END': '28-DEC-2026' },
 ];
 
 const nodes = {
@@ -88,7 +103,7 @@ const nodes = {
 const parsed = runNode('parse-lines.js', [{ json: {} }], nodes);
 
 // Pilot filter keeps only pilot customers
-assert.strictEqual(parsed.length, 8, 'pilot filter should keep 8 lines');
+assert.strictEqual(parsed.length, 10, 'pilot filter should keep 10 lines');
 assert.ok(!parsed.some((i) => i.json.tenant_name === 'Some Other Customer'));
 
 // Billing type 1: Annual Commit paid Monthly (P1Y:...:1:)
@@ -131,7 +146,7 @@ assert.strictEqual(azure.charge_type, 'MODN');
 // prepare-lines: default include rule + subscription id in contract name
 const tableRows = parsed.map((i) => ({ json: Object.assign({}, i.json, { include: null, use_custom_price: null, sell_price: null }) }));
 const prepared = runNode('prepare-lines.js', tableRows, {});
-assert.strictEqual(prepared.length, 7, 'Azure/MODN line must be excluded by default; $0 NCE lines stay in');
+assert.strictEqual(prepared.length, 9, 'Azure/MODN line must be excluded by default; $0 NCE lines stay in');
 // $0 NCE line (Teams Phone Resource) is included and sells at $0
 const pZero = prepared.find((i) => i.json.subscription_id === 'SUB-5').json;
 assert.strictEqual(pZero.effective_sell, 0);
@@ -215,6 +230,44 @@ for (const i of prepared) {
       'inferred window must start after the subscription first started');
   }
 }
+
+// ---- Co-terming -------------------------------------------------------
+// A term that is not a full 12 months means Microsoft aligned this
+// subscription to the customer's existing anniversary. Dicker still lists
+// the full 12-month unit price on the line either way.
+
+// Billed ANNUALLY UPFRONT: the single charge is pro-rated on days, exactly
+// as Dicker invoices it (verified live: a 272/365-day window bills x0.7452).
+const pCotermYr = prepared.find((i) => i.json.subscription_id === 'SUB-10').json;
+assert.strictEqual(pCotermYr.billing_type, 'annual_upfront');
+assert.strictEqual(pCotermYr.contract_start, '2026-05-14');
+assert.strictEqual(pCotermYr.contract_end, '2026-12-28');
+assert.strictEqual(pCotermYr.term_days, 229);
+assert.strictEqual(pCotermYr.term_factor, 0.6274);
+assert.strictEqual(pCotermYr.is_coterm, true);
+assert.strictEqual(pCotermYr.full_period_rrp, 1200);
+assert.strictEqual(pCotermYr.period_rrp, 752.88, 'upfront charge pro-rated to the stub term');
+assert.strictEqual(pCotermYr.period_cost, 627.4);
+assert.strictEqual(pCotermYr.effective_sell, 752.88);
+
+// Billed MONTHLY on the same stub: the monthly rate is unchanged, there are
+// simply fewer charges before it renews for a full year.
+const pCotermMo = prepared.find((i) => i.json.subscription_id === 'SUB-11').json;
+assert.strictEqual(pCotermMo.billing_type, 'annual_monthly');
+assert.strictEqual(pCotermMo.term_days, 229);
+assert.strictEqual(pCotermMo.is_coterm, true);
+assert.ok(Math.abs(pCotermMo.period_rrp - 23.52) < 0.005, 'monthly rate must NOT be pro-rated');
+assert.strictEqual(pCotermMo.period_rrp, pCotermMo.full_period_rrp);
+assert.strictEqual(pCotermMo.effective_sell, pCotermMo.period_rrp);
+
+// A full-length term is never flagged, and its prices are untouched.
+assert.strictEqual(pOld.is_coterm, false);
+assert.strictEqual(pOld.term_days, 365);
+assert.strictEqual(pOld.period_rrp, pOld.full_period_rrp);
+assert.strictEqual(pAnnYr.is_coterm, false, 'revaluation-derived annual term is a full 365 days');
+assert.strictEqual(pAnnYr.period_rrp, 1000);
+// Month-to-month never co-terms.
+assert.strictEqual(pRenewed.is_coterm, false);
 
 // custom price override wins
 tableRows[0].json.use_custom_price = true;
