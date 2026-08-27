@@ -94,6 +94,24 @@ function effInclude(l) {
   // simply sync at a $0 sell price.
   return l.charge_type === 'NCE' && l.status === 'Active';
 }
+function addMonthsIso(iso, months) {
+  var d = new Date(iso + 'T00:00:00Z');
+  if (isNaN(d.getTime())) return '';
+  d.setUTCMonth(d.getUTCMonth() + months);
+  return d.toISOString().slice(0, 10);
+}
+// Same contract-window derivation as the sync (Prepare Lines): term dates
+// from the invoice report, falling back to the revaluation period, then
+// usage start + term length.
+function contractWindow(l) {
+  var ok = function (v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : ''; };
+  var start = ok(l.term_start);
+  var end = ok(l.term_end) || ok(l.revaluation_period);
+  if (!start && end) start = addMonthsIso(end, -(l.term_months || 12));
+  if (!start) start = ok(l.usage_start);
+  if (!end && start) end = addMonthsIso(start, l.term_months || 12);
+  return { start: start, end: end };
+}
 function marginPct(l) {
   var s = effSell(l), c = periodCost(l);
   if (!s) return null;
@@ -141,6 +159,8 @@ function render() {
 
     var table = document.createElement('table');
     table.innerHTML = '<thead><tr><th>Incl.</th><th>Offer</th><th>Billing</th><th>Subscription ID</th>' +
+      '<th title="Contract/subscription term (current billing period for month-to-month)">Start</th>' +
+      '<th title="Contract/subscription term (current billing period for month-to-month)">End</th>' +
       '<th class="num">Qty</th><th class="num">Cost</th><th class="num">RRP</th>' +
       '<th>Custom</th><th class="num">Sell</th><th title="Date the price change takes effect in Autotask">From</th><th class="num">Margin</th><th>Status</th></tr></thead>';
     var tbody = document.createElement('tbody');
@@ -172,6 +192,14 @@ function buildRow(l) {
   var sid = document.createElement('td');
   sid.innerHTML = '<span class="mono" title="' + escapeHtml(l.subscription_id) + '">' + escapeHtml(String(l.subscription_id).slice(0, 8)) + '…</span>';
   tr.appendChild(sid);
+
+  var win = contractWindow(l);
+  var tdStart = document.createElement('td');
+  tdStart.innerHTML = win.start ? '<span class="mono">' + escapeHtml(win.start) + '</span>' : '<span class="muted">—</span>';
+  tr.appendChild(tdStart);
+  var tdEnd = document.createElement('td');
+  tdEnd.innerHTML = win.end ? '<span class="mono">' + escapeHtml(win.end) + '</span>' : '<span class="muted">—</span>';
+  tr.appendChild(tdEnd);
 
   tr.appendChild(tdText(l.qty, 'num'));
   tr.appendChild(tdText(fmt(periodCost(l)) + periodSuffix(l), 'num'));
