@@ -335,6 +335,7 @@ function buildRow(l) {
   effDate.title = 'Price/unit changes take effect in Autotask from this date';
   effDate.onchange = function () { l.price_effective_date = effDate.value; l._dirty = true; };
   l.price_effective_date = effDate.value;
+  effDate.disabled = !l.use_custom_price;
   tr.appendChild(td(effDate));
 
   var margin = document.createElement('td');
@@ -350,8 +351,12 @@ function buildRow(l) {
 
   custom.onchange = function () {
     l.use_custom_price = custom.checked; l._dirty = true;
-    if (!custom.checked) { l.sell_price = null; sell.value = fmt(periodRrp(l)); sell.disabled = true; }
-    else { sell.disabled = false; l.sell_price = Number(sell.value); sell.focus(); }
+    if (!custom.checked) {
+      l.sell_price = null; sell.value = fmt(periodRrp(l)); sell.disabled = true;
+      effDate.value = new Date().toISOString().slice(0, 10);
+      l.price_effective_date = effDate.value;
+      effDate.disabled = true;
+    } else { sell.disabled = false; l.sell_price = Number(sell.value); effDate.disabled = false; sell.focus(); }
     refreshMargin();
   };
   sell.onchange = function () { l.sell_price = Number(sell.value); l._dirty = true; refreshMargin(); };
