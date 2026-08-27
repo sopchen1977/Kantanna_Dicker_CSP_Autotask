@@ -63,6 +63,9 @@
   .pend-item .mono { color:var(--ink); }
   .atlink { margin-left:auto; font-weight:600; color:var(--brand); text-decoration:none; white-space:nowrap; }
   .atlink:hover { text-decoration:underline; }
+  .datepicks { font-size:10.5px; margin-top:2px; white-space:nowrap; color:var(--muted); }
+  .datepicks a { color:var(--brand); text-decoration:none; cursor:pointer; }
+  .datepicks a:hover { text-decoration:underline; }
 </style>
 </head>
 <body>
@@ -336,7 +339,42 @@ function buildRow(l) {
   effDate.onchange = function () { l.price_effective_date = effDate.value; l._dirty = true; };
   l.price_effective_date = effDate.value;
   effDate.disabled = !l.use_custom_price;
-  tr.appendChild(td(effDate));
+
+  // Quick picks: the next Approve & Post billing start, or the contract start.
+  var dateCell = document.createElement('td');
+  dateCell.appendChild(effDate);
+  var picks = document.createElement('div');
+  picks.className = 'datepicks';
+  function mkPick(label, getDate, titleTxt) {
+    var a = document.createElement('a');
+    a.textContent = label;
+    a.title = titleTxt;
+    a.onclick = function () {
+      if (effDate.disabled) return;
+      var d = getDate();
+      if (!d) return;
+      effDate.value = d; l.price_effective_date = d; l._dirty = true;
+    };
+    return a;
+  }
+  picks.appendChild(mkPick('next post', function () {
+    var items = pendingItems(l);
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].type === 'cycle' || items[i].type === 'next cycle') return items[i].s;
+    }
+    return items.length ? items[0].s : '';
+  }, 'Set to the next Approve & Post billing start date'));
+  picks.appendChild(document.createTextNode(' · '));
+  picks.appendChild(mkPick('contract start', function () {
+    return contractWindow(l).start;
+  }, 'Set to the contract start date'));
+  dateCell.appendChild(picks);
+  function updatePicks() {
+    picks.style.opacity = effDate.disabled ? '.45' : '1';
+    picks.style.pointerEvents = effDate.disabled ? 'none' : 'auto';
+  }
+  updatePicks();
+  tr.appendChild(dateCell);
 
   var margin = document.createElement('td');
   margin.className = 'num';
@@ -357,6 +395,7 @@ function buildRow(l) {
       l.price_effective_date = effDate.value;
       effDate.disabled = true;
     } else { sell.disabled = false; l.sell_price = Number(sell.value); effDate.disabled = false; sell.focus(); }
+    updatePicks();
     refreshMargin();
   };
   sell.onchange = function () { l.sell_price = Number(sell.value); l._dirty = true; refreshMargin(); };
