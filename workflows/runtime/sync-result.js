@@ -19,6 +19,7 @@ const csCreate = grab('CS From Create');
 const csPatch = grab('CS After Patch');
 const csDec = grab('CS Decision');
 const units = grab('Units Decision');
+const billing = grab('Billing Summary');
 
 const serviceId = (svcCreated && svcCreated.service_id) || (svcDec && svcDec.service_id) || null;
 const contractId = (conCreated && conCreated.contract_id) || (conDec && conDec.contract_id) || null;
@@ -68,4 +69,6 @@ return [{ json: {
   autotask_service_id: serviceId,
   autotask_contract_id: contractId,
   autotask_contract_service_id: csId,
+  billing_last: (billing && billing.billing_last) || '',
+  billing_next: (billing && billing.billing_next) || '',
 } }];

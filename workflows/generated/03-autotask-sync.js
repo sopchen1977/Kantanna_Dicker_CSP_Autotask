@@ -587,6 +587,42 @@ const unitsDecision = node({
   output: [{ line_key: '2F295B21|P1Y:CFQ7TTC0LCHC:0002:1:', contract_id: 7001, service_id: 9001, cs_id: 8001, sell: 34.55, current_units: 0, target_units: 275, delta: 275 }]
 });
 
+// What has been approved & posted so far: BillingItems only exist once a
+// charge is posted, so the latest item date shows the last posted period
+// and its absence means nothing has been through Approve & Post yet.
+const fetchBillingItems = node({
+  type: 'n8n-nodes-base.httpRequest',
+  version: 4.5,
+  config: {
+    name: 'Fetch Billing Items',
+    position: [5000, 160],
+    onError: 'continueRegularOutput',
+    parameters: {
+      method: 'POST',
+      url: expr("{{ $('Autotask Config').first().json.base_url }}/BillingItems/query"),
+      authentication: 'genericCredentialType',
+      genericAuthType: 'httpCustomAuth',
+      sendBody: true,
+      specifyBody: 'json',
+      jsonBody: expr('{{ JSON.stringify({ MaxRecords: 500, Filter: [{ op: "eq", field: "contractID", value: $json.contract_id || 0 }] }) }}'),
+      options: {}
+    },
+    credentials: { httpCustomAuth: newCredential('KantannaAutotask') }
+  },
+  output: [{ items: [], pageDetails: { count: 0 } }]
+});
+
+const billingSummary = node({
+  type: 'n8n-nodes-base.code',
+  version: 2,
+  config: {
+    name: 'Billing Summary',
+    position: [5070, 20],
+    parameters: { mode: 'runOnceForAllItems', jsCode: "// Input: Autotask BillingItems/query response for this line's contract.\n// BillingItems only exist once a charge has been APPROVED & POSTED in\n// Autotask, so: the latest item date = what was last posted, and the next\n// approve-and-post charge is estimated as one billing period later (or the\n// current billing cycle when nothing has been posted yet) at qty x sell.\n// Passes the Units Decision fields through for the downstream nodes.\nconst line = $('Current Line').first().json;\n\nfunction grab(name) {\n  try {\n    const j = $(name).first().json;\n    return j.line_key === line.line_key ? j : null;\n  } catch (e) { return null; }\n}\nconst ud = grab('Units Decision') || {};\n\nconst resp = $input.first().json || {};\nconst items = resp.items || [];\n\nfunction iso(v) { return String(v || '').slice(0, 10); }\nfunction addMonths(isoDate, months) {\n  const d = new Date(isoDate + 'T00:00:00Z');\n  if (isNaN(d.getTime())) return '';\n  d.setUTCMonth(d.getUTCMonth() + months);\n  return d.toISOString().slice(0, 10);\n}\nfunction amount(b) {\n  const t = b.totalAmount !== undefined && b.totalAmount !== null ? Number(b.totalAmount)\n    : (b.extendedPrice !== undefined && b.extendedPrice !== null ? Number(b.extendedPrice)\n      : Number(b.quantity || 0) * Number(b.rate || 0));\n  return isNaN(t) ? 0 : t;\n}\n\n// Latest posted period = max item date; several items can share that date\n// (pro-rata rows), so sum them and note whether any is already invoiced.\nlet lastDate = '';\nlet lastTotal = 0;\nlet lastInvoiced = false;\nfor (const b of items) {\n  const d = iso(b.itemDate || b.postedOnDate || b.postedDate);\n  if (!d) continue;\n  if (d > lastDate) { lastDate = d; lastTotal = 0; lastInvoiced = false; }\n  if (d === lastDate) { lastTotal += amount(b); if (b.invoiceID) lastInvoiced = true; }\n}\n\nconst qty = Number(line.qty || 0);\nconst sell = Number(line.effective_sell || 0);\nconst periodMonths = Number(line.billing_months || 1) === 12 ? 12 : 1;\nconst nextDate = lastDate ? addMonths(lastDate, periodMonths)\n  : (ud.cycle_start || line.contract_start || line.today || '');\nconst nextAmount = Math.round(qty * sell * 100) / 100;\n\nconst err = resp.error ? String(resp.error.message || JSON.stringify(resp.error)).slice(0, 120) : '';\nreturn [{ json: Object.assign({}, ud, {\n  line_key: line.line_key,\n  billing_last: err ? 'billing lookup failed: ' + err\n    : (lastDate ? lastDate + ' \u00b7 $' + lastTotal.toFixed(2) + (lastInvoiced ? ' \u00b7 invoiced' : ' \u00b7 posted')\n      : 'nothing posted yet'),\n  billing_next: (nextDate || '?') + ' \u00b7 $' + nextAmount.toFixed(2)\n    + ' (' + qty + ' \u00d7 ' + sell.toFixed(2) + (periodMonths === 12 ? '/yr' : '/mo') + ')',\n}) }];\n" }
+  },
+  output: [{ line_key: '2F295B21|P1Y:CFQ7TTC0LCHC:0002:1:', contract_id: 7001, cs_id: 8001, plan: [], plan_count: 0, billing_last: '2026-07-31 · $9501.25 · posted', billing_next: '2026-08-31 · $9501.25 (275 × 34.55/mo)' }]
+});
+
 const needAdjust = ifElse({
   version: 2.2,
   config: {
@@ -655,7 +691,7 @@ const syncResult = node({
   config: {
     name: 'Sync Result',
     position: [5800, 20],
-    parameters: { mode: 'runOnceForAllItems', jsCode: "// Build the final per-line outcome that gets written back to the\n// csp_subscription_lines table. Reads every step's node for THIS line only\n// (guarded by line_key, since $() returns a node's most recent run).\nconst line = $('Current Line').first().json;\n\nfunction grab(name) {\n  try {\n    const j = $(name).first().json;\n    return j.line_key === line.line_key ? j : null;\n  } catch (e) { return null; }\n}\n\nconst svcDec = grab('Service Decision');\nconst svcCreated = grab('Service From Create');\nconst conDec = grab('Contract Decision');\nconst conCreated = grab('Contract From Create');\nconst conExtended = grab('Contract Extended');\nconst csCreate = grab('CS From Create');\nconst csPatch = grab('CS After Patch');\nconst csDec = grab('CS Decision');\nconst units = grab('Units Decision');\n\nconst serviceId = (svcCreated && svcCreated.service_id) || (svcDec && svcDec.service_id) || null;\nconst contractId = (conCreated && conCreated.contract_id) || (conDec && conDec.contract_id) || null;\nconst csId = (csCreate && csCreate.cs_id) || (csDec && csDec.cs_id) || null;\n\nconst notes = [];\nconst errors = [];\nif (svcCreated) {\n  if (svcCreated.service_id) notes.push('service created #' + svcCreated.service_id);\n  else errors.push('service create failed: ' + (svcCreated.create_error || 'unknown'));\n}\nif (conCreated) {\n  if (conCreated.contract_id) notes.push('contract created #' + conCreated.contract_id);\n  else errors.push('contract create failed: ' + (conCreated.create_error || 'unknown'));\n}\nif (conExtended) {\n  if (conExtended.extend_error) errors.push('contract end-date extension failed: ' + conExtended.extend_error);\n  else notes.push('contract end extended ' + conExtended.extended_from + ' -> ' + conExtended.extended_to);\n}\nif (csCreate) {\n  if (csCreate.cs_id) notes.push('service added to contract @ ' + csCreate.sell);\n  else errors.push('contract service create failed: ' + (csCreate.create_error || 'unknown'));\n}\nif (csPatch) {\n  if (csPatch.patch_error) errors.push('price update failed: ' + csPatch.patch_error);\n  else notes.push('price ' + csPatch.old_price + ' -> ' + csPatch.sell\n    + (csPatch.effective_date ? ' effective ' + csPatch.effective_date : ''));\n}\nif (units && units.plan_count > 0 && csId) {\n  const adj = grab('Adjust Result');\n  if (adj && adj.adjust_error) errors.push('unit adjustment failed: ' + adj.adjust_error);\n  else notes.push('units ' + units.current_units + ' -> ' + units.target_units +\n    ' (' + units.plan_summary + ')');\n}\nif (!serviceId) errors.push('no Autotask service resolved');\nif (!contractId) errors.push('no Autotask contract resolved');\nif (!csId && serviceId && contractId) errors.push('no contract service resolved');\n\nconst status = errors.length ? 'error' : 'synced';\nconst message = (errors.length ? errors : (notes.length ? notes : ['up to date'])).join('; ').slice(0, 500);\n\nreturn [{ json: {\n  subscription_id: line.subscription_id,\n  stock_code: line.stock_code,\n  sync_status: status,\n  sync_message: message,\n  autotask_service_id: serviceId,\n  autotask_contract_id: contractId,\n  autotask_contract_service_id: csId,\n} }];\n" }
+    parameters: { mode: 'runOnceForAllItems', jsCode: "// Build the final per-line outcome that gets written back to the\n// csp_subscription_lines table. Reads every step's node for THIS line only\n// (guarded by line_key, since $() returns a node's most recent run).\nconst line = $('Current Line').first().json;\n\nfunction grab(name) {\n  try {\n    const j = $(name).first().json;\n    return j.line_key === line.line_key ? j : null;\n  } catch (e) { return null; }\n}\n\nconst svcDec = grab('Service Decision');\nconst svcCreated = grab('Service From Create');\nconst conDec = grab('Contract Decision');\nconst conCreated = grab('Contract From Create');\nconst conExtended = grab('Contract Extended');\nconst csCreate = grab('CS From Create');\nconst csPatch = grab('CS After Patch');\nconst csDec = grab('CS Decision');\nconst units = grab('Units Decision');\nconst billing = grab('Billing Summary');\n\nconst serviceId = (svcCreated && svcCreated.service_id) || (svcDec && svcDec.service_id) || null;\nconst contractId = (conCreated && conCreated.contract_id) || (conDec && conDec.contract_id) || null;\nconst csId = (csCreate && csCreate.cs_id) || (csDec && csDec.cs_id) || null;\n\nconst notes = [];\nconst errors = [];\nif (svcCreated) {\n  if (svcCreated.service_id) notes.push('service created #' + svcCreated.service_id);\n  else errors.push('service create failed: ' + (svcCreated.create_error || 'unknown'));\n}\nif (conCreated) {\n  if (conCreated.contract_id) notes.push('contract created #' + conCreated.contract_id);\n  else errors.push('contract create failed: ' + (conCreated.create_error || 'unknown'));\n}\nif (conExtended) {\n  if (conExtended.extend_error) errors.push('contract end-date extension failed: ' + conExtended.extend_error);\n  else notes.push('contract end extended ' + conExtended.extended_from + ' -> ' + conExtended.extended_to);\n}\nif (csCreate) {\n  if (csCreate.cs_id) notes.push('service added to contract @ ' + csCreate.sell);\n  else errors.push('contract service create failed: ' + (csCreate.create_error || 'unknown'));\n}\nif (csPatch) {\n  if (csPatch.patch_error) errors.push('price update failed: ' + csPatch.patch_error);\n  else notes.push('price ' + csPatch.old_price + ' -> ' + csPatch.sell\n    + (csPatch.effective_date ? ' effective ' + csPatch.effective_date : ''));\n}\nif (units && units.plan_count > 0 && csId) {\n  const adj = grab('Adjust Result');\n  if (adj && adj.adjust_error) errors.push('unit adjustment failed: ' + adj.adjust_error);\n  else notes.push('units ' + units.current_units + ' -> ' + units.target_units +\n    ' (' + units.plan_summary + ')');\n}\nif (!serviceId) errors.push('no Autotask service resolved');\nif (!contractId) errors.push('no Autotask contract resolved');\nif (!csId && serviceId && contractId) errors.push('no contract service resolved');\n\nconst status = errors.length ? 'error' : 'synced';\nconst message = (errors.length ? errors : (notes.length ? notes : ['up to date'])).join('; ').slice(0, 500);\n\nreturn [{ json: {\n  subscription_id: line.subscription_id,\n  stock_code: line.stock_code,\n  sync_status: status,\n  sync_message: message,\n  autotask_service_id: serviceId,\n  autotask_contract_id: contractId,\n  autotask_contract_service_id: csId,\n  billing_last: (billing && billing.billing_last) || '',\n  billing_next: (billing && billing.billing_next) || '',\n} }];\n" }
   },
   output: [{ subscription_id: '2F295B21', stock_code: 'P1Y:CFQ7TTC0LCHC:0002:1:', sync_status: 'synced', sync_message: 'contract created #7001; service added to contract @ 34.55; units 0 -> 275', autotask_service_id: 9001, autotask_contract_id: 7001, autotask_contract_service_id: 8001 }]
 });
@@ -686,14 +722,18 @@ const markSynced = node({
           sync_message: expr('{{ $json.sync_message }}'),
           autotask_service_id: expr('{{ $json.autotask_service_id }}'),
           autotask_contract_id: expr('{{ $json.autotask_contract_id }}'),
-          autotask_contract_service_id: expr('{{ $json.autotask_contract_service_id }}')
+          autotask_contract_service_id: expr('{{ $json.autotask_contract_service_id }}'),
+          billing_last: expr('{{ $json.billing_last }}'),
+          billing_next: expr('{{ $json.billing_next }}')
         },
         schema: [
           { id: 'sync_status', displayName: 'sync_status', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false },
           { id: 'sync_message', displayName: 'sync_message', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false },
           { id: 'autotask_service_id', displayName: 'autotask_service_id', required: false, defaultMatch: false, display: true, type: 'number', canBeUsedToMatch: false },
           { id: 'autotask_contract_id', displayName: 'autotask_contract_id', required: false, defaultMatch: false, display: true, type: 'number', canBeUsedToMatch: false },
-          { id: 'autotask_contract_service_id', displayName: 'autotask_contract_service_id', required: false, defaultMatch: false, display: true, type: 'number', canBeUsedToMatch: false }
+          { id: 'autotask_contract_service_id', displayName: 'autotask_contract_service_id', required: false, defaultMatch: false, display: true, type: 'number', canBeUsedToMatch: false },
+          { id: 'billing_last', displayName: 'billing_last', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false },
+          { id: 'billing_next', displayName: 'billing_next', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false }
         ]
       },
       options: {}
@@ -741,6 +781,8 @@ export default workflow('kantanna-csp-03-sync', '03 · Autotask Sync')
     .onCase(2, fetchUnits))
   .add(fetchUnits)
   .to(unitsDecision)
+  .to(fetchBillingItems)
+  .to(billingSummary)
   .to(needAdjust
     .onTrue(splitPlan.to(adjustUnits.to(adjustResult.to(syncResult))))
     .onFalse(syncResult))

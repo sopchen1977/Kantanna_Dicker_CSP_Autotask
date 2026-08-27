@@ -48,6 +48,8 @@
   .margin-neg { color:var(--err); }
   .muted { color:var(--muted); }
   .small { font-size:11.5px; }
+  tr.mainrow td { border-bottom:none; }
+  tr.subrow td { padding:0 10px 8px; font-size:11.5px; background:transparent; }
 </style>
 </head>
 <body>
@@ -164,15 +166,35 @@ function render() {
       '<th class="num">Qty</th><th class="num">Cost</th><th class="num">RRP</th>' +
       '<th>Custom</th><th class="num">Sell</th><th title="Date the price change takes effect in Autotask">From</th><th class="num">Margin</th><th>Status</th></tr></thead>';
     var tbody = document.createElement('tbody');
-    byCustomer[name].forEach(function (l) { tbody.appendChild(buildRow(l)); });
+    byCustomer[name].forEach(function (l) {
+      tbody.appendChild(buildRow(l));
+      tbody.appendChild(buildBillingRow(l));
+    });
     table.appendChild(tbody);
     card.appendChild(table);
     app.appendChild(card);
   });
 }
 
+// Autotask billing state, refreshed on every sync: what was last approved
+// & posted for this line's contract, and the estimated next charge.
+function buildBillingRow(l) {
+  var tr = document.createElement('tr');
+  tr.className = 'subrow';
+  tr.appendChild(document.createElement('td'));
+  var td1 = document.createElement('td');
+  td1.colSpan = 13;
+  var last = l.billing_last || 'not checked yet — run a sync';
+  var next = l.billing_next || '';
+  td1.innerHTML = '<span class="muted">Last posted:</span> ' + escapeHtml(last) +
+    (next ? ' &nbsp;<span class="muted">·&nbsp; Next to post:</span> ' + escapeHtml(next) : '');
+  tr.appendChild(td1);
+  return tr;
+}
+
 function buildRow(l) {
   var tr = document.createElement('tr');
+  tr.className = 'mainrow';
 
   var incl = document.createElement('input');
   incl.type = 'checkbox';

@@ -223,6 +223,24 @@ assert.strictEqual(cdNewCycle.contract_id, 7005);
 assert.strictEqual(cdNewCycle.need_date_fix, true, 'new cycle end extends the contract');
 assert.strictEqual(cdNewCycle.contract_end_needed, '2026-09-21');
 
+// -- Billing summary: last approved & posted + estimated next charge --
+const nBill = { 'Current Line': [{ json: line }],
+  'Units Decision': [{ json: { line_key: line.line_key, contract_id: 7001, cs_id: 8001, plan: [], plan_count: 0, cycle_start: '2026-07-31' } }] };
+// Nothing posted yet -> next charge lands at the current billing cycle
+const bs0 = runNode('billing-summary.js', [{ json: { items: [] } }], nBill)[0].json;
+assert.strictEqual(bs0.billing_last, 'nothing posted yet');
+assert.ok(bs0.billing_next.startsWith('2026-07-31 · $1762.05 (51 × 34.55/mo)'), bs0.billing_next);
+assert.strictEqual(bs0.plan_count, 0, 'Units Decision fields must pass through');
+// Posted items: pro-rata rows on the latest date are summed; invoiced flagged
+const bs1 = runNode('billing-summary.js', [{ json: { items: [
+  { itemDate: '2026-06-30T00:00:00Z', totalAmount: 1500, invoiceID: 900 },
+  { itemDate: '2026-07-31T00:00:00Z', totalAmount: 1700.5, invoiceID: 901 },
+  { itemDate: '2026-07-31T00:00:00Z', totalAmount: 61.55, invoiceID: null },
+] } }], nBill)[0].json;
+assert.strictEqual(bs1.billing_last, '2026-07-31 · $1762.05 · invoiced');
+assert.ok(bs1.billing_next.startsWith('2026-08-31 · '), 'next charge is one period after the last posted');
+nBill['Billing Summary'] = [{ json: bs1 }];
+
 const r3 = runNode('sync-result.js', [{ json: {} }], n3)[0].json;
 console.log('scenario 3 (API errors):', r3.sync_status, '|', r3.sync_message.slice(0, 120));
 assert.strictEqual(r3.sync_status, 'error');

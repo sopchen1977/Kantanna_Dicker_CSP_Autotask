@@ -587,6 +587,42 @@ const unitsDecision = node({
   output: [{ line_key: '2F295B21|P1Y:CFQ7TTC0LCHC:0002:1:', contract_id: 7001, service_id: 9001, cs_id: 8001, sell: 34.55, current_units: 0, target_units: 275, delta: 275 }]
 });
 
+// What has been approved & posted so far: BillingItems only exist once a
+// charge is posted, so the latest item date shows the last posted period
+// and its absence means nothing has been through Approve & Post yet.
+const fetchBillingItems = node({
+  type: 'n8n-nodes-base.httpRequest',
+  version: 4.5,
+  config: {
+    name: 'Fetch Billing Items',
+    position: [5000, 160],
+    onError: 'continueRegularOutput',
+    parameters: {
+      method: 'POST',
+      url: expr("{{ $('Autotask Config').first().json.base_url }}/BillingItems/query"),
+      authentication: 'genericCredentialType',
+      genericAuthType: 'httpCustomAuth',
+      sendBody: true,
+      specifyBody: 'json',
+      jsonBody: expr('{{ JSON.stringify({ MaxRecords: 500, Filter: [{ op: "eq", field: "contractID", value: $json.contract_id || 0 }] }) }}'),
+      options: {}
+    },
+    credentials: { httpCustomAuth: newCredential('KantannaAutotask') }
+  },
+  output: [{ items: [], pageDetails: { count: 0 } }]
+});
+
+const billingSummary = node({
+  type: 'n8n-nodes-base.code',
+  version: 2,
+  config: {
+    name: 'Billing Summary',
+    position: [5070, 20],
+    parameters: { mode: 'runOnceForAllItems', jsCode: __BILLING_SUMMARY__ }
+  },
+  output: [{ line_key: '2F295B21|P1Y:CFQ7TTC0LCHC:0002:1:', contract_id: 7001, cs_id: 8001, plan: [], plan_count: 0, billing_last: '2026-07-31 · $9501.25 · posted', billing_next: '2026-08-31 · $9501.25 (275 × 34.55/mo)' }]
+});
+
 const needAdjust = ifElse({
   version: 2.2,
   config: {
@@ -686,14 +722,18 @@ const markSynced = node({
           sync_message: expr('{{ $json.sync_message }}'),
           autotask_service_id: expr('{{ $json.autotask_service_id }}'),
           autotask_contract_id: expr('{{ $json.autotask_contract_id }}'),
-          autotask_contract_service_id: expr('{{ $json.autotask_contract_service_id }}')
+          autotask_contract_service_id: expr('{{ $json.autotask_contract_service_id }}'),
+          billing_last: expr('{{ $json.billing_last }}'),
+          billing_next: expr('{{ $json.billing_next }}')
         },
         schema: [
           { id: 'sync_status', displayName: 'sync_status', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false },
           { id: 'sync_message', displayName: 'sync_message', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false },
           { id: 'autotask_service_id', displayName: 'autotask_service_id', required: false, defaultMatch: false, display: true, type: 'number', canBeUsedToMatch: false },
           { id: 'autotask_contract_id', displayName: 'autotask_contract_id', required: false, defaultMatch: false, display: true, type: 'number', canBeUsedToMatch: false },
-          { id: 'autotask_contract_service_id', displayName: 'autotask_contract_service_id', required: false, defaultMatch: false, display: true, type: 'number', canBeUsedToMatch: false }
+          { id: 'autotask_contract_service_id', displayName: 'autotask_contract_service_id', required: false, defaultMatch: false, display: true, type: 'number', canBeUsedToMatch: false },
+          { id: 'billing_last', displayName: 'billing_last', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false },
+          { id: 'billing_next', displayName: 'billing_next', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false }
         ]
       },
       options: {}
@@ -741,6 +781,8 @@ export default workflow('kantanna-csp-03-sync', '03 · Autotask Sync')
     .onCase(2, fetchUnits))
   .add(fetchUnits)
   .to(unitsDecision)
+  .to(fetchBillingItems)
+  .to(billingSummary)
   .to(needAdjust
     .onTrue(splitPlan.to(adjustUnits.to(adjustResult.to(syncResult))))
     .onFalse(syncResult))
