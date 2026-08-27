@@ -235,7 +235,7 @@ function pendingItems(l) {
 // ww31 zone (Approve & Post for its charges is one click from there).
 function contractLink(l) {
   if (!l.autotask_contract_id) return '';
-  return '<a class="atlink" target="_blank" rel="noopener" href="https://ww31.autotask.net/AutotaskExtend/ExecuteCommand.aspx?Code=OpenContract&amp;ContractID=' +
+  return '<a class="atlink" target="_blank" rel="noopener" href="https://ww31.autotask.net/Autotask/AutotaskExtend/ExecuteCommand.aspx?Code=OpenContract&amp;ContractID=' +
     encodeURIComponent(l.autotask_contract_id) + '">Open contract in Autotask ↗</a>';
 }
 
