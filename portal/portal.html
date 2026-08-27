@@ -40,6 +40,7 @@
   .btn:disabled { opacity:.5; cursor:default; }
   .toolbar { position:sticky; top:0; z-index:10; background:var(--bg); padding:12px 0; display:flex; gap:10px; align-items:center; }
   .toolbar .msg { color:var(--muted); font-size:13px; }
+  .toolbar a.btn { text-decoration:none; color:var(--ink); }
   .map-box { position:relative; }
   .map-results { position:absolute; top:100%; left:0; width:320px; background:#fff; border:1px solid var(--line); border-radius:6px; box-shadow:0 6px 16px rgba(0,0,0,.12); z-index:20; max-height:240px; overflow:auto; }
   .map-results div { padding:7px 10px; cursor:pointer; font-size:13px; }
@@ -60,6 +61,8 @@
   .pend-total { font-weight:600; }
   .pend-item { display:block; padding:1.5px 0 0; }
   .pend-item .mono { color:var(--ink); }
+  .atlink { margin-left:auto; font-weight:600; color:var(--brand); text-decoration:none; white-space:nowrap; }
+  .atlink:hover { text-decoration:underline; }
 </style>
 </head>
 <body>
@@ -72,6 +75,7 @@
     <button class="btn primary" onclick="saveAll(this)">Save prices</button>
     <button class="btn sync" onclick="syncNow(this)">Sync to Autotask</button>
     <button class="btn" onclick="location.reload()">Refresh</button>
+    <a class="btn" href="https://ww31.autotask.net/" target="_blank" rel="noopener" title="Approve &amp; Post lives under Contracts &gt; Approve &amp; Post">Autotask ↗</a>
     <span class="msg" id="msg"></span>
   </div>
   <div id="app"></div>
@@ -227,6 +231,14 @@ function pendingItems(l) {
   return items;
 }
 
+// Documented Autotask deep link: opens the contract's Summary page in the
+// ww31 zone (Approve & Post for its charges is one click from there).
+function contractLink(l) {
+  if (!l.autotask_contract_id) return '';
+  return '<a class="atlink" target="_blank" rel="noopener" href="https://ww31.autotask.net/AutotaskExtend/ExecuteCommand.aspx?Code=OpenContract&amp;ContractID=' +
+    encodeURIComponent(l.autotask_contract_id) + '">Open contract in Autotask ↗</a>';
+}
+
 function buildBillingRow(l) {
   var tr = document.createElement('tr');
   tr.className = 'subrow';
@@ -254,6 +266,7 @@ function buildBillingRow(l) {
       '<span class="pend-title">' + (allPosted ? 'Report fully posted · next cycle' : 'Awaiting Approve &amp; Post') + '</span>' +
       '<span class="pend-total">$' + total.toFixed(2) + (items.length > 1 ? ' · ' + items.length + ' items' : '') + '</span>' +
       '<span class="muted">Last posted: ' + escapeHtml(lastTxt) + '</span>' +
+      contractLink(l) +
       '</div>';
     var rows = items.map(function (i) {
       return '<span class="pend-item"><span class="mono">' + escapeHtml(i.s) +
