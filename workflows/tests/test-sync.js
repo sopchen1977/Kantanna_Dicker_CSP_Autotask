@@ -370,4 +370,52 @@ assert.ok(rDescFail.sync_message.includes('invoice description update failed'));
 assert.strictEqual(rDescFail.contract_invoice_description, 'Thing - sub SUB-A',
   'a failed patch leaves the live description showing what Autotask still has');
 
+// -- The portal page reads Autotask live ------------------------------------
+// A description or price edited by hand in Autotask must show on a plain
+// refresh, without waiting for a sync.
+function runPortal(nodes) {
+  const code = fs.readFileSync(path.join(RUNTIME, 'build-portal-page.js'), 'utf8');
+  const fn = new Function('$input', '$', 'Buffer', code);
+  const withTemplate = Object.assign({
+    'Portal Template': [{ json: { html: '<html>__DATA_PLACEHOLDER__</html>' } }],
+  }, nodes);
+  return fn({ all: () => [], first: () => ({ json: {} }) }, makeDollar(withTemplate), Buffer);
+}
+function portalLines(nodes) {
+  const html = runPortal(nodes)[0].json.html;
+  const b64 = html.replace('<html>', '').replace('</html>', '');
+  return JSON.parse(Buffer.from(b64, 'base64').toString('utf8')).lines;
+}
+
+const storedLine = {
+  subscription_id: 'SUB-A', stock_code: 'P1Y:SKU1:0002:1:', tenant_name: 'Galilee Solicitors',
+  autotask_contract_id: 7001, autotask_contract_service_id: 8001,
+  contract_price: 34.55, contract_invoice_description: 'Thing - sub SUB-A',
+};
+const portalNodes = {
+  'Fetch Lines': [{ json: storedLine }],
+  'Fetch Mappings': [{ json: { tenant_name: 'Galilee Solicitors', autotask_company_id: 405 } }],
+  'Fetch Live Services': [{ json: { items: [{
+    id: 8001, serviceID: 9001, invoiceDescription: 'Edited by hand in Autotask',
+    internalCurrencyAdjustedPrice: 1200, internalCurrencyUnitPrice: 1382, unitPrice: 34.55,
+  }] } }],
+};
+const shown = portalLines(portalNodes)[0];
+assert.strictEqual(shown.contract_invoice_description, 'Edited by hand in Autotask',
+  'a hand-edited Autotask description must show on refresh');
+assert.ok(Math.abs(shown.contract_price - 30) < 0.005,
+  'the live price is converted out of internal currency: ' + shown.contract_price);
+
+// Autotask unreachable, or the line has no contract service yet: the page
+// still renders from what was stored.
+const noLive = Object.assign({}, portalNodes, { 'Fetch Live Services': [{ json: {} }] });
+assert.strictEqual(portalLines(noLive)[0].contract_invoice_description, 'Thing - sub SUB-A');
+assert.strictEqual(portalLines(noLive)[0].contract_price, 34.55);
+
+const unmatched = Object.assign({}, portalNodes, { 'Fetch Live Services': [{ json: { items: [
+  { id: 9999, invoiceDescription: 'someone else' },
+] } }] });
+assert.strictEqual(portalLines(unmatched)[0].contract_invoice_description, 'Thing - sub SUB-A',
+  'another contract service must not bleed into this line');
+
 console.log('\nALL SYNC TESTS PASSED');

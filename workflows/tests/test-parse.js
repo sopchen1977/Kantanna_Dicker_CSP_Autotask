@@ -434,4 +434,14 @@ assert.strictEqual(mergedNamed.json.service_invoice_description, 'Copilot seats'
 assert.ok(mergedNamed.json.service_invoice_description_default.indexOf(' - subs ') > 0,
   'the merged default is still reported');
 
+// The internal description is the permanent pointer at the subscription, so
+// it stays the generated text however the invoice line is renamed.
+assert.strictEqual(invBase.service_internal_description, invBase.service_invoice_description_default);
+assert.strictEqual(invCustom.service_internal_description, invCustom.service_invoice_description_default,
+  'renaming the invoice line must not change the internal description');
+assert.ok(invCustom.service_internal_description.includes('SUB-1'));
+assert.strictEqual(mergedNamed.json.service_internal_description,
+  mergedNamed.json.service_invoice_description_default,
+  'the merged service keeps its generated internal description too');
+
 console.log('ALL PARSE TESTS PASSED');

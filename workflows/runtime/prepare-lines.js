@@ -266,6 +266,12 @@ for (const l of rows) {
     service_invoice_description: customInvoiceDesc || defaultInvoiceDesc,
     service_invoice_description_default: defaultInvoiceDesc,
     invoice_description_custom: !!customInvoiceDesc,
+    // Autotask's INTERNAL description is a different field with a different
+    // job: it is the permanent internal record of which Dicker subscription
+    // this contract service is. It is set once at create time and is never
+    // touched again, so renaming the customer-facing invoice line does not
+    // destroy the traceability.
+    service_internal_description: defaultInvoiceDesc,
     effective_sell: Math.round(effectiveSell * 100) / 100,
     contract_start: contractStart,
     contract_end: contractEnd,
@@ -324,6 +330,7 @@ for (const k of Object.keys(byService)) {
     primary.invoice_lines = JSON.stringify(invAll).slice(0, 4000);
     primary.service_invoice_description_default =
       (String(primary.offer_name || '') + ' - subs ' + parts.map((p) => p.id).join(', ')).slice(0, 100);
+    primary.service_internal_description = primary.service_invoice_description_default;
     if (!primary.invoice_description_custom) {
       primary.service_invoice_description = primary.service_invoice_description_default;
     }

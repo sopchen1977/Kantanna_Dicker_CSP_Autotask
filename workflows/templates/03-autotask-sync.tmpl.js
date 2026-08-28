@@ -506,7 +506,7 @@ const createCS = node({
       genericAuthType: 'httpCustomAuth',
       sendBody: true,
       specifyBody: 'json',
-      jsonBody: expr('{{ JSON.stringify({ contractID: $json.contract_id, serviceID: $json.service_id, adjustedPrice: $json.sell, invoiceDescription: $("Current Line").first().json.service_invoice_description, internalDescription: $("Current Line").first().json.service_invoice_description }) }}'),
+      jsonBody: expr('{{ JSON.stringify({ contractID: $json.contract_id, serviceID: $json.service_id, adjustedPrice: $json.sell, invoiceDescription: $("Current Line").first().json.service_invoice_description, internalDescription: $("Current Line").first().json.service_internal_description }) }}'),
       options: {}
     },
     credentials: { httpCustomAuth: newCredential('KantannaAutotask') }
@@ -594,7 +594,9 @@ const patchDesc = node({
       genericAuthType: 'httpCustomAuth',
       sendBody: true,
       specifyBody: 'json',
-      jsonBody: expr('{{ JSON.stringify({ id: $("CS Decision").first().json.cs_id, invoiceDescription: $("Current Line").first().json.service_invoice_description, internalDescription: $("Current Line").first().json.service_invoice_description }) }}'),
+      // Only the invoice description. The internal description is set once at
+      // create time and left alone, so it keeps pointing at the subscription.
+      jsonBody: expr('{{ JSON.stringify({ id: $("CS Decision").first().json.cs_id, invoiceDescription: $("Current Line").first().json.service_invoice_description }) }}'),
       options: {}
     },
     credentials: { httpCustomAuth: newCredential('KantannaAutotask') }

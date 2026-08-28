@@ -50,6 +50,55 @@ const fetchMappings = node({
   output: [{ id: 1, tenant_name: 'ATLAS OUTSOURCING PTY LTD', autotask_company_id: 123, autotask_company_name: 'Atlas Outsourcing' }]
 });
 
+// The portal shows what Autotask has RIGHT NOW, not what the last sync
+// happened to record - so a description or price edited by hand in Autotask
+// shows up on the next page load. One query covers every contract on screen
+// (Autotask's `in` operator), and a failure here is non-fatal: the page still
+// renders from the stored values.
+const fetchLiveServices = node({
+  type: 'n8n-nodes-base.httpRequest',
+  version: 4.5,
+  config: {
+    name: 'Fetch Live Services',
+    position: [340, -240],
+    onError: 'continueRegularOutput',
+    parameters: {
+      method: 'POST',
+      url: 'https://webservices31.autotask.net/atservicesrest/v1.0/ContractServices/query',
+      authentication: 'genericCredentialType',
+      genericAuthType: 'httpCustomAuth',
+      sendBody: true,
+      specifyBody: 'json',
+      jsonBody: expr('{{ JSON.stringify({ MaxRecords: 500, Filter: (() => { const ids = [...new Set($("Fetch Lines").all().map((i) => i.json.autotask_contract_id).filter((v) => v))]; return ids.length ? [{ op: "in", field: "contractID", value: ids }] : [{ op: "eq", field: "id", value: 0 }]; })() }) }}'),
+      options: {}
+    },
+    credentials: { httpCustomAuth: newCredential('KantannaAutotask') }
+  },
+  output: [{ items: [], pageDetails: { count: 0 } }]
+});
+
+// The page itself, held as a plain string on a Set node. Keeping it out of
+// the Build Portal Page code node means the assembly logic can be changed
+// without re-deploying 55KB of HTML, and the page carries no escaping layer.
+// Generated from portal/portal.html at build time - edit that file.
+const portalTemplate = node({
+  type: 'n8n-nodes-base.set',
+  version: 3.4,
+  config: {
+    name: 'Portal Template',
+    position: [460, -240],
+    executeOnce: true,
+    parameters: {
+      mode: 'manual',
+      includeOtherFields: false,
+      assignments: {
+        assignments: [{ id: 'portal-html', name: 'html', type: 'string', value: __PORTAL_HTML__ }]
+      }
+    }
+  },
+  output: [{ html: '<!DOCTYPE html>…' }]
+});
+
 const buildPage = node({
   type: 'n8n-nodes-base.code',
   version: 2,
@@ -318,6 +367,8 @@ export default workflow('kantanna-csp-02-portal', '02 · CSP Pricing Portal')
   .add(portalPage)
   .to(fetchLines)
   .to(fetchMappings)
+  .to(fetchLiveServices)
+  .to(portalTemplate)
   .to(buildPage)
   .to(respondPage)
   .add(savePricing)

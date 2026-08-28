@@ -54,10 +54,12 @@ CODE_TOKENS = {
 
 def runtime_literal(filename: str) -> str:
     code = (RUNTIME / filename).read_text()
-    if filename == "build-portal-page.js":
-        html = (HERE.parent / "portal" / "portal.html").read_text()
-        code = code.replace("__PORTAL_HTML__", json.dumps(html))
     return json.dumps(code)
+
+
+def portal_html() -> str:
+    """The portal page, injected verbatim into the Portal Template Set node."""
+    return json.dumps((HERE.parent / "portal" / "portal.html").read_text())
 
 
 def build() -> None:
@@ -67,6 +69,8 @@ def build() -> None:
         for token, filename in CODE_TOKENS.items():
             if token in text:
                 text = text.replace(token, runtime_literal(filename))
+        if "__PORTAL_HTML__" in text:
+            text = text.replace("__PORTAL_HTML__", portal_html())
         for token, value in IDS.items():
             text = text.replace(token, value)
         out_path = OUT / tmpl.name.replace(".tmpl.js", ".js")
