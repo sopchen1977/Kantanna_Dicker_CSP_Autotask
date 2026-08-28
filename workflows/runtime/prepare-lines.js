@@ -236,10 +236,10 @@ for (const l of rows) {
   if (effectiveDate < contractStart) effectiveDate = contractStart;
   if (effectiveDate > contractEnd) effectiveDate = contractEnd;
 
-  // Every contract name starts with CSP. The Subscription ID rides on the
-  // contract SERVICE's invoice description, so it still reaches the invoice
-  // line the customer sees.
-  const contractName = 'CSP - ' + billing.short + ' - ' + anchorLabel;
+  // Every contract name starts with "CSP Microsoft". The Subscription ID
+  // rides on the contract SERVICE's invoice description, so it still reaches
+  // the invoice line the customer sees.
+  const contractName = 'CSP Microsoft ' + billing.short + ' ' + anchorLabel;
   const groupKey = String(l.tenant_name || '') + '|' + billing.key + '|' + groupId;
 
   out.push({ json: Object.assign({}, l, {

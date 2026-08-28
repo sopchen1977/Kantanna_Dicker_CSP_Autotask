@@ -434,7 +434,7 @@ function groupContract(l) {
     : 'Started ' + su;
   var firstUsage = earliestUsageIso(l);
   if (firstUsage && firstUsage < start) start = firstUsage;
-  return { name: 'CSP - ' + short + ' - ' + label, start: start, end: g.end, label: label, kind: short };
+  return { name: 'CSP Microsoft ' + short + ' ' + label, start: start, end: g.end, label: label, kind: short };
 }
 function marginPct(l) {
   var s = effSell(l), c = periodCost(l);
@@ -672,7 +672,7 @@ function contractHtml(customer, cname, block) {
     meta = '<div class="cmeta"><span>' + lines.length + (lines.length === 1 ? ' line' : ' lines') + '</span></div>';
   } else {
     title = '<div class="ctitle" title="' + escapeHtml(cname) + '">' +
-      '<span class="cpre">CSP</span>' +
+      '<span class="cpre">CSP MICROSOFT</span>' +
       '<span class="cname">' + escapeHtml(block.grp.kind || '') + '</span>' +
       '<span class="cdates">' + escapeHtml(block.grp.label || '') + '</span></div>';
     meta = '<div class="cmeta">' +
