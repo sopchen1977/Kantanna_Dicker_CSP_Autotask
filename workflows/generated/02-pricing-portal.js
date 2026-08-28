@@ -50,6 +50,11 @@ const fetchMappings = node({
   output: [{ id: 1, tenant_name: 'ATLAS OUTSOURCING PTY LTD', autotask_company_id: 123, autotask_company_name: 'Atlas Outsourcing' }]
 });
 
+// The three Autotask queries below each cover every contract on screen in a
+// single call, so they are executeOnce: without it they re-run for every item
+// Fetch Mappings emits and the duplicate requests trip Autotask's limit of 3
+// concurrent API threads (429).
+//
 // The portal shows what Autotask has RIGHT NOW, not what the last sync
 // happened to record - so a description or price edited by hand in Autotask
 // shows up on the next page load. One query covers every contract on screen
@@ -60,6 +65,7 @@ const fetchLiveServices = node({
   version: 4.5,
   config: {
     name: 'Fetch Live Services',
+    executeOnce: true,
     position: [340, -240],
     onError: 'continueRegularOutput',
     parameters: {
@@ -87,6 +93,7 @@ const fetchBillingItems = node({
   version: 4.5,
   config: {
     name: 'Fetch Billing Items',
+    executeOnce: true,
     position: [400, -240],
     onError: 'continueRegularOutput',
     parameters: {
@@ -111,6 +118,7 @@ const fetchInvoices = node({
   version: 4.5,
   config: {
     name: 'Fetch Invoices',
+    executeOnce: true,
     position: [430, -240],
     onError: 'continueRegularOutput',
     parameters: {
