@@ -17,37 +17,11 @@ TEMPLATES = HERE / "templates"
 OUT = HERE / "generated"
 
 # ---- environment-specific IDs (n8n project: Kantanna Dicker CSP and Autotask)
-#
-# Two variants are built from the same templates. "" is the live pilot; "-test"
-# is a throwaway stack with its own data tables, its own webhook paths and its
-# own upload form, so a test import can never touch pilot data. Everything else
-# — the parsing, the pricing maths, the Autotask calls — is identical code.
-VARIANTS = {
-    "": {
-        "__LINES_TABLE_ID__": "FDGqV46wAYu9bnGe",       # csp_subscription_lines
-        "__MAPPINGS_TABLE_ID__": "U7ymd9nAyD0GCLYb",    # csp_customer_mappings
-        "__SERVICES_TABLE_ID__": "ai3p8JIYv082bfjn",    # csp_sku_services
-        "__AUTOTASK_CREDENTIAL_ID__": "YXJai935T9ICrDqi",  # KantannaAutotask
-        "__SUFFIX__": "",
-        "__TABLE_SUFFIX__": "",
-        "__WF_SUFFIX__": "",
-        "__PILOT_CUSTOMERS__": "['B E Smart Admin Services']",
-        "__FORM_URL__": "https://gayleai.app.n8n.cloud/form/5c4bd81e-8556-4639-835f-4de4a7faefb3",
-    },
-    "-test": {
-        "__LINES_TABLE_ID__": "QLQ1Ov51TXE2UiP0",       # csp_subscription_lines_test
-        "__MAPPINGS_TABLE_ID__": "wGmRrV8dJLH0C4R0",    # csp_customer_mappings_test
-        # The SKU -> Autotask Service map is deliberately SHARED: an Autotask
-        # Service is a global product, so the test reuses the ones already
-        # created rather than making duplicates in the product catalogue.
-        "__SERVICES_TABLE_ID__": "ai3p8JIYv082bfjn",
-        "__AUTOTASK_CREDENTIAL_ID__": "YXJai935T9ICrDqi",
-        "__SUFFIX__": "-test",
-        "__TABLE_SUFFIX__": "_test",
-        "__WF_SUFFIX__": " · TEST",
-        "__PILOT_CUSTOMERS__": "['Galilee']",
-        "__FORM_URL__": "https://gayleai.app.n8n.cloud/form/631341bd-c7cd-49d1-ba58-441ec19deb1c",
-    },
+IDS = {
+    "__LINES_TABLE_ID__": "FDGqV46wAYu9bnGe",       # csp_subscription_lines
+    "__MAPPINGS_TABLE_ID__": "U7ymd9nAyD0GCLYb",    # csp_customer_mappings
+    "__SERVICES_TABLE_ID__": "ai3p8JIYv082bfjn",    # csp_sku_services
+    "__AUTOTASK_CREDENTIAL_ID__": "YXJai935T9ICrDqi",  # KantannaAutotask (httpCustomAuth)
 }
 
 # ---- runtime scripts embedded as Code-node jsCode
@@ -78,6 +52,11 @@ CODE_TOKENS = {
 }
 
 
+def runtime_literal(filename: str) -> str:
+    code = (RUNTIME / filename).read_text()
+    return json.dumps(code)
+
+
 def portal_html() -> str:
     """The portal page, injected verbatim into the Portal Template Set node."""
     return json.dumps((HERE.parent / "portal" / "portal.html").read_text())
@@ -85,25 +64,18 @@ def portal_html() -> str:
 
 def build() -> None:
     OUT.mkdir(exist_ok=True)
-    for suffix, ids in VARIANTS.items():
-        for tmpl in sorted(TEMPLATES.glob("*.tmpl.js")):
-            text = tmpl.read_text()
-            for token, filename in CODE_TOKENS.items():
-                if token in text:
-                    code = (RUNTIME / filename).read_text()
-                    # Runtime scripts carry their own tokens (the pilot filter),
-                    # substituted before the script is embedded as a literal.
-                    for t, v in ids.items():
-                        code = code.replace(t, v)
-                    text = text.replace(token, json.dumps(code))
-            if "__PORTAL_HTML__" in text:
-                text = text.replace("__PORTAL_HTML__", portal_html())
-            for token, value in ids.items():
-                text = text.replace(token, value)
-            name = tmpl.name.replace(".tmpl.js", f"{suffix}.js")
-            out_path = OUT / name
-            out_path.write_text(text)
-            print(f"built {out_path.relative_to(HERE.parent)} ({len(text)} bytes)")
+    for tmpl in sorted(TEMPLATES.glob("*.tmpl.js")):
+        text = tmpl.read_text()
+        for token, filename in CODE_TOKENS.items():
+            if token in text:
+                text = text.replace(token, runtime_literal(filename))
+        if "__PORTAL_HTML__" in text:
+            text = text.replace("__PORTAL_HTML__", portal_html())
+        for token, value in IDS.items():
+            text = text.replace(token, value)
+        out_path = OUT / tmpl.name.replace(".tmpl.js", ".js")
+        out_path.write_text(text)
+        print(f"built {out_path.relative_to(HERE.parent)} ({len(text)} bytes)")
 
 
 if __name__ == "__main__":

@@ -7,7 +7,7 @@ const uploadForm = trigger({
     name: 'Monthly Import Form',
     position: [-380, 0],
     parameters: {
-      formTitle: 'Dicker Data CSP Monthly Import__WF_SUFFIX__',
+      formTitle: 'Dicker Data CSP Monthly Import',
       formDescription: 'Upload this month’s Annuity Information export and CSP Invoice Report (.xlsx). Only the DETAILS / Invoice Details tabs are read.',
       formFields: {
         values: [
@@ -87,7 +87,7 @@ const upsertLine = node({
     parameters: {
       resource: 'row',
       operation: 'upsert',
-      dataTableId: { __rl: true, mode: 'id', value: '__LINES_TABLE_ID__', cachedResultName: 'csp_subscription_lines__TABLE_SUFFIX__' },
+      dataTableId: { __rl: true, mode: 'id', value: '__LINES_TABLE_ID__', cachedResultName: 'csp_subscription_lines' },
       matchType: 'allConditions',
       filters: {
         conditions: [
@@ -194,12 +194,12 @@ const importDone = node({
 });
 
 const noteImport = sticky(
-  '## 01 · Annuity Import\nUpload both monthly Dicker Data files. Lines are matched on Subscription ID + Stock Code and upserted, so custom sell prices and include/exclude choices saved in the portal survive re-imports.\n\n**Pilot filter:** edit PILOT_CUSTOMERS at the top of the "Parse Subscription Lines" node (this stack: __PILOT_CUSTOMERS__; matched as a substring, empty list = all customers).',
+  '## 01 · Annuity Import\nUpload both monthly Dicker Data files. Lines are matched on Subscription ID + Stock Code and upserted, so custom sell prices and include/exclude choices saved in the portal survive re-imports.\n\n**Pilot filter:** edit PILOT_CUSTOMERS at the top of the "Parse Subscription Lines" node. Currently B E Smart Admin Services + Kantanna Pty Ltd (Kantanna is the in-house test customer). Names are matched as a substring; an empty list = all customers.',
   [uploadForm, normalizeUploads],
   { color: 4 }
 );
 
-export default workflow('kantanna-csp-01-import__SUFFIX__', '01 · Annuity Import (Upload)__WF_SUFFIX__')
+export default workflow('kantanna-csp-01-import', '01 · Annuity Import (Upload)')
   .add(uploadForm)
   .to(normalizeUploads)
   .to(extractAnnuity.to(importBarrier.input(0)))

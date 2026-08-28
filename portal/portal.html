@@ -289,12 +289,6 @@
 <script id="__data" type="application/json">__DATA_PLACEHOLDER__</script>
 <script>
 var BASE = location.pathname.replace(/\/csp-pricing.*$/, '');
-// The same page is served by the live portal (/csp-pricing) and by the test
-// stack (/csp-pricing-test). The suffix in the path we were served at decides
-// which set of endpoints this page writes to, so a test page can never save
-// into the live data table.
-var SUFFIX = (location.pathname.match(/\/csp-pricing(-[a-z0-9-]+)?\/?$/) || [])[1] || '';
-function api(name) { return BASE + '/' + name + SUFFIX; }
 var DATA = JSON.parse(atob(document.getElementById('__data').textContent));
 var LINES = DATA.lines || [];
 var MAPPINGS = {};
@@ -1129,7 +1123,7 @@ function wireMapper(input) {
     var q = input.value.trim();
     if (q.length < 2) { results.style.display = 'none'; return; }
     timer = setTimeout(function () {
-      fetch(api('csp-pricing-companies') + '?q=' + encodeURIComponent(q))
+      fetch(BASE + '/csp-pricing-companies?q=' + encodeURIComponent(q))
         .then(function (r) { return r.json(); })
         .then(function (list) {
           results.innerHTML = '';
@@ -1151,7 +1145,7 @@ function wireMapper(input) {
 }
 
 function saveMapping(tenantName, company) {
-  fetch(api('csp-pricing-mapping'), {
+  fetch(BASE + '/csp-pricing-mapping', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tenant_name: tenantName, autotask_company_id: company.id, autotask_company_name: company.name })
   }).then(function () { location.reload(); });
@@ -1202,7 +1196,7 @@ function savePayload() {
 }
 
 function doSave() {
-  return fetch(api('csp-pricing-save'), {
+  return fetch(BASE + '/csp-pricing-save', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ lines: savePayload() })
   }).then(function (r) { return r.json(); });
@@ -1236,7 +1230,7 @@ function syncNow(btn) {
   doSave()
     .then(function (res) {
       setMsg(savedMsg(res) + ' Starting sync…');
-      return fetch(api('csp-autotask-sync'), { method: 'POST' });
+      return fetch(BASE + '/csp-autotask-sync', { method: 'POST' });
     })
     .then(function () { setMsg('Sync running — ~2–3 minutes. Refresh after that to see results.'); btn.disabled = false; })
     .catch(function (e) { setMsg('Sync could not start: ' + e.message); btn.disabled = false; });
