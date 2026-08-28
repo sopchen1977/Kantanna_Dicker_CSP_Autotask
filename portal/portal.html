@@ -234,6 +234,11 @@
   .dtag.cycle { background:#eff6ff; color:#1d4ed8; }
   .dtag.prorata { background:var(--violetbg); color:var(--violet); }
   .dfoot { font-size:11.5px; color:var(--muted); margin-top:6px; }
+  .dsec { font-size:10px; text-transform:uppercase; letter-spacing:.06em; font-weight:700; color:#94a3b8; margin:9px 0 3px; }
+  .dsec:first-child { margin-top:0; }
+  .dline.posted .amt { color:var(--ok); }
+  .dnone { font-size:12.5px; color:var(--muted); padding:3px 0; }
+  .inv-no { font-weight:600; color:var(--ink2); }
 
   /* ---------- mapper ---------- */
   .map-box { position:relative; }
@@ -880,6 +885,38 @@ function syncHtml(l) {
     '>' + escapeHtml(st) + '</span>';
 }
 
+// The last charge Autotask has actually approved & posted for this service,
+// read live from BillingItems, with the invoice it landed on if it has been
+// invoiced since. Autotask publishes no per-invoice URL, so the number is
+// shown for you to search on rather than linked to a guessed address.
+function lastPostedHtml(l) {
+  if (!l.billing_last_date) {
+    return '<div class="dnone">Nothing has been approved &amp; posted for this service yet.</div>';
+  }
+  var rows = Number(l.billing_last_rows) || 1;
+  var qty = Number(l.billing_last_qty) || 0;
+  var inv = String(l.billing_last_invoice_number || '');
+  var invId = String(l.billing_last_invoice_id || '');
+  var line = '<div class="dline posted"><span class="when">' +
+    escapeHtml(longDateIso(l.billing_last_date)) + '</span>' +
+    '<span class="dtag">' + (inv || invId ? 'invoiced' : 'posted') + '</span>' +
+    '<span class="muted">qty ' + escapeHtml(String(qty)) +
+      (rows > 1 ? ' · ' + rows + ' items' : '') + '</span>' +
+    '<span class="amt">' + money(l.billing_last_amount) + '</span></div>';
+  var bits = [];
+  if (l.billing_last_posted_on) bits.push('posted ' + longDateIso(l.billing_last_posted_on));
+  if (inv) {
+    bits.push('invoice <span class="inv-no" title="Autotask has no direct link to a single invoice — ' +
+      'open Billing &gt; Invoices and search this number">' + escapeHtml(inv) + '</span>' +
+      (l.billing_last_invoice_date ? ' of ' + escapeHtml(longDateIso(l.billing_last_invoice_date)) : ''));
+  } else if (invId) {
+    bits.push('invoiced (invoice #' + escapeHtml(invId) + ')');
+  } else {
+    bits.push('not invoiced yet');
+  }
+  return line + '<div class="dfoot">' + bits.join(' · ') + '</div>';
+}
+
 // The breakdown behind the billing pill — hidden until asked for.
 function detailHtml(l) {
   if (!effInclude(l) || !l.billing_last) return '';
@@ -893,12 +930,16 @@ function detailHtml(l) {
       '<span class="amt">' + money(x.amount) + '</span></div>';
   }).join('');
   var allPosted = !items.filter(function (x) { return x.type !== 'next cycle'; }).length;
-  return '<tr class="detail" data-d="' + l._i + '"><td colspan="9"><div class="dpanel">' + rows +
+  return '<tr class="detail" data-d="' + l._i + '"><td colspan="9"><div class="dpanel">' +
+    '<div class="dsec">' + (allPosted ? 'Next cycle (estimate)' : 'Waiting to be approved &amp; posted') + '</div>' +
+    rows +
     '<div class="dfoot">' +
-      (allPosted ? 'The whole CSP report is posted for this service — the line above is next cycle&#39;s estimate. '
-                 : 'Estimated at the sell price on this screen. ') +
-      'Last posted in Autotask: ' + escapeHtml(String(l.billing_last)) +
-    '</div></div></td></tr>';
+      (allPosted ? 'The whole CSP report is posted for this service — the line above is next cycle&#39;s estimate.'
+                 : 'Estimated at the sell price on this screen.') +
+    '</div>' +
+    '<div class="dsec">Last approved &amp; posted</div>' +
+    lastPostedHtml(l) +
+    '</div></td></tr>';
 }
 
 // Documented Autotask deep link: opens the contract's Summary page in the

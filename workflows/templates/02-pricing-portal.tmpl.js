@@ -77,6 +77,57 @@ const fetchLiveServices = node({
   output: [{ items: [], pageDetails: { count: 0 } }]
 });
 
+// What Autotask has already approved & posted. A BillingItem only exists
+// once a charge has been through Approve & Post, so the newest itemDate per
+// contract service is that service's last posting, and its invoiceID says
+// whether the posting has since been invoiced. One query covers every
+// contract on screen; a failure here is non-fatal.
+const fetchBillingItems = node({
+  type: 'n8n-nodes-base.httpRequest',
+  version: 4.5,
+  config: {
+    name: 'Fetch Billing Items',
+    position: [400, -240],
+    onError: 'continueRegularOutput',
+    parameters: {
+      method: 'POST',
+      url: 'https://webservices31.autotask.net/atservicesrest/v1.0/BillingItems/query',
+      authentication: 'genericCredentialType',
+      genericAuthType: 'httpCustomAuth',
+      sendBody: true,
+      specifyBody: 'json',
+      jsonBody: expr('{{ JSON.stringify({ MaxRecords: 500, Filter: (() => { const ids = [...new Set($("Fetch Lines").all().map((i) => i.json.autotask_contract_id).filter((v) => v))]; return ids.length ? [{ op: "in", field: "contractID", value: ids }] : [{ op: "eq", field: "id", value: 0 }]; })() }) }}'),
+      options: {}
+    },
+    credentials: { httpCustomAuth: newCredential('KantannaAutotask') }
+  },
+  output: [{ items: [], pageDetails: { count: 0 } }]
+});
+
+// The invoice each posting landed on. BillingItems carry only an invoiceID,
+// and the number a customer actually quotes lives on the Invoice itself.
+const fetchInvoices = node({
+  type: 'n8n-nodes-base.httpRequest',
+  version: 4.5,
+  config: {
+    name: 'Fetch Invoices',
+    position: [430, -240],
+    onError: 'continueRegularOutput',
+    parameters: {
+      method: 'POST',
+      url: 'https://webservices31.autotask.net/atservicesrest/v1.0/Invoices/query',
+      authentication: 'genericCredentialType',
+      genericAuthType: 'httpCustomAuth',
+      sendBody: true,
+      specifyBody: 'json',
+      jsonBody: expr('{{ JSON.stringify({ MaxRecords: 500, Filter: (() => { let bi = []; try { bi = $("Fetch Billing Items").first().json.items || []; } catch (e) {} const ids = [...new Set(bi.map((b) => Number(b.invoiceID)).filter((v) => v > 0))]; return ids.length ? [{ op: "in", field: "id", value: ids }] : [{ op: "eq", field: "id", value: 0 }]; })() }) }}'),
+      options: {}
+    },
+    credentials: { httpCustomAuth: newCredential('KantannaAutotask') }
+  },
+  output: [{ items: [], pageDetails: { count: 0 } }]
+});
+
 // The page itself, held as a plain string on a Set node. Keeping it out of
 // the Build Portal Page code node means the assembly logic can be changed
 // without re-deploying 55KB of HTML, and the page carries no escaping layer.
@@ -368,6 +419,8 @@ export default workflow('kantanna-csp-02-portal', '02 · CSP Pricing Portal')
   .to(fetchLines)
   .to(fetchMappings)
   .to(fetchLiveServices)
+  .to(fetchBillingItems)
+  .to(fetchInvoices)
   .to(portalTemplate)
   .to(buildPage)
   .to(respondPage)

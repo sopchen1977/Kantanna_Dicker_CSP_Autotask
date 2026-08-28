@@ -399,6 +399,8 @@ const portalNodes = {
     id: 8001, serviceID: 9001, invoiceDescription: 'Edited by hand in Autotask',
     internalCurrencyAdjustedPrice: 1200, internalCurrencyUnitPrice: 1382, unitPrice: 34.55,
   }] } }],
+  'Fetch Billing Items': [{ json: { items: [] } }],
+  'Fetch Invoices': [{ json: { items: [] } }],
 };
 const shown = portalLines(portalNodes)[0];
 assert.strictEqual(shown.contract_invoice_description, 'Edited by hand in Autotask',
@@ -476,5 +478,62 @@ const noMarker = descDecision({
   invoice_description_custom: true,
 }, 'Thing - sub SUB-A');
 assert.strictEqual(noMarker.desc_change, true);
+
+
+// -- Last approved & posted ------------------------------------------------
+// The newest itemDate for a contract service is its last posting; the rows
+// sharing that date (a cycle charge plus its pro-rata adjustments) are summed,
+// and the invoice number is resolved from the posting's invoiceID.
+function withBilling(items, invs) {
+  return Object.assign({}, portalNodes, {
+    'Fetch Billing Items': [{ json: { items: items } }],
+    'Fetch Invoices': [{ json: { items: invs || [] } }],
+  });
+}
+const posted = portalLines(withBilling([
+  { contractServiceID: 8001, itemDate: '2026-06-30T00:00:00.000Z', totalAmount: 1000,
+    quantity: 29, postedOnTime: '2026-07-02T04:11:00.000Z', invoiceID: 77 },
+  { contractServiceID: 8001, itemDate: '2026-06-30T00:00:00.000Z', totalAmount: 71.05,
+    quantity: 2, postedOnTime: '2026-07-02T04:11:00.000Z', invoiceID: 77 },
+  { contractServiceID: 8001, itemDate: '2026-05-31T00:00:00.000Z', totalAmount: 900,
+    quantity: 29, postedOnTime: '2026-06-02T04:00:00.000Z', invoiceID: 70 },
+  { contractServiceID: 9999, itemDate: '2026-07-31T00:00:00.000Z', totalAmount: 5,
+    quantity: 1, invoiceID: 0 },
+], [{ id: 77, invoiceNumber: 'INV-10023', invoiceDateTime: '2026-07-02T00:00:00.000Z' }]))[0];
+
+assert.strictEqual(posted.billing_last_date, '2026-06-30', 'the newest item date is the last posting');
+assert.ok(Math.abs(posted.billing_last_amount - 1071.05) < 0.005,
+  'rows sharing the posting date are summed: ' + posted.billing_last_amount);
+assert.strictEqual(posted.billing_last_qty, 31);
+assert.strictEqual(posted.billing_last_rows, 2);
+assert.strictEqual(posted.billing_last_posted_on, '2026-07-02');
+assert.strictEqual(posted.billing_last_invoice_number, 'INV-10023');
+assert.strictEqual(posted.billing_last_invoice_date, '2026-07-02');
+assert.strictEqual(posted.billing_last, '2026-06-30 · $1071.05 · invoiced');
+
+// Posted but not yet invoiced: invoiceID 0 must not read as an invoice.
+const notInvoiced = portalLines(withBilling([
+  { contractServiceID: 8001, itemDate: '2026-06-30T00:00:00.000Z', extendedPrice: 315,
+    quantity: 20, postedOnTime: '2026-07-02T04:11:00.000Z', invoiceID: 0 },
+]))[0];
+assert.strictEqual(notInvoiced.billing_last_invoice_id, '');
+assert.strictEqual(notInvoiced.billing_last_invoice_number, '');
+assert.strictEqual(notInvoiced.billing_last, '2026-06-30 · $315.00 · posted');
+
+// A $0 posting is still a posting, not an absence.
+const zeroPost = portalLines(withBilling([
+  { contractServiceID: 8001, itemDate: '2026-06-30T00:00:00.000Z', totalAmount: 0,
+    quantity: 4, postedOnTime: '2026-07-02T04:11:00.000Z', invoiceID: 0 },
+]))[0];
+assert.strictEqual(zeroPost.billing_last_date, '2026-06-30');
+assert.strictEqual(zeroPost.billing_last_amount, 0);
+
+// Nothing posted for this service: the stored value is left alone rather
+// than being overwritten with a blank.
+const otherOnly = portalLines(withBilling([
+  { contractServiceID: 9999, itemDate: '2026-07-31T00:00:00.000Z', totalAmount: 5, quantity: 1 },
+]))[0];
+assert.strictEqual(otherOnly.billing_last_date, undefined,
+  'another service\'s postings must not attach to this line');
 
 console.log('\nALL SYNC TESTS PASSED');
