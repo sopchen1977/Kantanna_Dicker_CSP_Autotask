@@ -20,7 +20,8 @@ function runNode(file, inputItems, nodes) {
 const line = {
   tenant_name: 'Galilee Solicitors', subscription_id: 'SUB-A', stock_code: 'P1Y:SKU1:0002:1:',
   line_key: 'SUB-A|P1Y:SKU1:0002:1:', service_key: 'P1Y:SKU1', service_name: 'Thing [P1Y:SKU1]',
-  contract_name: 'CSP - Thing - SUB-A', effective_sell: 34.55, qty: 51,
+  contract_name: 'CSP - Thing - SUB-A',
+  contract_number: 'CSP-ANN-MO-20251229-20261228', effective_sell: 34.55, qty: 51,
   monthly_cost: 29.37, monthly_rrp: 34.55, contract_start: '2025-12-29', contract_end: '2026-12-28',
   today: '2026-08-26', stock_description: 'DESC', offer_name: 'Thing',
   price_effective_date: '2026-08-26',
@@ -237,22 +238,68 @@ const udD = runNode('units-decision.js', [{ json: { items: [] } }], nD)[0].json;
 assert.deepStrictEqual(udD.plan, [{ change: 1, date: '2026-12-28' }],
   'a date past the contract end must clamp to the contract end');
 
-// -- Existing contract whose endDate predates the current term -> extend it
+// -- Contract identity is the External Contract Number, not the name -------
 const nE = { 'Current Line': [{ json: line }] };
+const stamped = { id: 7001, contractName: 'Whatever Someone Renamed It To',
+  contractNumber: 'CSP-ANN-MO-20251229-20261228', endDate: '2026-12-28T00:00:00Z' };
+
+// A contract carrying the reference is THE contract, whatever it is called.
+const cdRef = runNode('contract-decision.js', [{ json: { items: [stamped] } }], nE)[0].json;
+assert.strictEqual(cdRef.need_contract, false);
+assert.strictEqual(cdRef.contract_id, 7001);
+assert.strictEqual(cdRef.contract_matched_by, 'number');
+assert.strictEqual(cdRef.need_contract_patch, false,
+  'a contract found by reference and reaching the term end needs nothing');
+
+// A contract belonging to a DIFFERENT group is never adopted, even when the
+// name happens to line up.
+const cdOther = runNode('contract-decision.js', [{ json: { items: [
+  { id: 7009, contractName: 'CSP - Thing - SUB-A', contractNumber: 'CSP-ANN-MO-20240101-20241231' },
+] } }], nE)[0].json;
+assert.strictEqual(cdOther.need_contract, true, 'someone else\'s contract must not be stolen');
+assert.strictEqual(cdOther.contract_id, null);
+
+// A contract predating the reference is adopted by name ONCE: the reference
+// is stamped on, and its stale endDate is extended in the same PATCH.
 const cdE = runNode('contract-decision.js',
   [{ json: { items: [{ id: 7001, contractName: 'CSP - Thing - SUB-A', endDate: '2024-08-17T00:00:00Z' }] } }], nE)[0].json;
 assert.strictEqual(cdE.need_contract, false);
-assert.strictEqual(cdE.need_date_fix, true, 'stale contract endDate must trigger an extension');
+assert.strictEqual(cdE.contract_matched_by, 'name');
+assert.strictEqual(cdE.need_contract_patch, true);
+assert.deepStrictEqual(cdE.contract_patch,
+  { id: 7001, endDate: '2026-12-28', contractNumber: 'CSP-ANN-MO-20251229-20261228' });
 assert.strictEqual(cdE.contract_end_needed, '2026-12-28');
 assert.strictEqual(cdE.contract_end_found, '2024-08-17');
 nE['Contract Decision'] = [{ json: cdE }];
-const ceE = runNode('contract-extended.js', [{ json: { itemId: null } }], nE)[0].json;
+const ceE = runNode('contract-patched.js', [{ json: { itemId: null } }], nE)[0].json;
 assert.strictEqual(ceE.contract_id, 7001);
-assert.strictEqual(ceE.extend_error, '');
-// ...and a contract that already reaches the term end needs no fix
-const cdOk = runNode('contract-decision.js',
-  [{ json: { items: [{ id: 7001, contractName: 'CSP - Thing - SUB-A', endDate: '2026-12-28T00:00:00Z' }] } }], nE)[0].json;
-assert.strictEqual(cdOk.need_date_fix, false);
+assert.strictEqual(ceE.patch_error, '');
+
+// Adoption is also the one moment the name is ours to correct - a month to
+// month contract still carrying its old ISO-dated name is renamed.
+const lineLegacy = Object.assign({}, line, {
+  contract_name: 'CSP Microsoft Month to Month Started 18 Dec 2025',
+  contract_name_legacy: 'CSP Microsoft Month to Month Started 2025-12-18',
+  contract_number: 'CSP-MTM-D1-20251218',
+});
+const cdLegacy = runNode('contract-decision.js', [{ json: { items: [
+  { id: 7007, contractName: 'CSP Microsoft Month to Month Started 2025-12-18', endDate: '2026-12-28T00:00:00Z' },
+] } }], { 'Current Line': [{ json: lineLegacy }] })[0].json;
+assert.strictEqual(cdLegacy.contract_id, 7007,
+  'a contract named before the rename must still be found');
+assert.deepStrictEqual(cdLegacy.contract_patch, { id: 7007,
+  contractNumber: 'CSP-MTM-D1-20251218',
+  contractName: 'CSP Microsoft Month to Month Started 18 Dec 2025' });
+
+// A failed lookup must never read as "no contract exists".
+const cdErr = runNode('contract-decision.js',
+  [{ json: { error: { message: 'API thread threshold of 3 threads has been exceeded' } } }], nE)[0].json;
+assert.strictEqual(cdErr.need_contract, false, 'a query error must not create a duplicate contract');
+assert.ok(cdErr.query_error.includes('thread threshold'));
+const errResult = runNode('sync-result.js', [{ json: {} }],
+  { 'Current Line': [{ json: line }], 'Contract Decision': [{ json: cdErr }] })[0].json;
+assert.strictEqual(errResult.sync_status, 'error');
+assert.ok(errResult.sync_message.includes('contract lookup failed'), errResult.sync_message);
 
 // -- Two subscriptions of the same product share one contract service, so
 // -- the sync runs once but BOTH table rows get their status written back.
@@ -282,10 +329,13 @@ const lineM = Object.assign({}, line, {
 });
 const nM = { 'Current Line': [{ json: lineM }] };
 const cdNewCycle = runNode('contract-decision.js',
-  [{ json: { items: [{ id: 7005, contractName: 'CSP - Thing - SUB-A', endDate: '2026-08-21T00:00:00Z' }] } }], nM)[0].json;
+  [{ json: { items: [{ id: 7005, contractName: 'anything at all',
+    contractNumber: line.contract_number, endDate: '2026-08-21T00:00:00Z' }] } }], nM)[0].json;
 assert.strictEqual(cdNewCycle.need_contract, false, 'monthly cycle reuses the same contract');
 assert.strictEqual(cdNewCycle.contract_id, 7005);
-assert.strictEqual(cdNewCycle.need_date_fix, true, 'new cycle end extends the contract');
+assert.strictEqual(cdNewCycle.need_contract_patch, true, 'new cycle end extends the contract');
+assert.deepStrictEqual(cdNewCycle.contract_patch, { id: 7005, endDate: '2026-09-21' },
+  'a contract already carrying its reference is only extended, never renamed');
 assert.strictEqual(cdNewCycle.contract_end_needed, '2026-09-21');
 
 // -- Billing summary: last approved & posted + estimated next charge --

@@ -458,7 +458,7 @@ function groupContract(l) {
     ? String(l.usage_start) : contractWindow(l).start || g.start;
   var label = g.months === 12
     ? longDateIso(g.start) + ' to ' + longDateIso(g.end)
-    : 'Started ' + su;
+    : 'Started ' + longDateIso(su);
   var firstUsage = earliestUsageIso(l);
   if (firstUsage && firstUsage < start) start = firstUsage;
   return { name: 'CSP Microsoft ' + short + ' ' + label, start: start, end: g.end, label: label, kind: short };

@@ -19,7 +19,7 @@ Everything lives in the n8n project **Kantanna Dicker CSP and Autotask**
 |---|----------|---------|--------------|
 | 01 | **Annuity Import (Upload)** (`YvQ9T1rEFfIUnQUj`) | n8n Form | Upload the monthly **Annuity Information** + **CSP Invoice Report** (.xlsx). Reads only the `DETAILS` / `Invoice Details` tabs, normalises each subscription line (SKU + term parsed from the stock code, per-term prices converted to per-unit **monthly** cost/RRP, term dates taken from the invoice report), and upserts into the `csp_subscription_lines` data table keyed by *Subscription ID + Stock Code*. Custom sell prices and include/exclude choices survive re-imports. |
 | 02 | **CSP Pricing Portal** (`X9YtsHTLZJd1B21n`) | Webhook `GET /webhook/csp-pricing` | Web page grouped by customer: qty, monthly cost, monthly RRP, margin. Sell price **defaults to RRP**; tick *Custom* to set your own price. Map each Dicker tenant to an Autotask company (live company search). *Save prices* persists, *Sync to Autotask* kicks off workflow 03. |
-| 03 | **Autotask Sync** (`s9t606cOMcSVkufg`) | Webhook `POST /webhook/csp-autotask-sync` | Per included line: resolve the company mapping → ensure an Autotask **Service** exists for the SKU+term (created with monthly RRP/cost) → ensure a **Contract** exists whose name embeds the **Subscription ID** (`CSP - {offer} - {subscription id}`) → add/re-price the contract service at the chosen sell price → adjust units to the imported quantity. Results (synced / needs_mapping / error + message and Autotask IDs) are written back per line and shown in the portal. |
+| 03 | **Autotask Sync** (`s9t606cOMcSVkufg`) | Webhook `POST /webhook/csp-autotask-sync` | Per included line: resolve the company mapping → ensure an Autotask **Service** exists for the SKU+term (created with monthly RRP/cost) → ensure a **Contract** exists for the co-term group, matched on its Autotask **External Contract Number** → add/re-price the contract service at the chosen sell price → adjust units to the imported quantity. Results (synced / needs_mapping / error + message and Autotask IDs) are written back per line and shown in the portal. |
 
 ### Data tables (n8n project storage)
 
@@ -82,12 +82,38 @@ matching billing period, so it bills correctly on a recurring contract:
 Service names carry the billing type, e.g.
 `Microsoft 365 Business Premium - Annual Commit (Monthly) [CFQ7TTC0LCHC]`.
 
-**One contract per subscription.** Every billing type gets ONE contract
-with a stable name (`CSP - {offer} - {subscription id}`, max 100 chars)
-that is found again on every import. When the new report's billing cycle
-(month-to-month auto-renews at Dicker each cycle) or a renewed annual
-term ends after the contract's current end date, the contract endDate is
-**extended in place** automatically.
+**One contract per co-term group.** Autotask steps a contract's billing
+periods from its START DATE, and Dicker bills every co-termed subscription on
+its group's anchor day - so the contract belongs to the GROUP, not to the
+subscription: one per customer + billing type + anniversary, holding every
+subscription that shares that renewal date.
+
+**A contract is identified by its External Contract Number, never by its
+name.** On create, the sync writes a reference into Autotask's `contractNumber`
+field and matches on it from then on:
+
+| Reference | Means |
+| --- | --- |
+| `CSP-ANN-MO-20251001-20260930` | annual commit billed monthly, co-term year 1 Oct 2025 - 30 Sep 2026 |
+| `CSP-ANN-YR-20251229-20261228` | the same, billed annually upfront |
+| `CSP-MTM-D1-20251218` | month to month, 1st-of-month billing cycle, subscription started 18 Dec 2025 |
+
+Names are labels: `CSP Microsoft Annual Commit Monthly 1 Oct 2025 to 30 Sep
+2026`, or `CSP Microsoft Month to Month Started 18 Dec 2025`. They can be
+reworded here or edited by hand in Autotask without the next import losing
+track of a contract that has already been approved, posted and invoiced.
+
+A contract created before the reference existed is adopted once, matched on
+the name it was given then (including the older `Started 2025-12-18` form),
+and the same PATCH stamps the reference on and brings the name up to date.
+After that the name is nobody's business but the reader's. A contract already
+carrying a *different* reference is never adopted, and a failed lookup is
+reported as an error rather than treated as "no contract exists" - either
+would put a second contract beside the real one.
+
+When the new report's billing cycle (month-to-month auto-renews at Dicker each
+cycle) or a renewed annual term ends after the contract's current end date,
+the contract endDate is **extended in place** automatically.
 The import stores both monthly figures (`monthly_cost`/`monthly_rrp`, for
 comparison) and per-billing-period figures (`period_cost`/`period_rrp`, what
 Autotask bills). Sell prices in the portal are **per billing period** — per

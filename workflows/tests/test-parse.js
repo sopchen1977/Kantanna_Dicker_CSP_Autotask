@@ -201,7 +201,7 @@ for (const i of prepared) {
   } else {
     // Month to month rolls forever, so it carries no TERM - it is named for
     // when the subscriptions on that cycle first started.
-    assert.ok(/ Started \d{4}-\d{2}-\d{2}$/.test(i.json.contract_name),
+    assert.ok(/ Started \d{1,2} \w{3} \d{4}$/.test(i.json.contract_name),
       i.json.contract_name);
   }
   assert.strictEqual(i.json.effective_sell, i.json.period_rrp, 'default sell price is the per-period RRP');
@@ -225,7 +225,46 @@ assert.strictEqual(pAnnMo.contract_end, '2026-08-30');
 // Month-to-month splits by the date the subscription first started, so
 // SUB-2, SUB-6 and SUB-8 each get their own contract even though all three
 // are Galilee on the same 1st-to-month-end cycle.
-assert.strictEqual(pMtm.contract_name, 'CSP Microsoft Month to Month Started 2025-12-18');
+assert.strictEqual(pMtm.contract_name, 'CSP Microsoft Month to Month Started 18 Dec 2025');
+// Both contract kinds write their dates the same human way - no raw ISO in a
+// contract name. The month-to-month GROUP KEY still carries the ISO date,
+// because it is an identity and must not move when a label is reformatted.
+assert.ok(/ Started \d{1,2} \w{3} \d{4}$/.test(pMtm.contract_name));
+assert.ok(/ \d{1,2} \w{3} \d{4} to \d{1,2} \w{3} \d{4}$/.test(pAnnMo.contract_name),
+  'annual names keep their existing "1 Oct 2025 to 30 Sep 2026" shape');
+assert.ok(!/\d{4}-\d{2}-\d{2}/.test(pMtm.contract_name + pAnnMo.contract_name),
+  'no contract name may contain a raw ISO date');
+assert.ok(/started-\d{4}-\d{2}-\d{2}/.test(pMtm.contract_group_key),
+  'the grouping key keeps the ISO date it has always used');
+
+// ---- The contract's identity ------------------------------------------
+// Names are labels and get reworded. What says "the same contract" is the
+// reference written to Autotask's External Contract Number, which encodes
+// exactly what the group key encodes and never moves when a name changes.
+assert.strictEqual(pAnnMo.contract_number, 'CSP-ANN-MO-20250831-20260830');
+assert.strictEqual(pMtm.contract_number, 'CSP-MTM-D1-20251218');
+assert.strictEqual(prepared.find((i) => i.json.subscription_id === 'SUB-4').json.contract_number,
+  'CSP-ANN-YR-20251229-20261228');
+for (const i of prepared) {
+  assert.ok(i.json.contract_number.length <= 50,
+    'Autotask contractNumber is 50 characters: ' + i.json.contract_number);
+}
+// One reference per contract, and one contract per reference.
+const refByName = {};
+for (const i of prepared) {
+  const j = i.json;
+  if (refByName[j.contract_name] === undefined) refByName[j.contract_name] = j.contract_number;
+  assert.strictEqual(refByName[j.contract_name], j.contract_number,
+    'two contracts cannot share a name but differ by reference: ' + j.contract_name);
+}
+assert.strictEqual(new Set(prepared.map((i) => i.json.contract_number)).size,
+  new Set(prepared.map((i) => i.json.contract_name)).size,
+  'references and names must partition the lines identically');
+// Month-to-month contracts made before the reference existed were named with
+// a raw ISO date; the legacy name is what lets the sync adopt one of those
+// exactly once. Annual names never changed, so they carry no legacy name.
+assert.strictEqual(pMtm.contract_name_legacy, 'CSP Microsoft Month to Month Started 2025-12-18');
+assert.strictEqual(pAnnMo.contract_name_legacy, '');
 const pAnnYr = prepared.find((i) => i.json.subscription_id === 'SUB-4').json;
 assert.strictEqual(pAnnYr.service_key, 'ANN-YR:CFQ7TTC0LFLZ:0002');
 assert.strictEqual(pAnnYr.service_period_type, 5, 'upfront billing -> yearly service period (Autotask picklist 5)');
@@ -262,7 +301,7 @@ assert.strictEqual(pRenewed.contract_window_source, 'renewed');
 assert.strictEqual(pRenewed.member_start, '2026-08-01');
 assert.strictEqual(pRenewed.contract_end, '2026-08-31', 'renewal extends to the revaluation period');
 assert.strictEqual(pRenewed.contract_start, '2026-07-01', 'window reaches the invoice line it replays');
-assert.strictEqual(pRenewed.contract_name, 'CSP Microsoft Month to Month Started 2025-11-11');
+assert.strictEqual(pRenewed.contract_name, 'CSP Microsoft Month to Month Started 11 Nov 2025');
 
 // Month-end arithmetic must clamp, not overflow: 31-MAR minus one month is
 // 28-FEB, so the cycle starts 01-MAR (not 04-MAR).
@@ -271,7 +310,7 @@ assert.strictEqual(pMonthEnd.contract_start, '2027-03-01');
 assert.strictEqual(pMonthEnd.contract_end, '2027-03-31');
 // A month-end monthly cycle always anchors on day 1, in every month length -
 // otherwise February would fork the group onto a "day 29" contract.
-assert.strictEqual(pMonthEnd.contract_name, 'CSP Microsoft Month to Month Started 2025-05-31');
+assert.strictEqual(pMonthEnd.contract_name, 'CSP Microsoft Month to Month Started 31 May 2025');
 assert.notStrictEqual(pMtm.contract_group_key, pMonthEnd.contract_group_key,
   'different start dates -> different contracts');
 // The cycle day stays in the KEY even though only the date is in the name:

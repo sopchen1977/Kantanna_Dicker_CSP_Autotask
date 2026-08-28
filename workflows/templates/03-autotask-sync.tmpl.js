@@ -303,6 +303,11 @@ const recordService = node({
   output: [{ id: 1, sku: 'P1Y:CFQ7TTC0LCHC', service_name: 'Microsoft 365 Business Premium [P1Y:CFQ7TTC0LCHC]', autotask_service_id: 9001, unit_rrp: 34.55 }]
 });
 
+// Every CSP contract this customer has, in one query: the contract is matched
+// on its External Contract Number (see Contract Decision), which Autotask
+// cannot filter on with a value the query does not know yet. Bounded by the
+// "CSP-" reference / "CSP Microsoft " name prefixes so a customer's unrelated
+// contracts never come back.
 const findContract = node({
   type: 'n8n-nodes-base.httpRequest',
   version: 4.5,
@@ -317,7 +322,7 @@ const findContract = node({
       genericAuthType: 'httpCustomAuth',
       sendBody: true,
       specifyBody: 'json',
-      jsonBody: expr('{{ JSON.stringify({ MaxRecords: 100, Filter: [{ op: "eq", field: "companyID", value: $("Lookup Mapping").first().json.autotask_company_id }, { op: "eq", field: "contractName", value: $("Current Line").first().json.contract_name }] }) }}'),
+      jsonBody: expr('{{ JSON.stringify({ MaxRecords: 500, Filter: [{ op: "and", items: [{ op: "eq", field: "companyID", value: $("Lookup Mapping").first().json.autotask_company_id }, { op: "or", items: [{ op: "beginsWith", field: "contractNumber", value: "CSP-" }, { op: "beginsWith", field: "contractName", value: "CSP Microsoft " }] }] }] }) }}'),
       options: {}
     },
     credentials: { httpCustomAuth: newCredential('KantannaAutotask') }
@@ -333,7 +338,7 @@ const contractDecision = node({
     position: [2720, 20],
     parameters: { mode: 'runOnceForAllItems', jsCode: __CONTRACT_DECISION__ }
   },
-  output: [{ line_key: '2F295B21|P1Y:CFQ7TTC0LCHC:0002:1:', contract_id: null, need_contract: true, need_date_fix: false, contract_end_needed: '2026-12-28', contract_end_found: '', query_error: '' }]
+  output: [{ line_key: '2F295B21|P1Y:CFQ7TTC0LCHC:0002:1:', contract_id: null, need_contract: true, need_contract_patch: false, contract_patch: { id: null }, contract_patch_summary: '', contract_matched_by: '', contract_number: 'CSP-ANN-MO-20250831-20260830', contract_end_needed: '2026-12-28', contract_end_found: '', query_error: '' }]
 });
 
 const needContract = ifElse({
@@ -367,7 +372,7 @@ const createContract = node({
       genericAuthType: 'httpCustomAuth',
       sendBody: true,
       specifyBody: 'json',
-      jsonBody: expr('{{ JSON.stringify({ companyID: $("Lookup Mapping").first().json.autotask_company_id, contractName: $("Current Line").first().json.contract_name, contractType: Number($("Autotask Config").first().json.contract_type), status: Number($("Autotask Config").first().json.contract_status), startDate: $("Current Line").first().json.contract_start, endDate: $("Current Line").first().json.contract_end, contractPeriodType: Number($("Autotask Config").first().json.contract_period_type), timeReportingRequiresStartAndStopTimes: 0, setupFee: 0, organizationalLevelAssociationID: Number($("Autotask Config").first().json.line_of_business_id), description: ("Dicker Data CSP - " + $("Current Line").first().json.billing_label + ". Every subscription co-termed to " + $("Current Line").first().json.contract_end + " bills on this contract; each Subscription ID is on its service line. Managed by the Kantanna n8n automation.").slice(0, 1900) }) }}'),
+      jsonBody: expr('{{ JSON.stringify({ companyID: $("Lookup Mapping").first().json.autotask_company_id, contractName: $("Current Line").first().json.contract_name, contractNumber: $("Current Line").first().json.contract_number, contractType: Number($("Autotask Config").first().json.contract_type), status: Number($("Autotask Config").first().json.contract_status), startDate: $("Current Line").first().json.contract_start, endDate: $("Current Line").first().json.contract_end, contractPeriodType: Number($("Autotask Config").first().json.contract_period_type), timeReportingRequiresStartAndStopTimes: 0, setupFee: 0, organizationalLevelAssociationID: Number($("Autotask Config").first().json.line_of_business_id), description: ("Dicker Data CSP - " + $("Current Line").first().json.billing_label + ". Every subscription co-termed to " + $("Current Line").first().json.contract_end + " bills on this contract; each Subscription ID is on its service line. Managed by the Kantanna n8n automation.").slice(0, 1900) }) }}'),
       options: {}
     },
     credentials: { httpCustomAuth: newCredential('KantannaAutotask') }
@@ -386,21 +391,27 @@ const contractFromCreate = node({
   output: [{ line_key: '2F295B21|P1Y:CFQ7TTC0LCHC:0002:1:', contract_id: 7001, contract_created: true, create_error: '' }]
 });
 
-// An existing contract whose endDate predates this import's term end would
-// make Autotask reject every adjustment dated after it ("effectiveDate must
-// be between the start date and end date of the Contract"), so extend it
-// first. Happens on annual renewals and on contracts created before the
-// term dates were known.
-const needDateFix = ifElse({
+// An existing contract sometimes needs repairing before its services can be
+// synced. Contract Decision works out what, and hands over a ready-made PATCH
+// body; this branch only asks whether there is anything to send. Three things
+// land here:
+//   - its End Date predates this import's term end, which would make Autotask
+//     reject every adjustment dated after it ("effectiveDate must be between
+//     the start date and end date of the Contract");
+//   - it predates the External Contract Number and has just been adopted by
+//     name, so the reference gets stamped on and the fallback never fires
+//     for it again;
+//   - and, in that same moment, its name is brought up to date.
+const needContractPatch = ifElse({
   version: 2.2,
   config: {
-    name: 'Extend Contract Dates?',
+    name: 'Patch Contract?',
     position: [3160, 160],
     parameters: {
       conditions: {
         options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
         conditions: [
-          { leftValue: expr('{{ $json.need_date_fix }}'), operator: { type: 'boolean', operation: 'true', singleValue: true } }
+          { leftValue: expr('{{ $json.need_contract_patch }}'), operator: { type: 'boolean', operation: 'true', singleValue: true } }
         ],
         combinator: 'and'
       }
@@ -408,11 +419,11 @@ const needDateFix = ifElse({
   }
 });
 
-const extendContract = node({
+const patchContract = node({
   type: 'n8n-nodes-base.httpRequest',
   version: 4.5,
   config: {
-    name: 'Extend Contract',
+    name: 'Patch Contract',
     position: [3380, 160],
     onError: 'continueRegularOutput',
     parameters: {
@@ -422,7 +433,7 @@ const extendContract = node({
       genericAuthType: 'httpCustomAuth',
       sendBody: true,
       specifyBody: 'json',
-      jsonBody: expr('{{ JSON.stringify({ id: $json.contract_id, endDate: $json.contract_end_needed }) }}'),
+      jsonBody: expr('{{ JSON.stringify($json.contract_patch) }}'),
       options: {}
     },
     credentials: { httpCustomAuth: newCredential('KantannaAutotask') }
@@ -430,15 +441,15 @@ const extendContract = node({
   output: [{ itemId: 7001 }]
 });
 
-const contractExtended = node({
+const contractPatched = node({
   type: 'n8n-nodes-base.code',
   version: 2,
   config: {
-    name: 'Contract Extended',
+    name: 'Contract Patched',
     position: [3580, 160],
-    parameters: { mode: 'runOnceForAllItems', jsCode: __CONTRACT_EXTENDED__ }
+    parameters: { mode: 'runOnceForAllItems', jsCode: __CONTRACT_PATCHED__ }
   },
-  output: [{ line_key: '2F295B21|P1Y:CFQ7TTC0LCHC:0002:1:', contract_id: 7001, extended_from: '2024-08-17', extended_to: '2026-12-28', extend_error: '' }]
+  output: [{ line_key: '2F295B21|P1Y:CFQ7TTC0LCHC:0002:1:', contract_id: 7001, patch_summary: 'reference CSP-ANN-MO-20250831-20260830', patch_error: '' }]
 });
 
 const fetchContractServices = node({
@@ -835,8 +846,8 @@ export default workflow('kantanna-csp-03-sync', '03 · Autotask Sync')
   .to(contractDecision)
   .to(needContract
     .onTrue(createContract.to(contractFromCreate.to(fetchContractServices)))
-    .onFalse(needDateFix
-      .onTrue(extendContract.to(contractExtended.to(fetchContractServices)))
+    .onFalse(needContractPatch
+      .onTrue(patchContract.to(contractPatched.to(fetchContractServices)))
       .onFalse(fetchContractServices)))
   .add(fetchContractServices)
   .to(csDecision)
