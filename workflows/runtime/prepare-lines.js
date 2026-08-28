@@ -68,6 +68,12 @@ const BILLING = {
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+function longDate(isoDate) {
+  const d = new Date(isoDate + 'T00:00:00Z');
+  if (isNaN(d.getTime())) return String(isoDate || '');
+  return d.getUTCDate() + ' ' + MONTH_ABBR[d.getUTCMonth()] + ' ' + d.getUTCFullYear();
+}
+
 const out = [];
 for (const l of rows) {
   const billingType = l.billing_type ||
@@ -176,10 +182,19 @@ for (const l of rows) {
   // creates it.
   const groupEnd = memberEnd;
   const groupStart = addMonths(addDays(groupEnd, 1), -termMonths) || memberStart;
+  // How the contract is labelled, and therefore what counts as "the same
+  // contract" on the next import:
+  //   - Annual: named for its TERM, so each renewal is a new contract -
+  //     which is how Autotask models an annual renewal anyway.
+  //   - Month to month: no dates, because it rolls forever. The anchor day
+  //     stays in the name because it is not a term, it is which billing
+  //     cycle the subscription sits on: B E Smart has one group billing
+  //     1st-to-month-end and another billing 22nd-to-21st, and they cannot
+  //     share a contract.
   const anchor = new Date(groupStart + 'T00:00:00Z');
   const anchorLabel = isNaN(anchor.getTime()) ? groupStart
     : (termMonths === 12
-      ? anchor.getUTCDate() + ' ' + MONTH_ABBR[anchor.getUTCMonth()]
+      ? longDate(groupStart) + ' to ' + longDate(groupEnd)
       : 'day ' + anchor.getUTCDate());
 
   let contractStart = groupStart;
@@ -207,12 +222,9 @@ for (const l of rows) {
   if (effectiveDate < contractStart) effectiveDate = contractStart;
   if (effectiveDate > contractEnd) effectiveDate = contractEnd;
 
-  // The contract name identifies the GROUP, and must stay stable across
-  // renewals - so it carries the anchor's month/day (annual) or day of
-  // month (month-to-month), never the year. A renewal extends the same
-  // contract's end date rather than creating a new one.
-  // The Subscription ID now rides on the contract SERVICE's invoice
-  // description, so it still reaches the invoice line the customer sees.
+  // Every contract name starts with CSP. The Subscription ID rides on the
+  // contract SERVICE's invoice description, so it still reaches the invoice
+  // line the customer sees.
   const contractName = 'CSP - ' + billing.short + ' - ' + anchorLabel;
   const groupKey = String(l.tenant_name || '') + '|' + billing.key + '|' + anchorLabel;
 

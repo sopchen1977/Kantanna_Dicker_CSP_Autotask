@@ -203,6 +203,11 @@ function earliestUsageIso(l) {
   return first;
 }
 var MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function longDateIso(iso) {
+  var d = new Date(iso + 'T00:00:00Z');
+  if (isNaN(d.getTime())) return String(iso || '');
+  return d.getUTCDate() + ' ' + MONTH_ABBR[d.getUTCMonth()] + ' ' + d.getUTCFullYear();
+}
 var BILLING_SHORT = { annual_monthly: 'Annual Commit Monthly', annual_upfront: 'Annual Commit Yearly',
   monthly: 'Month to Month', usage: 'Usage' };
 // The Autotask contract belongs to the CO-TERM GROUP, not the subscription:
@@ -217,8 +222,11 @@ function groupContract(l) {
   if (!end) return { name: '', start: '', end: '' };
   var start = addMonthsIso(addDaysIso(end, 1), -months);
   var d = new Date(start + 'T00:00:00Z');
+  // Annual contracts are named for their term (so a renewal is a new
+  // contract); month-to-month rolls forever and carries only its billing
+  // anchor day, which says which cycle the subscription sits on.
   var anchor = isNaN(d.getTime()) ? start
-    : (months === 12 ? d.getUTCDate() + ' ' + MONTH_ABBR[d.getUTCMonth()] : 'day ' + d.getUTCDate());
+    : (months === 12 ? longDateIso(start) + ' to ' + longDateIso(end) : 'day ' + d.getUTCDate());
   var short = BILLING_SHORT[l.billing_type] || 'Month to Month';
   var firstUsage = earliestUsageIso(l);
   if (firstUsage && firstUsage < start) start = firstUsage;

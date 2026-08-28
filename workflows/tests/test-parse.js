@@ -156,9 +156,18 @@ for (const i of prepared) {
   // rides on the service line instead of the contract name.
   assert.ok(i.json.service_invoice_description.includes(i.json.subscription_id),
     'Subscription ID must reach the invoice line');
-  assert.ok(!/\d{4}/.test(i.json.contract_name.replace(/CSP - /, '')),
-    'contract name must not carry a year, or renewals would fork a new contract');
+  assert.ok(i.json.contract_name.startsWith('CSP - '), 'every contract name starts with CSP');
   assert.ok(i.json.contract_name.length <= 100);
+  if (i.json.term_months === 12) {
+    // Annual contracts carry their term, so each renewal is a new contract.
+    assert.ok(/ - \d{1,2} \w{3} \d{4} to \d{1,2} \w{3} \d{4}$/.test(i.json.contract_name),
+      'annual contract names carry start and end dates: ' + i.json.contract_name);
+  } else {
+    // Month to month rolls forever, so no dates - only the billing anchor.
+    assert.ok(!/\d{4}/.test(i.json.contract_name),
+      'month-to-month contract names carry no dates: ' + i.json.contract_name);
+    assert.ok(/ - day \d{1,2}$/.test(i.json.contract_name), i.json.contract_name);
+  }
   assert.strictEqual(i.json.effective_sell, i.json.period_rrp, 'default sell price is the per-period RRP');
 }
 // Each billing type creates a distinct service with the right period type
@@ -174,7 +183,7 @@ assert.ok(pMtm.service_name.includes('Month to Month'));
 // contract is the group: one per customer + billing type + anniversary,
 // named from the anchor's month/day (never the year, or a renewal would
 // fork a new contract).
-assert.strictEqual(pAnnMo.contract_name, 'CSP - Annual Commit Monthly - 31 Aug');
+assert.strictEqual(pAnnMo.contract_name, 'CSP - Annual Commit Monthly - 31 Aug 2025 to 30 Aug 2026');
 assert.strictEqual(pAnnMo.contract_start, '2025-08-31', 'grid anchored on the 31st, as Dicker invoices');
 assert.strictEqual(pAnnMo.contract_end, '2026-08-30');
 assert.strictEqual(pMtm.contract_name, 'CSP - Month to Month - day 1');
@@ -253,7 +262,7 @@ const pCotermYr = prepared.find((i) => i.json.subscription_id === 'SUB-10').json
 assert.strictEqual(pCotermYr.billing_type, 'annual_upfront');
 assert.strictEqual(pCotermYr.member_start, '2026-05-14');
 assert.strictEqual(pCotermYr.member_end, '2026-12-28');
-assert.strictEqual(pCotermYr.contract_name, 'CSP - Annual Commit Yearly - 29 Dec');
+assert.strictEqual(pCotermYr.contract_name, 'CSP - Annual Commit Yearly - 29 Dec 2025 to 28 Dec 2026');
 assert.strictEqual(pCotermYr.term_days, 229);
 assert.strictEqual(pCotermYr.term_factor, 0.6274);
 assert.strictEqual(pCotermYr.is_coterm, true);
@@ -284,7 +293,7 @@ assert.strictEqual(pRenewed.is_coterm, false);
 // Every member of a group derives an identical contract window, so whichever
 // line reaches Autotask first creates it and the rest find it.
 const galilee = prepared.filter((i) => i.json.tenant_name === 'Galilee Solicitors').map((i) => i.json);
-const annMoGroup = galilee.filter((j) => j.contract_name === 'CSP - Annual Commit Monthly - 29 Dec');
+const annMoGroup = galilee.filter((j) => j.contract_name === 'CSP - Annual Commit Monthly - 29 Dec 2025 to 28 Dec 2026');
 assert.ok(annMoGroup.length >= 2, 'Galilee annual-monthly lines share one contract');
 for (const j of annMoGroup) {
   assert.strictEqual(j.contract_start, '2025-12-29');
@@ -293,7 +302,7 @@ for (const j of annMoGroup) {
 }
 // Billing types never share a contract - Autotask period types differ.
 const annYrGroup = galilee.filter((j) => j.billing_type === 'annual_upfront');
-assert.strictEqual(annYrGroup[0].contract_name, 'CSP - Annual Commit Yearly - 29 Dec');
+assert.strictEqual(annYrGroup[0].contract_name, 'CSP - Annual Commit Yearly - 29 Dec 2025 to 28 Dec 2026');
 assert.notStrictEqual(annYrGroup[0].contract_name, annMoGroup[0].contract_name);
 
 // A co-termed member's units start at ITS OWN term start, mid-cycle inside
