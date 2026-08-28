@@ -46,6 +46,7 @@ CODE_TOKENS = {
     "__BILLING_SUMMARY__": "billing-summary.js",
     "__SPLIT_PLAN__": "split-plan.js",
     "__ADJUST_RESULT__": "adjust-result.js",
+    "__DESC_RESULT__": "desc-result.js",
     "__SYNC_RESULT__": "sync-result.js",
     "__SYNC_DONE__": "sync-done.js",
 }

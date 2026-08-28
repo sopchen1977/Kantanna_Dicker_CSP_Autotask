@@ -31,6 +31,17 @@ function currentPrice(c) {
 }
 
 const oldPrice = cs ? currentPrice(cs) : null;
+
+// The invoice description Autotask currently shows for this contract
+// service, and whether the portal is asking to change it. Like the price,
+// it is only pushed when the user explicitly typed one - so a description
+// edited by hand in Autotask is never silently overwritten. A brand-new
+// contract service gets its description at create time, not by patching.
+const currentDesc = cs && cs.invoiceDescription !== undefined && cs.invoiceDescription !== null
+  ? String(cs.invoiceDescription) : '';
+const targetDesc = String(line.service_invoice_description || '');
+const descChange = !!cs && line.invoice_description_custom === true
+  && !!targetDesc && currentDesc !== targetDesc;
 // Re-price ONLY when the user explicitly set a price in the portal
 // ("Edit price" ticked). Otherwise the contract keeps its current price —
 // unticking never reverts anything to RRP.
@@ -48,6 +59,9 @@ return [{ json: {
   service_id: serviceId,
   cs_id: cs ? cs.id : null,
   old_price: oldPrice,
+  cs_invoice_description: currentDesc,
+  target_invoice_description: targetDesc,
+  desc_change: descChange,
   // The price carried into unit adjustments: the price being set when
   // editing/creating, otherwise the contract's existing price.
   sell: action === 'none' && oldPrice !== null ? oldPrice : target,

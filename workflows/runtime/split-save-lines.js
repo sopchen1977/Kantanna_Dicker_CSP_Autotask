@@ -14,5 +14,7 @@ return lines
       ? null : Number(l.sell_price),
     include: l.include !== false,
     price_effective_date: isoDate(l.price_effective_date),
+    // Empty string means "no override" - the generated default is used.
+    invoice_description: String(l.invoice_description || '').trim().slice(0, 100),
   } }))
   .filter((i) => i.json.subscription_id);

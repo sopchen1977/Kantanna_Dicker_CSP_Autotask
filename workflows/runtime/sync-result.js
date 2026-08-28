@@ -18,6 +18,7 @@ const conExtended = grab('Contract Extended');
 const csCreate = grab('CS From Create');
 const csPatch = grab('CS After Patch');
 const csDec = grab('CS Decision');
+const csDesc = grab('Desc Result');
 const units = grab('Units Decision');
 const billing = grab('Billing Summary');
 
@@ -48,6 +49,10 @@ if (csPatch) {
   else notes.push('price ' + csPatch.old_price + ' -> ' + csPatch.sell
     + (csPatch.effective_date ? ' effective ' + csPatch.effective_date : ''));
 }
+if (csDesc) {
+  if (csDesc.desc_error) errors.push('invoice description update failed: ' + csDesc.desc_error);
+  else notes.push('invoice description -> ' + csDesc.desc_to);
+}
 if (units && units.plan_count > 0 && csId) {
   const adj = grab('Adjust Result');
   if (adj && adj.adjust_error) errors.push('unit adjustment failed: ' + adj.adjust_error);
@@ -71,6 +76,16 @@ if (csPatch && !csPatch.patch_error) contractPrice = csPatch.sell;
 else if (csCreate && csCreate.cs_id) contractPrice = csCreate.sell;
 else if (csDec && csDec.old_price !== null && csDec.old_price !== undefined) contractPrice = csDec.old_price;
 
+// The invoice description now on the contract service: what this run just
+// set, what it was created with, or what Autotask already had. Shown in the
+// portal so you can see the live text without opening Autotask.
+let invoiceDesc = null;
+if (csDesc && !csDesc.desc_error) invoiceDesc = csDesc.desc_to;
+else if (csCreate && csCreate.cs_id) invoiceDesc = line.service_invoice_description || '';
+else if (csDec && csDec.cs_invoice_description !== undefined && csDec.cs_invoice_description !== null) {
+  invoiceDesc = csDec.cs_invoice_description;
+}
+
 // When two subscriptions of the same product share one contract service,
 // the sync ran once but BOTH rows need their status written back.
 const keys = Array.isArray(line.merged_keys) && line.merged_keys.length
@@ -88,4 +103,5 @@ return keys.map((k) => ({ json: {
   billing_last: (billing && billing.billing_last) || '',
   billing_next: (billing && billing.billing_next) || '',
   contract_price: contractPrice,
+  contract_invoice_description: invoiceDesc === null ? '' : String(invoiceDesc),
 } }));

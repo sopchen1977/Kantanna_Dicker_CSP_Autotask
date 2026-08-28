@@ -188,6 +188,28 @@
   .picks a { color:var(--brand); cursor:pointer; text-decoration:none; }
   .picks a:hover { text-decoration:underline; }
 
+  /* ---------- invoice description ---------- */
+  .inv { margin-top:5px; font-size:11.5px; display:flex; align-items:baseline; gap:6px; min-width:0; }
+  .inv .lbl { color:#94a3b8; font-weight:600; text-transform:uppercase; letter-spacing:.04em; font-size:10px; flex:none; }
+  /* One line, ellipsised - the full text is in the tooltip and in the
+     editor, so a long description never changes the row height. */
+  .invtext {
+    font:inherit; font-size:11.5px; text-align:left; border:none; background:none; padding:0; cursor:pointer;
+    color:var(--ink2); border-bottom:1px dashed transparent; line-height:1.35;
+    min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .invtext:hover { color:var(--brand); border-bottom-color:#93c5fd; }
+  .invtext.custom { color:var(--brand); font-weight:600; }
+  .invtext.default { color:#94a3b8; font-style:italic; }
+  .invedit { display:none; gap:6px; align-items:center; margin-top:5px; flex-wrap:wrap; }
+  .inv-open .invedit { display:flex; }
+  .inv-open .inv { display:none; }
+  .invedit input[type=text] {
+    flex:1; min-width:220px; max-width:440px; padding:5px 8px; font:inherit; font-size:12.5px;
+    border:1px solid var(--brand); border-radius:7px;
+  }
+  .invedit .count { font-size:10.5px; color:var(--muted); }
+
   /* ---------- billing pill + detail ---------- */
   .pill {
     display:inline-flex; align-items:center; gap:7px; padding:4px 10px 4px 8px; border-radius:8px;
@@ -436,6 +458,28 @@ function groupContract(l) {
   if (firstUsage && firstUsage < start) start = firstUsage;
   return { name: 'CSP Microsoft ' + short + ' ' + label, start: start, end: g.end, label: label, kind: short };
 }
+// The invoice description Autotask shows for this service. A description
+// typed in the portal is what will be pushed on the next sync; otherwise the
+// live value read back from Autotask, falling back to the generated default.
+function defaultInvoiceDesc(l) {
+  return (String(l.offer_name || '') + ' - sub ' + l.subscription_id).slice(0, 100);
+}
+function customInvoiceDesc(l) {
+  return String(l.invoice_description || '').trim();
+}
+function liveInvoiceDesc(l) {
+  return String(l.contract_invoice_description || '').trim();
+}
+// { text, state } - state is 'custom' (pending push), 'live' (what Autotask
+// has now) or 'default' (what a first sync would set it to).
+function invoiceDesc(l) {
+  var c = customInvoiceDesc(l);
+  if (c) return { text: c, state: 'custom' };
+  var live = liveInvoiceDesc(l);
+  if (live) return { text: live, state: 'live' };
+  return { text: defaultInvoiceDesc(l), state: 'default' };
+}
+
 function marginPct(l) {
   var s = effSell(l), c = periodCost(l);
   if (!s) return null;
@@ -519,7 +563,7 @@ function matches(l) {
   if (!UI.showOff && !effInclude(l)) return false;
   if (!UI.q) return true;
   var hay = [l.tenant_name, l.offer_name, l.stock_description, l.sku, l.subscription_id,
-    groupContract(l).name].join(' ').toLowerCase();
+    groupContract(l).name, invoiceDesc(l).text].join(' ').toLowerCase();
   return hay.indexOf(UI.q) >= 0;
 }
 
@@ -754,7 +798,8 @@ function lineHtml(l) {
     '<td><div class="svc"' + (cut ? ' title="' + escapeHtml(String(l.stock_description || '')) +
         ' (Dicker truncates the product name at 30 characters)"' : '') + '>' +
       escapeHtml(nm) + (cut ? '<span class="muted">…</span>' : '') + '</div>' +
-      '<div class="svcsub" title="' + escapeHtml(subTitle) + '">' + bits.join('<span class="dot">·</span>') + '</div></td>' +
+      '<div class="svcsub" title="' + escapeHtml(subTitle) + '">' + bits.join('<span class="dot">·</span>') + '</div>' +
+      invoiceHtml(l, i) + '</td>' +
     '<td class="num">' + escapeHtml(String(l.qty || 0)) + '</td>' +
     '<td class="num muted">' + fmt(periodCost(l)) + '<span class="per">' + suffix + '</span></td>' +
     '<td class="num muted">' + fmt(periodRrp(l)) + '<span class="per">' + suffix + '</span></td>' +
@@ -779,6 +824,30 @@ function lineHtml(l) {
   '</tr>';
 
   return main + detailHtml(l);
+}
+
+// Shown under every service: what appears on the customer's invoice line.
+// Click it to type your own; the next sync pushes it to Autotask.
+function invoiceHtml(l, i) {
+  var d = invoiceDesc(l);
+  var hint = d.state === 'custom'
+    ? 'Your wording - the next sync will set this in Autotask. Click to change.'
+    : (d.state === 'live'
+      ? 'What Autotask shows on the invoice line today. Click to change it.'
+      : 'No contract service yet - this is what the first sync will set. Click to change it.');
+  return '<div class="inv"><span class="lbl">Invoice' + (d.state === 'default' ? ' (unset)' : '') + '</span>' +
+      '<button class="invtext ' + d.state + ' js-invedit" data-i="' + i + '" ' +
+        'title="' + escapeHtml(d.text + ' — ' + hint) + '">' + escapeHtml(d.text) +
+      '</button></div>' +
+    '<div class="invedit">' +
+      '<input type="text" maxlength="100" class="js-invtext" data-i="' + i + '" ' +
+        'value="' + escapeHtml(customInvoiceDesc(l) || d.text) + '" ' +
+        'placeholder="' + escapeHtml(defaultInvoiceDesc(l)) + '">' +
+      '<span class="count" data-invcount="' + i + '"></span>' +
+      '<button class="btn link js-invdone" data-i="' + i + '">done</button>' +
+      '<button class="btn link js-invreset" data-i="' + i + '" ' +
+        'title="Drop your wording and go back to the generated description">reset</button>' +
+    '</div>';
 }
 
 function marginClass(m) {
@@ -907,7 +976,54 @@ function wire() {
     };
   });
 
+  each('.js-invedit', function (el) {
+    el.onclick = function () { setInvEditing(+el.getAttribute('data-i'), true); };
+  });
+  each('.js-invdone', function (el) {
+    el.onclick = function () { setInvEditing(+el.getAttribute('data-i'), false); };
+  });
+  each('.js-invreset', function (el) {
+    el.onclick = function () {
+      var i = +el.getAttribute('data-i');
+      LINES[i].invoice_description = '';
+      var input = document.querySelector('.js-invtext[data-i="' + i + '"]');
+      if (input) input.value = defaultInvoiceDesc(LINES[i]);
+      setInvEditing(i, false);
+    };
+  });
+  each('.js-invtext', function (el) {
+    var i = +el.getAttribute('data-i');
+    var sync = function () {
+      var v = el.value.trim();
+      // Typing the generated default back in is the same as no override.
+      LINES[i].invoice_description = (v === defaultInvoiceDesc(LINES[i])) ? '' : v;
+      var c = document.querySelector('[data-invcount="' + i + '"]');
+      if (c) c.textContent = el.value.length + '/100';
+    };
+    el.oninput = sync;
+    el.onchange = sync;
+    sync();
+  });
+
   each('.js-map', function (el) { wireMapper(el); });
+}
+
+function setInvEditing(i, on) {
+  var cell = document.querySelector('tr.line[data-i="' + i + '"] td:nth-child(2)');
+  if (cell) cell.className = on ? 'inv-open' : '';
+  var input = document.querySelector('.js-invtext[data-i="' + i + '"]');
+  if (on && input) { input.focus(); input.select(); }
+  if (!on) refreshInvoice(LINES[i]);
+}
+
+function refreshInvoice(l) {
+  var d = invoiceDesc(l);
+  var btn = document.querySelector('.js-invedit[data-i="' + l._i + '"]');
+  if (!btn) return;
+  btn.className = 'invtext ' + d.state + ' js-invedit';
+  btn.textContent = d.text;
+  var lbl = btn.parentNode.firstChild;
+  if (lbl) lbl.textContent = 'Invoice' + (d.state === 'default' ? ' (unset)' : '');
 }
 
 function setEditing(i, on) {
@@ -1018,7 +1134,8 @@ function savePayload() {
       use_custom_price: !!l.use_custom_price,
       sell_price: l.use_custom_price ? Number(l.sell_price !== null && l.sell_price !== undefined ? l.sell_price : periodRrp(l)) : null,
       include: effInclude(l),
-      price_effective_date: l.price_effective_date || ''
+      price_effective_date: l.price_effective_date || '',
+      invoice_description: customInvoiceDesc(l)
     };
   });
 }

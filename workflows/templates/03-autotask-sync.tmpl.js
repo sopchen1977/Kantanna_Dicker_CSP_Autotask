@@ -554,6 +554,61 @@ const csAfterPatch = node({
   output: [{ line_key: '2F295B21|P1Y:CFQ7TTC0LCHC:0002:1:', action: 'patch', contract_id: 7001, service_id: 9001, cs_id: 8001, sell: 33, old_price: 34.55, patch_error: '' }]
 });
 
+// Only an EXISTING contract service needs a description patch - a new one
+// is created with its description already set.
+const needDesc = ifElse({
+  version: 2.2,
+  config: {
+    name: 'Need Description Change?',
+    position: [4700, -80],
+    parameters: {
+      conditions: {
+        options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+        conditions: [
+          { leftValue: expr('{{ $("CS Decision").first().json.desc_change }}'), operator: { type: 'boolean', operation: 'true', singleValue: true } },
+          { leftValue: expr('{{ $("CS Decision").first().json.cs_id ?? "" }}'), operator: { type: 'string', operation: 'notEmpty', singleValue: true } }
+        ],
+        combinator: 'and'
+      }
+    }
+  }
+});
+
+// Autotask patches a child collection by PATCHing the parent's collection
+// URL with the child's own id in the body.
+const patchDesc = node({
+  type: 'n8n-nodes-base.httpRequest',
+  version: 4.5,
+  config: {
+    name: 'Patch CS Description',
+    position: [4920, -180],
+    onError: 'continueRegularOutput',
+    parameters: {
+      method: 'PATCH',
+      url: expr("{{ $('Autotask Config').first().json.base_url }}/Contracts/{{ $('CS Decision').first().json.contract_id }}/Services"),
+      authentication: 'genericCredentialType',
+      genericAuthType: 'httpCustomAuth',
+      sendBody: true,
+      specifyBody: 'json',
+      jsonBody: expr('{{ JSON.stringify({ id: $("CS Decision").first().json.cs_id, invoiceDescription: $("Current Line").first().json.service_invoice_description, internalDescription: $("Current Line").first().json.service_invoice_description }) }}'),
+      options: {}
+    },
+    credentials: { httpCustomAuth: newCredential('KantannaAutotask') }
+  },
+  output: [{ itemId: 8001 }]
+});
+
+const descResult = node({
+  type: 'n8n-nodes-base.code',
+  version: 2,
+  config: {
+    name: 'Desc Result',
+    position: [5140, -180],
+    parameters: { mode: 'runOnceForAllItems', jsCode: __DESC_RESULT__ }
+  },
+  output: [{ line_key: '2F295B21|P1Y:CFQ7TTC0LCHC:0002:1:', action: 'none', contract_id: 7001, service_id: 9001, cs_id: 8001, sell: 34.55, desc_from: 'Microsoft 365 Business Premium - sub 2F295B21', desc_to: 'M365 Business Premium licences', desc_updated: true, desc_error: '' }]
+});
+
 const fetchUnits = node({
   type: 'n8n-nodes-base.httpRequest',
   version: 4.5,
@@ -725,7 +780,8 @@ const markSynced = node({
           autotask_contract_service_id: expr('{{ $json.autotask_contract_service_id }}'),
           billing_last: expr('{{ $json.billing_last }}'),
           billing_next: expr('{{ $json.billing_next }}'),
-          contract_price: expr('{{ $json.contract_price }}')
+          contract_price: expr('{{ $json.contract_price }}'),
+          contract_invoice_description: expr('{{ $json.contract_invoice_description }}')
         },
         schema: [
           { id: 'sync_status', displayName: 'sync_status', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false },
@@ -735,7 +791,8 @@ const markSynced = node({
           { id: 'autotask_contract_service_id', displayName: 'autotask_contract_service_id', required: false, defaultMatch: false, display: true, type: 'number', canBeUsedToMatch: false },
           { id: 'billing_last', displayName: 'billing_last', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false },
           { id: 'billing_next', displayName: 'billing_next', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false },
-          { id: 'contract_price', displayName: 'contract_price', required: false, defaultMatch: false, display: true, type: 'number', canBeUsedToMatch: false }
+          { id: 'contract_price', displayName: 'contract_price', required: false, defaultMatch: false, display: true, type: 'number', canBeUsedToMatch: false },
+          { id: 'contract_invoice_description', displayName: 'contract_invoice_description', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false }
         ]
       },
       options: {}
@@ -778,9 +835,12 @@ export default workflow('kantanna-csp-03-sync', '03 · Autotask Sync')
   .add(fetchContractServices)
   .to(csDecision)
   .to(csRoute
-    .onCase(0, createCS.to(csFromCreate.to(fetchUnits)))
-    .onCase(1, patchCS.to(csAfterPatch.to(fetchUnits)))
-    .onCase(2, fetchUnits))
+    .onCase(0, createCS.to(csFromCreate.to(needDesc)))
+    .onCase(1, patchCS.to(csAfterPatch.to(needDesc)))
+    .onCase(2, needDesc))
+  .add(needDesc
+    .onTrue(patchDesc.to(descResult.to(fetchUnits)))
+    .onFalse(fetchUnits))
   .add(fetchUnits)
   .to(unitsDecision)
   .to(fetchBillingItems)

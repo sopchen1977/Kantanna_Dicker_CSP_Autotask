@@ -391,4 +391,47 @@ tableRows[0].json.sell_price = 99.5;
 const prepared2 = runNode('prepare-lines.js', tableRows, {});
 assert.strictEqual(prepared2.find((i) => i.json.subscription_id === 'SUB-1').json.effective_sell, 99.5);
 
+// -- Invoice description overrides -----------------------------------------
+// The generated description is the default; whatever is typed in the portal
+// replaces it and is flagged so the sync knows to push it.
+const invBase = prepared.find((i) => i.json.subscription_id === 'SUB-1').json;
+assert.strictEqual(invBase.service_invoice_description, invBase.service_invoice_description_default);
+assert.strictEqual(invBase.invoice_description_custom, false);
+assert.ok(invBase.service_invoice_description.includes('SUB-1'),
+  'the default description still carries the Subscription ID to the invoice line');
+
+const withDesc = (pick) => parsed.map((i) => ({ json: Object.assign({}, i.json, {
+  include: null, use_custom_price: null, sell_price: null, invoice_description: pick(i.json),
+}) }));
+
+const invCustom = runNode('prepare-lines.js',
+  withDesc((j) => (j.subscription_id === 'SUB-1' ? '  M365 seats - August  ' : '')), {})
+  .find((i) => i.json.subscription_id === 'SUB-1').json;
+assert.strictEqual(invCustom.service_invoice_description, 'M365 seats - August',
+  'a typed description is trimmed and wins over the generated one');
+assert.strictEqual(invCustom.invoice_description_custom, true);
+assert.ok(invCustom.service_invoice_description_default.includes('SUB-1'),
+  'the generated default is still reported alongside');
+
+// Over-long text is cut to the field length rather than rejected by Autotask.
+assert.ok(runNode('prepare-lines.js', withDesc(() => 'x'.repeat(180)), {})
+  .every((i) => i.json.service_invoice_description.length === 100),
+  'descriptions stay within Autotask\'s 100-character field');
+
+// Two subscriptions of one product bill as a single contract service. Its
+// generated description names both, but a typed one still wins.
+const merged = runNode('prepare-lines.js', withDesc(() => ''), {})
+  .find((i) => i.json.merged_note);
+assert.ok(merged, 'the duplicate-product fixture still merges');
+assert.ok(merged.json.service_invoice_description.indexOf(' - subs ') > 0,
+  'a merged service names every subscription by default');
+
+const mergedNamed = runNode('prepare-lines.js',
+  withDesc((j) => (j.stock_code === merged.json.stock_code ? 'Copilot seats' : '')), {})
+  .find((i) => i.json.merged_note);
+assert.strictEqual(mergedNamed.json.service_invoice_description, 'Copilot seats',
+  'a typed description survives the same-product merge');
+assert.ok(mergedNamed.json.service_invoice_description_default.indexOf(' - subs ') > 0,
+  'the merged default is still reported');
+
 console.log('ALL PARSE TESTS PASSED');

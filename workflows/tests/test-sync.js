@@ -300,4 +300,74 @@ console.log('scenario 3 (API errors):', r3.sync_status, '|', r3.sync_message.sli
 assert.strictEqual(r3.sync_status, 'error');
 assert.ok(r3.sync_message.includes('materialCodeID invalid'));
 
+// -- Invoice description ---------------------------------------------------
+// A description is only pushed when the user typed one in the portal, so a
+// description edited by hand in Autotask is never silently overwritten.
+const csRow = { id: 8001, serviceID: 9001, adjustedPrice: 34.55,
+  invoiceDescription: 'Thing - sub SUB-A' };
+
+const nDescOff = { 'Current Line': [{ json: Object.assign({}, line, {
+  service_invoice_description: 'Something else entirely',
+  invoice_description_custom: false,
+}) }] };
+nDescOff['Record Service'] = [{ json: { sku: 'P1Y:SKU1', autotask_service_id: 9001 } }];
+nDescOff['Contract Decision'] = [{ json: { line_key: line.line_key, contract_id: 7001 } }];
+const descOff = runNode('cs-decision.js', [{ json: { items: [csRow] } }], nDescOff)[0].json;
+assert.strictEqual(descOff.desc_change, false,
+  'a generated description must not overwrite what Autotask already has');
+assert.strictEqual(descOff.cs_invoice_description, 'Thing - sub SUB-A',
+  'the live description is read back for the portal to show');
+
+const nDesc = { 'Current Line': [{ json: Object.assign({}, line, {
+  service_invoice_description: 'M365 Business Premium licences',
+  invoice_description_custom: true,
+}) }] };
+nDesc['Record Service'] = [{ json: { sku: 'P1Y:SKU1', autotask_service_id: 9001 } }];
+nDesc['Contract Decision'] = [{ json: { line_key: line.line_key, contract_id: 7001 } }];
+const descOn = runNode('cs-decision.js', [{ json: { items: [csRow] } }], nDesc)[0].json;
+assert.strictEqual(descOn.desc_change, true, 'a typed description is pushed');
+assert.strictEqual(descOn.action, 'none', 'a description change alone is not a re-price');
+assert.strictEqual(descOn.target_invoice_description, 'M365 Business Premium licences');
+
+// Same text already in Autotask -> nothing to do (idempotent).
+const descSame = runNode('cs-decision.js', [{ json: { items: [
+  Object.assign({}, csRow, { invoiceDescription: 'M365 Business Premium licences' }),
+] } }], nDesc)[0].json;
+assert.strictEqual(descSame.desc_change, false, 'an unchanged description must not re-patch');
+
+// A brand-new contract service is created with its description, not patched.
+const descNew = runNode('cs-decision.js', [{ json: { items: [] } }], nDesc)[0].json;
+assert.strictEqual(descNew.action, 'create');
+assert.strictEqual(descNew.desc_change, false, 'a create already carries the description');
+
+// The PATCH result must carry the identifiers the units query needs.
+nDesc['CS Decision'] = [{ json: descOn }];
+const dOk = runNode('desc-result.js', [{ json: { itemId: 8001 } }], nDesc)[0].json;
+assert.strictEqual(dOk.desc_updated, true);
+assert.strictEqual(dOk.desc_error, '');
+assert.strictEqual(dOk.cs_id, 8001, 'Fetch CS Units reads cs_id off this item');
+assert.strictEqual(dOk.contract_id, 7001);
+assert.strictEqual(dOk.desc_to, 'M365 Business Premium licences');
+
+const dBad = runNode('desc-result.js',
+  [{ json: { errors: ['invoiceDescription exceeds maximum length'] } }], nDesc)[0].json;
+assert.strictEqual(dBad.desc_updated, false);
+assert.ok(dBad.desc_error.includes('exceeds maximum length'));
+assert.strictEqual(dBad.cs_id, 8001, 'a failed description patch must not break the units query');
+
+// ...and it reaches the line's status + the portal's stored description.
+// A resolved service and contract, so the run has no unrelated errors.
+nDesc['Service Decision'] = [{ json: { line_key: line.line_key, service_id: 9001 } }];
+const nDescRes = Object.assign({}, nDesc, { 'Desc Result': [{ json: dOk }] });
+const rDesc = runNode('sync-result.js', [{ json: {} }], nDescRes)[0].json;
+assert.ok(rDesc.sync_message.includes('invoice description -> M365 Business Premium licences'));
+assert.strictEqual(rDesc.contract_invoice_description, 'M365 Business Premium licences');
+
+const nDescFail = Object.assign({}, nDesc, { 'Desc Result': [{ json: dBad }] });
+const rDescFail = runNode('sync-result.js', [{ json: {} }], nDescFail)[0].json;
+assert.strictEqual(rDescFail.sync_status, 'error');
+assert.ok(rDescFail.sync_message.includes('invoice description update failed'));
+assert.strictEqual(rDescFail.contract_invoice_description, 'Thing - sub SUB-A',
+  'a failed patch leaves the live description showing what Autotask still has');
+
 console.log('\nALL SYNC TESTS PASSED');
