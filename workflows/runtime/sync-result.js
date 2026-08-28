@@ -58,6 +58,8 @@ if (!serviceId) errors.push('no Autotask service resolved');
 if (!contractId) errors.push('no Autotask contract resolved');
 if (!csId && serviceId && contractId) errors.push('no contract service resolved');
 
+if (line.merged_note) notes.unshift(line.merged_note);
+
 const status = errors.length ? 'error' : 'synced';
 const message = (errors.length ? errors : (notes.length ? notes : ['up to date'])).join('; ').slice(0, 500);
 
@@ -69,9 +71,15 @@ if (csPatch && !csPatch.patch_error) contractPrice = csPatch.sell;
 else if (csCreate && csCreate.cs_id) contractPrice = csCreate.sell;
 else if (csDec && csDec.old_price !== null && csDec.old_price !== undefined) contractPrice = csDec.old_price;
 
-return [{ json: {
-  subscription_id: line.subscription_id,
-  stock_code: line.stock_code,
+// When two subscriptions of the same product share one contract service,
+// the sync ran once but BOTH rows need their status written back.
+const keys = Array.isArray(line.merged_keys) && line.merged_keys.length
+  ? line.merged_keys
+  : [{ subscription_id: line.subscription_id, stock_code: line.stock_code }];
+
+return keys.map((k) => ({ json: {
+  subscription_id: k.subscription_id,
+  stock_code: k.stock_code,
   sync_status: status,
   sync_message: message,
   autotask_service_id: serviceId,
@@ -80,4 +88,4 @@ return [{ json: {
   billing_last: (billing && billing.billing_last) || '',
   billing_next: (billing && billing.billing_next) || '',
   contract_price: contractPrice,
-} }];
+} }));

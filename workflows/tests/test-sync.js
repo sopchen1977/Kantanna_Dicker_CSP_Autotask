@@ -90,7 +90,9 @@ const adjErr = runNode('adjust-result.js', [
 assert.strictEqual(adjErr.adjust_ok_count, 1);
 assert.ok(adjErr.adjust_error.includes('effectiveDate must be between'), 'real Autotask error must surface');
 
-const result = runNode('sync-result.js', [{ json: {} }], nodes)[0].json;
+const resultItems = runNode('sync-result.js', [{ json: {} }], nodes);
+assert.strictEqual(resultItems.length, 1, 'one subscription -> one status row');
+const result = resultItems[0].json;
 console.log('scenario 1 (all created):', result.sync_status, '|', result.sync_message);
 assert.strictEqual(result.sync_status, 'synced');
 assert.ok(result.sync_message.includes('+4 @2026-07-13') && result.sync_message.includes('+45 @2026-07-31'), 'message should show the chronological plan');
@@ -221,6 +223,26 @@ assert.strictEqual(ceE.extend_error, '');
 const cdOk = runNode('contract-decision.js',
   [{ json: { items: [{ id: 7001, contractName: 'CSP - Thing - SUB-A', endDate: '2026-12-28T00:00:00Z' }] } }], nE)[0].json;
 assert.strictEqual(cdOk.need_date_fix, false);
+
+// -- Two subscriptions of the same product share one contract service, so
+// -- the sync runs once but BOTH table rows get their status written back.
+const mergedLine = Object.assign({}, line, {
+  merged_note: 'combined 2 subscriptions of the same product (SUB-13 x3, SUB-14 x5)',
+  merged_keys: [
+    { subscription_id: 'SUB-13', stock_code: 'P1Y:CFQ7TTC0LH04:0001:1:' },
+    { subscription_id: 'SUB-14', stock_code: 'P1Y:CFQ7TTC0LH04:0001:1:' },
+  ],
+});
+const nMerged = Object.assign({}, nodes, { 'Current Line': [{ json: mergedLine }] });
+const mergedOut = runNode('sync-result.js', [{ json: {} }], nMerged);
+assert.strictEqual(mergedOut.length, 2, 'both subscriptions get a status row');
+assert.deepStrictEqual(mergedOut.map((i) => i.json.subscription_id), ['SUB-13', 'SUB-14']);
+for (const i of mergedOut) {
+  assert.strictEqual(i.json.sync_status, 'synced');
+  assert.strictEqual(i.json.autotask_contract_service_id, 8001,
+    'both rows point at the one shared contract service');
+  assert.ok(i.json.sync_message.startsWith('combined 2 subscriptions'), i.json.sync_message);
+}
 
 // -- Month-to-month: the next billing cycle EXTENDS the same contract --
 const lineM = Object.assign({}, line, {

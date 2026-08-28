@@ -278,4 +278,55 @@ for (const l of rows) {
   }) });
 }
 
-return out;
+// ---- Two subscriptions of the same product on one contract --------------
+// A customer can hold the same SKU twice as two separate subscriptions
+// (ConnectOS has M365 Business Standard as qty 1 and qty 7). Both resolve to
+// the same Autotask service, and a contract carries a given service only
+// once - so left alone the second line would find the first line's contract
+// service and overwrite its units, billing 7 instead of 8.
+//
+// They are therefore billed as ONE contract service with the combined
+// quantity, replaying both subscriptions' invoice lines. Every subscription
+// in the group still gets its own status written back to the table, via
+// merged_keys, so no row is left stale.
+const byService = {};
+for (const i of out) {
+  const j = i.json;
+  const k = j.contract_group_key + '||' + j.service_key;
+  (byService[k] = byService[k] || []).push(j);
+}
+
+const combined = [];
+for (const k of Object.keys(byService)) {
+  const group = byService[k].sort((a, b) => String(a.line_key).localeCompare(String(b.line_key)));
+  const primary = group[0];
+  if (group.length > 1) {
+    const parts = group.map((j) => ({
+      id: String(j.subscription_id).slice(0, 8),
+      qty: Number(j.qty || 0),
+      sell: Number(j.effective_sell || 0),
+    }));
+    primary.qty = parts.reduce((s, p) => s + p.qty, 0);
+    // Replay every subscription's invoice lines so the unit history adds up
+    // to the combined quantity.
+    let invAll = [];
+    for (const j of group) {
+      try { invAll = invAll.concat(JSON.parse(j.invoice_lines || '[]')); } catch (e) { /* none */ }
+    }
+    invAll.sort((a, b) => String(a && a.s).localeCompare(String(b && b.s)));
+    primary.invoice_lines = JSON.stringify(invAll).slice(0, 4000);
+    primary.service_invoice_description =
+      (String(primary.offer_name || '') + ' - subs ' + parts.map((p) => p.id).join(', ')).slice(0, 100);
+    primary.merged_note = 'combined ' + group.length + ' subscriptions of the same product ('
+      + parts.map((p) => p.id + ' x' + p.qty).join(', ') + ')'
+      + (new Set(parts.map((p) => p.sell)).size > 1
+        ? ' - they had different sell prices, using ' + primary.effective_sell : '');
+  }
+  // Whether merged or not, every subscription in the group gets its status
+  // written back against its own row.
+  primary.merged_keys = group.map((j) => ({
+    subscription_id: j.subscription_id, stock_code: j.stock_code,
+  }));
+  combined.push({ json: primary });
+}
+return combined;

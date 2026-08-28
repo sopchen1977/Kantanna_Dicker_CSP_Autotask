@@ -75,6 +75,17 @@ const annuity = [
     'STOCK CODE': 'P1M:CFQ7TTC0LH1P:0001:1:', 'STOCK DESCRIPTION': 'MS NCE EXCHANGE ONLINE PLAN 2', 'REFERENCE': 'Exchange Online (Plan 2)',
     'QTY': '4.00', 'CHARGE TYPE': 'NCE', 'STATUS': 'Active', 'START USAGE': '11-NOV-2025', 'END USAGE': '11-NOV-2025',
     'REVALUATION PERIOD': '31-AUG-2026', 'UNIT PRICE': '$11.32', 'UNIT RRP': '$13.32' },
+  // Two SEPARATE subscriptions of the same product on the same annual term.
+  // Both resolve to one Autotask service, so they must bill as one line of
+  // 3 + 5 = 8 rather than the second overwriting the first.
+  { 'TENANT ID': 'T2', 'TENANT NAME': 'Galilee Solicitors', 'SUBSCRIPTION ID': 'SUB-13',
+    'STOCK CODE': 'P1Y:CFQ7TTC0LH04:0001:1:', 'STOCK DESCRIPTION': 'MS NCE EXCHANGE ONLINE PLAN 1', 'REFERENCE': 'Exchange Online (Plan 1)',
+    'QTY': '3.00', 'CHARGE TYPE': 'NCE', 'STATUS': 'Active', 'START USAGE': '29-JUL-2023', 'END USAGE': '28-AUG-2023',
+    'REVALUATION PERIOD': '28-DEC-2026', 'UNIT PRICE': '$100.00', 'UNIT RRP': '$120.00' },
+  { 'TENANT ID': 'T2', 'TENANT NAME': 'Galilee Solicitors', 'SUBSCRIPTION ID': 'SUB-14',
+    'STOCK CODE': 'P1Y:CFQ7TTC0LH04:0001:1:', 'STOCK DESCRIPTION': 'MS NCE EXCHANGE ONLINE PLAN 1', 'REFERENCE': 'Exchange Online (Plan 1)',
+    'QTY': '5.00', 'CHARGE TYPE': 'NCE', 'STATUS': 'Active', 'START USAGE': '29-JUL-2023', 'END USAGE': '28-AUG-2023',
+    'REVALUATION PERIOD': '28-DEC-2026', 'UNIT PRICE': '$100.00', 'UNIT RRP': '$120.00' },
   { 'TENANT ID': 'T9', 'TENANT NAME': 'Some Other Customer', 'SUBSCRIPTION ID': 'SUB-9',
     'STOCK CODE': 'P1Y:XXXX:0001:1:', 'STOCK DESCRIPTION': 'Other', 'REFERENCE': 'Other',
     'QTY': '1.00', 'CHARGE TYPE': 'NCE', 'STATUS': 'Active', 'START USAGE': '', 'END USAGE': '',
@@ -109,7 +120,7 @@ const nodes = {
 const parsed = runNode('parse-lines.js', [{ json: {} }], nodes);
 
 // Pilot filter keeps only pilot customers
-assert.strictEqual(parsed.length, 11, 'pilot filter should keep 11 lines');
+assert.strictEqual(parsed.length, 13, 'pilot filter should keep 13 lines');
 assert.ok(!parsed.some((i) => i.json.tenant_name === 'Some Other Customer'));
 
 // Billing type 1: Annual Commit paid Monthly (P1Y:...:1:)
@@ -152,7 +163,9 @@ assert.strictEqual(azure.charge_type, 'MODN');
 // prepare-lines: default include rule + subscription id in contract name
 const tableRows = parsed.map((i) => ({ json: Object.assign({}, i.json, { include: null, use_custom_price: null, sell_price: null }) }));
 const prepared = runNode('prepare-lines.js', tableRows, {});
-assert.strictEqual(prepared.length, 10, 'Azure/MODN line must be excluded by default; $0 NCE lines stay in');
+// SUB-7 and SUB-13 are the same product on the same contract, so they come
+// out as ONE line carrying the combined quantity.
+assert.strictEqual(prepared.length, 11, 'Azure/MODN excluded; $0 NCE kept; duplicate product merged');
 // $0 NCE line (Teams Phone Resource) is included and sells at $0
 const pZero = prepared.find((i) => i.json.subscription_id === 'SUB-5').json;
 assert.strictEqual(pZero.effective_sell, 0);
@@ -345,6 +358,26 @@ assert.strictEqual(pMtm.service_key, 'MTM:CFQ7TTC0LCHC:0002');
 assert.strictEqual(pSameDay.service_key, 'MTM:CFQ7TTC0LH1P:0001');
 assert.notStrictEqual(pSameDay.service_key, pRenewed.service_key,
   'two subscriptions sharing a contract still need distinct services');
+
+// ---- Two subscriptions of the same product on one contract -------------
+const pDup = prepared.filter((i) => i.json.service_key === 'ANN-MO:CFQ7TTC0LH04:0001').map((i) => i.json);
+assert.strictEqual(pDup.length, 1, 'one contract service, not two');
+assert.strictEqual(pDup[0].qty, 8, 'quantities combine: 3 + 5');
+assert.ok(pDup[0].service_invoice_description.indexOf('SUB-13') !== -1
+  && pDup[0].service_invoice_description.indexOf('SUB-14') !== -1,
+  pDup[0].service_invoice_description);
+assert.ok(/combined 2 subscriptions/.test(pDup[0].merged_note), pDup[0].merged_note);
+// Both rows still get their own status written back.
+assert.deepStrictEqual(pDup[0].merged_keys.map((k) => k.subscription_id).sort(),
+  ['SUB-13', 'SUB-14']);
+// Their invoice lines are replayed together, in date order.
+const dupInv = JSON.parse(pDup[0].invoice_lines);
+for (let n = 1; n < dupInv.length; n++) {
+  assert.ok(dupInv[n - 1].s <= dupInv[n].s, 'replayed invoice lines stay in date order');
+}
+// A line with no duplicate still carries exactly its own key.
+assert.deepStrictEqual(pAnnMo.merged_keys, [{ subscription_id: 'SUB-1', stock_code: 'P1Y:CFQ7TTC0LCHC:0002:1:' }]);
+assert.strictEqual(pAnnMo.merged_note, undefined);
 
 // custom price override wins
 tableRows[0].json.use_custom_price = true;

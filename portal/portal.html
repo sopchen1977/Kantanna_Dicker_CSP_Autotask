@@ -17,6 +17,14 @@
   .customer { background:var(--card); border:1px solid var(--line); border-radius:10px; margin-bottom:22px; overflow:hidden; }
   .customer > .head { padding:12px 16px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; border-bottom:1px solid var(--line); background:#f8fafc; }
   .customer h2 { font-size:15px; margin:0; }
+  .contract { border-top:1px solid var(--line); }
+  .contract:first-of-type { border-top:none; }
+  .chead { padding:10px 16px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:#eef2f7; }
+  .cname { font-weight:600; font-size:13px; }
+  .cdates { color:var(--muted); }
+  .ctotal { margin-left:auto; font-size:11.5px; font-weight:600; color:var(--ok); }
+  .ctotal.cdue { color:var(--warn); }
+  .chead .atlink { margin-left:0; }
   table { width:100%; border-collapse:collapse; font-size:13.5px; }
   th,td { padding:8px 10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:middle; }
   th { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); background:#fbfcfe; }
@@ -287,29 +295,79 @@ function render() {
     }
     card.appendChild(head);
 
-    var table = document.createElement('table');
-    table.innerHTML = '<thead><tr><th>Incl.</th><th>Offer</th><th>Billing</th>' +
-      '<th title="The Autotask contract this line bills on. Every subscription co-termed to the same anniversary shares one contract, so they Approve &amp; Post together.">Contract</th>' +
-      '<th>Subscription ID</th>' +
-      '<th title="Start of the CURRENT term (month-to-month: the current billing cycle). Hover the date for when the subscription first started.">Start</th>' +
-      '<th title="End of the current term — the annuity report&#39;s REVALUATION PERIOD. Renewals extend the Autotask contract to this date.">End</th>' +
-      '<th class="num">Qty</th><th class="num">Cost</th><th class="num">RRP</th>' +
-      '<th title="Tick to change the contract price; unticked, the contract keeps its current price">Edit price</th><th class="num">Sell</th><th title="Date the price change takes effect in Autotask">From</th><th class="num">Margin</th><th>Status</th></tr></thead>';
-    var tbody = document.createElement('tbody');
-    // Order by the contract they share, so an Approve & Post run reads as
-    // one block per contract rather than scattered lines.
-    byCustomer[name].slice().sort(function (a, b) {
-      var ga = groupContract(a).name, gb = groupContract(b).name;
-      if (ga !== gb) return ga < gb ? -1 : 1;
-      return String(a.offer_name || '').localeCompare(String(b.offer_name || ''));
-    }).forEach(function (l) {
-      tbody.appendChild(buildRow(l));
-      tbody.appendChild(buildBillingRow(l));
+    // One block per Autotask contract, with its services listed underneath -
+    // the same shape you Approve & Post in.
+    var byContract = {};
+    byCustomer[name].forEach(function (l) {
+      var g = groupContract(l);
+      var k = g.name || '';
+      (byContract[k] = byContract[k] || { grp: g, lines: [] }).lines.push(l);
     });
-    table.appendChild(tbody);
-    card.appendChild(table);
+    Object.keys(byContract).sort(function (a, b) {
+      if (!a !== !b) return a ? -1 : 1;   // unbilled lines last
+      return a < b ? -1 : (a > b ? 1 : 0);
+    }).forEach(function (cname) {
+      card.appendChild(buildContract(cname, byContract[cname]));
+    });
     app.appendChild(card);
   });
+}
+
+// A contract and every service billing on it.
+function buildContract(cname, block) {
+  var lines = block.lines.slice().sort(function (a, b) {
+    return String(a.offer_name || '').localeCompare(String(b.offer_name || ''));
+  });
+  var wrap = document.createElement('div');
+  wrap.className = 'contract';
+
+  // Everything on this contract still waiting to be approved and posted.
+  var due = 0;
+  var anyChecked = false;
+  lines.forEach(function (l) {
+    if (!effInclude(l) || !l.billing_last) return;
+    anyChecked = true;
+    pendingItems(l).forEach(function (i) { if (i.type !== 'next cycle') due += i.amount; });
+  });
+
+  var atId = (lines.find(function (l) { return l.autotask_contract_id; }) || {}).autotask_contract_id;
+  var head = document.createElement('div');
+  head.className = 'chead';
+  if (!cname) {
+    // Lines with no Autotask contract: Azure and other usage-billed items,
+    // which the sync leaves alone.
+    head.innerHTML = '<span class="cname muted">Not billed through Autotask</span>' +
+      '<span class="badge">' + lines.length + (lines.length === 1 ? ' line' : ' lines') + '</span>' +
+      '<span class="cdates">usage-billed — excluded from the sync</span>';
+  } else {
+    head.innerHTML = '<span class="cname">' + escapeHtml(cname) + '</span>' +
+      '<span class="cdates mono">' + escapeHtml(block.grp.start || '?') + ' → ' +
+        escapeHtml(block.grp.end || '?') + '</span>' +
+      '<span class="badge">' + lines.length + (lines.length === 1 ? ' service' : ' services') + '</span>' +
+      (atId ? '<span class="mono">#' + escapeHtml(String(atId)) + '</span>' : '') +
+      (anyChecked
+        ? '<span class="ctotal' + (due > 0 ? ' cdue' : '') + '">' +
+          (due > 0 ? 'Awaiting Approve &amp; Post: $' + due.toFixed(2) : 'Nothing awaiting posting') + '</span>'
+        : '') +
+      contractLink(atId);
+  }
+  wrap.appendChild(head);
+
+  var table = document.createElement('table');
+  table.innerHTML = '<thead><tr><th>Incl.</th><th>Offer</th><th>Billing</th>' +
+    '<th>Subscription ID</th>' +
+    '<th title="Start of the CURRENT term (month-to-month: the current billing cycle). Hover the date for when the subscription first started.">Start</th>' +
+    '<th title="End of the current term — the annuity report&#39;s REVALUATION PERIOD. Renewals extend the Autotask contract to this date.">End</th>' +
+    '<th class="num">Qty</th><th class="num">Cost</th><th class="num">RRP</th>' +
+    '<th title="Tick to change the contract price; unticked, the contract keeps its current price">Edit price</th><th class="num">Sell</th><th title="Date the price change takes effect in Autotask">From</th><th class="num">Margin</th><th>Status</th></tr></thead>';
+  var tbody = document.createElement('tbody');
+  lines.forEach(function (l) {
+    tbody.appendChild(buildRow(l));
+    tbody.appendChild(buildBillingRow(l));
+  });
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+  return wrap;
 }
 
 // Everything for this subscription that Autotask has NOT yet approved &
@@ -355,10 +413,10 @@ function pendingItems(l) {
 
 // Documented Autotask deep link: opens the contract's Summary page in the
 // ww31 zone (Approve & Post for its charges is one click from there).
-function contractLink(l) {
-  if (!l.autotask_contract_id) return '';
+function contractLink(contractId) {
+  if (!contractId) return '';
   return '<a class="atlink" target="_blank" rel="noopener" href="https://ww31.autotask.net/Autotask/AutotaskExtend/ExecuteCommand.aspx?Code=OpenContract&amp;ContractID=' +
-    encodeURIComponent(l.autotask_contract_id) + '">Open contract in Autotask ↗</a>';
+    encodeURIComponent(contractId) + '">Open contract in Autotask ↗</a>';
 }
 
 function buildBillingRow(l) {
@@ -366,7 +424,7 @@ function buildBillingRow(l) {
   tr.className = 'subrow';
   tr.appendChild(document.createElement('td'));
   var td1 = document.createElement('td');
-  td1.colSpan = 14;
+  td1.colSpan = 13;
 
   var box = document.createElement('div');
   var lastTxt = l.billing_last || '';
@@ -388,7 +446,6 @@ function buildBillingRow(l) {
       '<span class="pend-title">' + (allPosted ? 'Report fully posted · next cycle' : 'Awaiting Approve &amp; Post') + '</span>' +
       '<span class="pend-total">$' + total.toFixed(2) + (items.length > 1 ? ' · ' + items.length + ' items' : '') + '</span>' +
       '<span class="muted">Last posted: ' + escapeHtml(lastTxt) + '</span>' +
-      contractLink(l) +
       '</div>';
     var rows = items.map(function (i) {
       return '<span class="pend-item"><span class="mono">' + escapeHtml(i.s) +
@@ -433,15 +490,6 @@ function buildRow(l) {
   }
   billing.innerHTML = '<span class="badge">' + escapeHtml(billingLabel(l)) + '</span>' + cotermBadge;
   tr.appendChild(billing);
-
-  var grp = groupContract(l);
-  var tdGroup = document.createElement('td');
-  tdGroup.innerHTML = grp.name
-    ? '<span class="small" title="' + escapeHtml('Contract runs ' + grp.start + ' to ' + grp.end +
-        '. Autotask bills every service on it against this window.') + '">' + escapeHtml(grp.name) + '</span>' +
-      (l.autotask_contract_id ? '<div class="mono small">#' + escapeHtml(String(l.autotask_contract_id)) + '</div>' : '')
-    : '<span class="muted">—</span>';
-  tr.appendChild(tdGroup);
 
   var sid = document.createElement('td');
   sid.innerHTML = '<span class="mono" title="' + escapeHtml(l.subscription_id) + '">' + escapeHtml(String(l.subscription_id).slice(0, 8)) + '…</span>';
