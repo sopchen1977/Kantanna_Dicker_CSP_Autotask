@@ -194,7 +194,7 @@ const importDone = node({
 });
 
 const noteImport = sticky(
-  '## 01 · Annuity Import\nUpload both monthly Dicker Data files. Lines are matched on Subscription ID + Stock Code and upserted, so custom sell prices and include/exclude choices saved in the portal survive re-imports.\n\n**Pilot filter:** edit PILOT_CUSTOMERS at the top of the "Parse Subscription Lines" node (currently Atlas + Galilee; empty list = all customers).',
+  '## 01 · Annuity Import\nUpload both monthly Dicker Data files. Lines are matched on Subscription ID + Stock Code and upserted, so custom sell prices and include/exclude choices saved in the portal survive re-imports.\n\n**Pilot filter:** edit PILOT_CUSTOMERS at the top of the "Parse Subscription Lines" node (currently B E Smart Admin Services only; empty list = all customers).',
   [uploadForm, normalizeUploads],
   { color: 4 }
 );

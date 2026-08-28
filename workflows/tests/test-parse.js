@@ -12,11 +12,17 @@ function makeDollar(nodes) {
     return { all: () => items, first: () => items[0], item: items[0] };
   };
 }
-function runNode(file, inputItems, nodes) {
-  const code = fs.readFileSync(path.join(RUNTIME, file), 'utf8');
+function runNode(file, inputItems, nodes, patch) {
+  let code = fs.readFileSync(path.join(RUNTIME, file), 'utf8');
+  if (patch) code = patch(code);
   const fn = new Function('$input', '$', code);
   return fn({ all: () => inputItems, first: () => inputItems[0], item: inputItems[0] }, makeDollar(nodes));
 }
+
+// PILOT_CUSTOMERS is deployment config that changes as customers are switched
+// on, so the tests pin their own list rather than tracking it.
+const withPilot = (code) => code.replace(/const PILOT_CUSTOMERS = \[[^\]]*\];/,
+  "const PILOT_CUSTOMERS = ['ATLAS OUTSOURCING PTY LTD', 'Galilee Solicitors'];");
 
 const annuity = [
   { 'TENANT ID': 'T1', 'TENANT NAME': 'ATLAS OUTSOURCING PTY LTD', 'SUBSCRIPTION ID': 'SUB-1',
@@ -117,7 +123,7 @@ const nodes = {
   'Extract Invoice Details': invoice.map((j) => ({ json: j })),
   'Normalize Uploads': [{ json: { annuity_name: 'Annuity_Information_test.xlsx' } }],
 };
-const parsed = runNode('parse-lines.js', [{ json: {} }], nodes);
+const parsed = runNode('parse-lines.js', [{ json: {} }], nodes, withPilot);
 
 // Pilot filter keeps only pilot customers
 assert.strictEqual(parsed.length, 13, 'pilot filter should keep 13 lines');
