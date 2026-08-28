@@ -39,7 +39,15 @@ lines = lines.map((l) => {
   if (!c) return l;
   const out = Object.assign({}, l);
   if (c.invoiceDescription !== undefined && c.invoiceDescription !== null) {
-    out.contract_invoice_description = String(c.invoiceDescription);
+    const liveDesc = String(c.invoiceDescription);
+    const syncedDesc = String(l.contract_invoice_description || '');
+    // Autotask is the source of truth. If the description there no longer
+    // matches what the last sync pushed, someone edited it by hand, so the
+    // stored portal override is stale and is dropped: the page shows what
+    // Autotask actually holds. An override that has not been pushed yet
+    // (Autotask still matches what we last sent) survives untouched.
+    if (syncedDesc && liveDesc !== syncedDesc) out.invoice_description = '';
+    out.contract_invoice_description = liveDesc;
   }
   const p = livePrice(c);
   if (p !== null) out.contract_price = p;

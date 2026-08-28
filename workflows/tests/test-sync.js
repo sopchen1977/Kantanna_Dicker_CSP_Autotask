@@ -418,4 +418,63 @@ const unmatched = Object.assign({}, portalNodes, { 'Fetch Live Services': [{ jso
 assert.strictEqual(portalLines(unmatched)[0].contract_invoice_description, 'Thing - sub SUB-A',
   'another contract service must not bleed into this line');
 
+// A description edited in Autotask beats a stale portal override. The
+// override the portal last pushed is recorded in contract_invoice_description,
+// so a live value that differs from it means someone edited Autotask.
+const staleOverride = Object.assign({}, portalNodes, {
+  'Fetch Lines': [{ json: Object.assign({}, storedLine, {
+    invoice_description: 'Test - Thing - sub SUB-A',
+    contract_invoice_description: 'Test - Thing - sub SUB-A',
+  }) }],
+});
+const cleared = portalLines(staleOverride)[0];
+assert.strictEqual(cleared.invoice_description, '',
+  'a stale override must be dropped once Autotask holds something else');
+assert.strictEqual(cleared.contract_invoice_description, 'Edited by hand in Autotask');
+
+// An override typed in the portal but not yet synced must survive a refresh:
+// Autotask still holds exactly what the last sync pushed.
+const pendingEdit = Object.assign({}, portalNodes, {
+  'Fetch Lines': [{ json: Object.assign({}, storedLine, {
+    invoice_description: 'Typed but not synced',
+    contract_invoice_description: 'Edited by hand in Autotask',
+  }) }],
+});
+assert.strictEqual(portalLines(pendingEdit)[0].invoice_description, 'Typed but not synced',
+  'an unsynced portal edit must survive a refresh');
+
+// The sync side of the same rule: never push an override over a description
+// that has been edited in Autotask since we last wrote it.
+function descDecision(extra, liveDesc) {
+  const n = { 'Current Line': [{ json: Object.assign({}, line, extra) }] };
+  n['Record Service'] = [{ json: { sku: 'P1Y:SKU1', autotask_service_id: 9001 } }];
+  n['Contract Decision'] = [{ json: { line_key: line.line_key, contract_id: 7001 } }];
+  const row = { id: 8001, serviceID: 9001, adjustedPrice: 34.55, invoiceDescription: liveDesc };
+  return runNode('cs-decision.js', [{ json: { items: [row] } }], n)[0].json;
+}
+
+const externalDecision = descDecision({
+  service_invoice_description: 'Test - Thing - sub SUB-A',
+  invoice_description_custom: true,
+  contract_invoice_description: 'Test - Thing - sub SUB-A',
+}, 'Edited by hand in Autotask');
+assert.strictEqual(externalDecision.desc_change, false,
+  'a hand-edited Autotask description must not be overwritten by a stale override');
+
+const pendingDecision = descDecision({
+  service_invoice_description: 'Typed but not synced',
+  invoice_description_custom: true,
+  contract_invoice_description: 'Edited by hand in Autotask',
+}, 'Edited by hand in Autotask');
+assert.strictEqual(pendingDecision.desc_change, true,
+  'an unsynced portal edit must still be pushed');
+
+// No recorded marker (a line synced before the marker existed): fall back to
+// the old behaviour rather than refusing to push forever.
+const noMarker = descDecision({
+  service_invoice_description: 'New text',
+  invoice_description_custom: true,
+}, 'Thing - sub SUB-A');
+assert.strictEqual(noMarker.desc_change, true);
+
 console.log('\nALL SYNC TESTS PASSED');

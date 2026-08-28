@@ -40,8 +40,14 @@ const oldPrice = cs ? currentPrice(cs) : null;
 const currentDesc = cs && cs.invoiceDescription !== undefined && cs.invoiceDescription !== null
   ? String(cs.invoiceDescription) : '';
 const targetDesc = String(line.service_invoice_description || '');
+// If Autotask no longer holds what the last sync pushed, the description was
+// edited there by hand. Their wording wins over a stale portal override.
+// prepare-lines passes the stored data-table row through untouched, so
+// contract_invoice_description is what the last sync recorded pushing.
+const syncedDesc = String(line.contract_invoice_description || '');
+const externallyEdited = !!syncedDesc && currentDesc !== syncedDesc;
 const descChange = !!cs && line.invoice_description_custom === true
-  && !!targetDesc && currentDesc !== targetDesc;
+  && !!targetDesc && currentDesc !== targetDesc && !externallyEdited;
 // Re-price ONLY when the user explicitly set a price in the portal
 // ("Edit price" ticked). Otherwise the contract keeps its current price —
 // unticking never reverts anything to RRP.
