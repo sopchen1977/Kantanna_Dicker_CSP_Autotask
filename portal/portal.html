@@ -533,6 +533,13 @@ function dueNow(l) {
     return i.type === 'next cycle' ? s : s + i.amount;
   }, 0);
 }
+// How many charges are still waiting to be approved & posted. A $0 line
+// still has one, so it is the COUNT — never the dollar value — that decides
+// whether a line reads as posted.
+function pendingCount(l) {
+  if (!effInclude(l) || !l.billing_last) return 0;
+  return pendingItems(l).filter(function (i) { return i.type !== 'next cycle'; }).length;
+}
 function needsAttention(l) {
   var s = String(l.sync_status || '');
   return s === 'error' || s === 'needs_mapping' || s === 'unmapped' || s === 'partial';
@@ -559,7 +566,7 @@ LINES.forEach(function (l, i) {
 });
 
 function matches(l) {
-  if (UI.onlyDue && dueNow(l) <= 0) return false;
+  if (UI.onlyDue && pendingCount(l) <= 0) return false;
   if (!UI.showOff && !effInclude(l)) return false;
   if (!UI.q) return true;
   var hay = [l.tenant_name, l.offer_name, l.stock_description, l.sku, l.subscription_id,
@@ -701,11 +708,12 @@ function contractHtml(customer, cname, block) {
   var key = 'k:' + customer + '|' + cname;
   var closed = !!UI.closed[key];
 
-  var due = 0, monthly = 0, checked = false;
+  var due = 0, monthly = 0, checked = false, pend = 0;
   lines.forEach(function (l) {
     if (effInclude(l)) monthly += monthlyValue(l);
     if (effInclude(l) && l.billing_last) checked = true;
     due += dueNow(l);
+    pend += pendingCount(l);
   });
   var atId = (lines.filter(function (l) { return l.autotask_contract_id; })[0] || {}).autotask_contract_id;
 
@@ -723,7 +731,7 @@ function contractHtml(customer, cname, block) {
       '<span>' + lines.length + (lines.length === 1 ? ' service' : ' services') + '</span>' +
       '<span><span class="cval">' + money0(monthly) + '</span> /mo</span>' +
       (checked
-        ? (due > 0
+        ? (pend > 0
           ? '<span class="pill due" style="cursor:default"><span class="tick">&#9679;</span>' + money(due) + ' to post</span>'
           : '<span class="pill clear" style="cursor:default"><span class="tick">&#10003;</span>all posted</span>')
         : '') +
@@ -784,9 +792,8 @@ function lineHtml(l) {
   } else if (!l.billing_last) {
     pill = '<span class="pill none" title="Run a sync to read Autotask billing state">not checked yet</span>';
   } else {
-    var items = pendingItems(l);
-    var n = items.filter(function (x) { return x.type !== 'next cycle'; }).length;
-    pill = due > 0
+    var n = pendingCount(l);
+    pill = n > 0
       ? '<button class="pill due js-bill" data-i="' + i + '"><span class="tick">&#9679;</span>' +
         money(due) + (n > 1 ? ' <span class="n">' + n + ' items</span>' : '') + '</button>'
       : '<button class="pill clear js-bill" data-i="' + i + '"><span class="tick">&#10003;</span>posted</button>';
