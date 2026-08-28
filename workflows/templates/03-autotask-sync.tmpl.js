@@ -28,12 +28,16 @@ const autotaskConfig = node({
           { id: 'cfg-contract-type', name: 'contract_type', type: 'number', value: 7 },
           { id: 'cfg-contract-status', name: 'contract_status', type: 'number', value: 1 },
           { id: 'cfg-contract-period', name: 'contract_period_type', type: 'number', value: 2 },
-          { id: 'cfg-service-period', name: 'service_period_type', type: 'number', value: 2 }
+          { id: 'cfg-service-period', name: 'service_period_type', type: 'number', value: 2 },
+          // Line of Business (Billing) = General > SaaS and Cloud Services.
+          // Autotask calls this organizationalLevelAssociationID; 18 is the id
+          // the hand-made SaaS contracts (Bitwarden, Arcserve) already use.
+          { id: 'cfg-line-of-business', name: 'line_of_business_id', type: 'number', value: 18 }
         ]
       }
     }
   },
-  output: [{ base_url: 'https://webservices31.autotask.net/atservicesrest/v1.0', billing_code_id: 29683278, contract_type: 7, contract_status: 1, contract_period_type: 2, service_period_type: 2 }]
+  output: [{ base_url: 'https://webservices31.autotask.net/atservicesrest/v1.0', billing_code_id: 29683278, contract_type: 7, contract_status: 1, contract_period_type: 2, service_period_type: 2, line_of_business_id: 18 }]
 });
 
 const fetchSyncLines = node({
@@ -363,7 +367,7 @@ const createContract = node({
       genericAuthType: 'httpCustomAuth',
       sendBody: true,
       specifyBody: 'json',
-      jsonBody: expr('{{ JSON.stringify({ companyID: $("Lookup Mapping").first().json.autotask_company_id, contractName: $("Current Line").first().json.contract_name, contractType: Number($("Autotask Config").first().json.contract_type), status: Number($("Autotask Config").first().json.contract_status), startDate: $("Current Line").first().json.contract_start, endDate: $("Current Line").first().json.contract_end, contractPeriodType: Number($("Autotask Config").first().json.contract_period_type), timeReportingRequiresStartAndStopTimes: 0, setupFee: 0, description: ("Dicker Data CSP - " + $("Current Line").first().json.billing_label + ". Every subscription co-termed to " + $("Current Line").first().json.contract_end + " bills on this contract; each Subscription ID is on its service line. Managed by the Kantanna n8n automation.").slice(0, 1900) }) }}'),
+      jsonBody: expr('{{ JSON.stringify({ companyID: $("Lookup Mapping").first().json.autotask_company_id, contractName: $("Current Line").first().json.contract_name, contractType: Number($("Autotask Config").first().json.contract_type), status: Number($("Autotask Config").first().json.contract_status), startDate: $("Current Line").first().json.contract_start, endDate: $("Current Line").first().json.contract_end, contractPeriodType: Number($("Autotask Config").first().json.contract_period_type), timeReportingRequiresStartAndStopTimes: 0, setupFee: 0, organizationalLevelAssociationID: Number($("Autotask Config").first().json.line_of_business_id), description: ("Dicker Data CSP - " + $("Current Line").first().json.billing_label + ". Every subscription co-termed to " + $("Current Line").first().json.contract_end + " bills on this contract; each Subscription ID is on its service line. Managed by the Kantanna n8n automation.").slice(0, 1900) }) }}'),
       options: {}
     },
     credentials: { httpCustomAuth: newCredential('KantannaAutotask') }
