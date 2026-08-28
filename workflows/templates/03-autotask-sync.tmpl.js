@@ -6,7 +6,7 @@ const startSync = trigger({
   config: {
     name: 'Start Sync',
     position: [-620, 0],
-    parameters: { httpMethod: 'POST', path: 'csp-autotask-sync', responseMode: 'onReceived', options: {} }
+    parameters: { httpMethod: 'POST', path: 'csp-autotask-sync__SUFFIX__', responseMode: 'onReceived', options: {} }
   },
   output: [{ body: {} }]
 });
@@ -50,7 +50,7 @@ const fetchSyncLines = node({
     parameters: {
       resource: 'row',
       operation: 'get',
-      dataTableId: { __rl: true, mode: 'id', value: '__LINES_TABLE_ID__', cachedResultName: 'csp_subscription_lines' },
+      dataTableId: { __rl: true, mode: 'id', value: '__LINES_TABLE_ID__', cachedResultName: 'csp_subscription_lines__TABLE_SUFFIX__' },
       matchType: 'allConditions',
       filters: { conditions: [] },
       returnAll: true
@@ -115,7 +115,7 @@ const lookupMapping = node({
     parameters: {
       resource: 'row',
       operation: 'get',
-      dataTableId: { __rl: true, mode: 'id', value: '__MAPPINGS_TABLE_ID__', cachedResultName: 'csp_customer_mappings' },
+      dataTableId: { __rl: true, mode: 'id', value: '__MAPPINGS_TABLE_ID__', cachedResultName: 'csp_customer_mappings__TABLE_SUFFIX__' },
       matchType: 'allConditions',
       filters: {
         conditions: [
@@ -156,7 +156,7 @@ const markNeedsMapping = node({
     parameters: {
       resource: 'row',
       operation: 'update',
-      dataTableId: { __rl: true, mode: 'id', value: '__LINES_TABLE_ID__', cachedResultName: 'csp_subscription_lines' },
+      dataTableId: { __rl: true, mode: 'id', value: '__LINES_TABLE_ID__', cachedResultName: 'csp_subscription_lines__TABLE_SUFFIX__' },
       matchType: 'allConditions',
       filters: {
         conditions: [
@@ -767,7 +767,7 @@ const markSynced = node({
     parameters: {
       resource: 'row',
       operation: 'update',
-      dataTableId: { __rl: true, mode: 'id', value: '__LINES_TABLE_ID__', cachedResultName: 'csp_subscription_lines' },
+      dataTableId: { __rl: true, mode: 'id', value: '__LINES_TABLE_ID__', cachedResultName: 'csp_subscription_lines__TABLE_SUFFIX__' },
       matchType: 'allConditions',
       filters: {
         conditions: [
@@ -813,7 +813,7 @@ const noteSync = sticky(
   { color: 3 }
 );
 
-export default workflow('kantanna-csp-03-sync', '03 · Autotask Sync')
+export default workflow('kantanna-csp-03-sync__SUFFIX__', '03 · Autotask Sync__WF_SUFFIX__')
   .add(startSync)
   .to(autotaskConfig)
   .to(fetchSyncLines)

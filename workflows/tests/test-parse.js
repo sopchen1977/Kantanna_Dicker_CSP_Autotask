@@ -19,10 +19,11 @@ function runNode(file, inputItems, nodes, patch) {
   return fn({ all: () => inputItems, first: () => inputItems[0], item: inputItems[0] }, makeDollar(nodes));
 }
 
-// PILOT_CUSTOMERS is deployment config that changes as customers are switched
-// on, so the tests pin their own list rather than tracking it.
-const withPilot = (code) => code.replace(/const PILOT_CUSTOMERS = \[[^\]]*\];/,
-  "const PILOT_CUSTOMERS = ['ATLAS OUTSOURCING PTY LTD', 'Galilee Solicitors'];");
+// PILOT_CUSTOMERS is deployment config - build.py substitutes it per variant
+// (the live pilot vs the test stack) - so the tests pin their own list.
+const pilot = (list) => (code) => code.replace(/const PILOT_CUSTOMERS = .*;/,
+  'const PILOT_CUSTOMERS = ' + JSON.stringify(list) + ';');
+const withPilot = pilot(['ATLAS OUTSOURCING PTY LTD', 'Galilee Solicitors']);
 
 const annuity = [
   { 'TENANT ID': 'T1', 'TENANT NAME': 'ATLAS OUTSOURCING PTY LTD', 'SUBSCRIPTION ID': 'SUB-1',
@@ -128,6 +129,16 @@ const parsed = runNode('parse-lines.js', [{ json: {} }], nodes, withPilot);
 // Pilot filter keeps only pilot customers
 assert.strictEqual(parsed.length, 13, 'pilot filter should keep 13 lines');
 assert.ok(!parsed.some((i) => i.json.tenant_name === 'Some Other Customer'));
+
+// The filter matches on substring, so the test stack can name a customer by a
+// short distinctive word and still pick up the full name Dicker writes.
+const short = runNode('parse-lines.js', [{ json: {} }], nodes, pilot(['Galilee']));
+assert.ok(short.length > 0 && short.every((i) => /Galilee/i.test(i.json.tenant_name)),
+  "'Galilee' must match 'Galilee Solicitors' and nothing else");
+// An empty list means every customer, which is how a full import is run.
+const everyone = runNode('parse-lines.js', [{ json: {} }], nodes, pilot([]));
+assert.ok(everyone.length > parsed.length, 'an empty filter imports every customer');
+assert.ok(everyone.some((i) => i.json.tenant_name === 'Some Other Customer'));
 
 // Billing type 1: Annual Commit paid Monthly (P1Y:...:1:)
 const bp = parsed.find((i) => i.json.subscription_id === 'SUB-1').json;

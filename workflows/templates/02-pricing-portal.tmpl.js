@@ -6,7 +6,7 @@ const portalPage = trigger({
   config: {
     name: 'Portal Page',
     position: [-380, -240],
-    parameters: { httpMethod: 'GET', path: 'csp-pricing', responseMode: 'responseNode', options: { ignoreBots: true } }
+    parameters: { httpMethod: 'GET', path: 'csp-pricing__SUFFIX__', responseMode: 'responseNode', options: { ignoreBots: true } }
   },
   output: [{ headers: {}, params: {}, query: {}, body: {} }]
 });
@@ -21,7 +21,7 @@ const fetchLines = node({
     parameters: {
       resource: 'row',
       operation: 'get',
-      dataTableId: { __rl: true, mode: 'id', value: '__LINES_TABLE_ID__', cachedResultName: 'csp_subscription_lines' },
+      dataTableId: { __rl: true, mode: 'id', value: '__LINES_TABLE_ID__', cachedResultName: 'csp_subscription_lines__TABLE_SUFFIX__' },
       matchType: 'allConditions',
       filters: { conditions: [] },
       returnAll: true
@@ -41,7 +41,7 @@ const fetchMappings = node({
     parameters: {
       resource: 'row',
       operation: 'get',
-      dataTableId: { __rl: true, mode: 'id', value: '__MAPPINGS_TABLE_ID__', cachedResultName: 'csp_customer_mappings' },
+      dataTableId: { __rl: true, mode: 'id', value: '__MAPPINGS_TABLE_ID__', cachedResultName: 'csp_customer_mappings__TABLE_SUFFIX__' },
       matchType: 'allConditions',
       filters: { conditions: [] },
       returnAll: true
@@ -186,7 +186,7 @@ const savePricing = trigger({
   config: {
     name: 'Save Pricing',
     position: [-380, 0],
-    parameters: { httpMethod: 'POST', path: 'csp-pricing-save', responseMode: 'responseNode', options: {} }
+    parameters: { httpMethod: 'POST', path: 'csp-pricing-save__SUFFIX__', responseMode: 'responseNode', options: {} }
   },
   output: [{ body: { lines: [{ subscription_id: '2F295B21', stock_code: 'P1Y:CFQ7TTC0LCHC:0002:1:', use_custom_price: true, sell_price: 33, include: true }] } }]
 });
@@ -212,7 +212,7 @@ const updatePricing = node({
     parameters: {
       resource: 'row',
       operation: 'update',
-      dataTableId: { __rl: true, mode: 'id', value: '__LINES_TABLE_ID__', cachedResultName: 'csp_subscription_lines' },
+      dataTableId: { __rl: true, mode: 'id', value: '__LINES_TABLE_ID__', cachedResultName: 'csp_subscription_lines__TABLE_SUFFIX__' },
       matchType: 'allConditions',
       filters: {
         conditions: [
@@ -267,7 +267,7 @@ const saveMapping = trigger({
   config: {
     name: 'Save Mapping',
     position: [-380, 240],
-    parameters: { httpMethod: 'POST', path: 'csp-pricing-mapping', responseMode: 'responseNode', options: {} }
+    parameters: { httpMethod: 'POST', path: 'csp-pricing-mapping__SUFFIX__', responseMode: 'responseNode', options: {} }
   },
   output: [{ body: { tenant_name: 'Galilee Solicitors', autotask_company_id: 456, autotask_company_name: 'Galilee Solicitors Pty Ltd' } }]
 });
@@ -281,7 +281,7 @@ const upsertMapping = node({
     parameters: {
       resource: 'row',
       operation: 'upsert',
-      dataTableId: { __rl: true, mode: 'id', value: '__MAPPINGS_TABLE_ID__', cachedResultName: 'csp_customer_mappings' },
+      dataTableId: { __rl: true, mode: 'id', value: '__MAPPINGS_TABLE_ID__', cachedResultName: 'csp_customer_mappings__TABLE_SUFFIX__' },
       matchType: 'allConditions',
       filters: {
         conditions: [
@@ -320,7 +320,7 @@ const companySearch = trigger({
   config: {
     name: 'Company Search',
     position: [-380, 480],
-    parameters: { httpMethod: 'GET', path: 'csp-pricing-companies', responseMode: 'responseNode', options: {} }
+    parameters: { httpMethod: 'GET', path: 'csp-pricing-companies__SUFFIX__', responseMode: 'responseNode', options: {} }
   },
   output: [{ query: { q: 'galilee' } }]
 });
@@ -389,7 +389,7 @@ const importRedirect = trigger({
   config: {
     name: 'Import Redirect',
     position: [-380, 720],
-    parameters: { httpMethod: 'GET', path: 'csp-import', responseMode: 'responseNode', options: {} }
+    parameters: { httpMethod: 'GET', path: 'csp-import__SUFFIX__', responseMode: 'responseNode', options: {} }
   },
   output: [{ headers: {}, query: {} }]
 });
@@ -402,7 +402,7 @@ const redirectToForm = node({
     position: [-140, 720],
     parameters: {
       respondWith: 'redirect',
-      redirectURL: 'https://gayleai.app.n8n.cloud/form/5c4bd81e-8556-4639-835f-4de4a7faefb3',
+      redirectURL: '__FORM_URL__',
       options: {}
     }
   }
@@ -414,7 +414,7 @@ const notePortal = sticky(
   { color: 5 }
 );
 
-export default workflow('kantanna-csp-02-portal', '02 · CSP Pricing Portal')
+export default workflow('kantanna-csp-02-portal__SUFFIX__', '02 · CSP Pricing Portal__WF_SUFFIX__')
   .add(portalPage)
   .to(fetchLines)
   .to(fetchMappings)

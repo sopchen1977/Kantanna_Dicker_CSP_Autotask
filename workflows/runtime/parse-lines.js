@@ -2,7 +2,7 @@
 // "Invoice Details" rows and emit one normalised item per subscription line.
 //
 // ==== CONFIG: pilot customers. Empty array = import every customer. ====
-const PILOT_CUSTOMERS = ['B E Smart Admin Services'];
+const PILOT_CUSTOMERS = __PILOT_CUSTOMERS__;
 // =======================================================================
 
 const MONTHS = { JAN: '01', FEB: '02', MAR: '03', APR: '04', MAY: '05', JUN: '06',
@@ -82,8 +82,10 @@ for (const r of annuityRows) {
   const tenant = String(r['TENANT NAME'] || '').trim();
   const subId = String(r['SUBSCRIPTION ID'] || '').trim();
   if (!tenant || !subId) continue;
+  // Matched as a substring, so a short distinctive name ('Galilee') picks up
+  // the full one Dicker writes ('Galilee Solicitors Pty Ltd').
   if (PILOT_CUSTOMERS.length &&
-      !PILOT_CUSTOMERS.some((c) => c.toLowerCase() === tenant.toLowerCase())) {
+      !PILOT_CUSTOMERS.some((c) => tenant.toLowerCase().includes(c.toLowerCase()))) {
     continue;
   }
   const stockCode = String(r['STOCK CODE'] || '').trim();
