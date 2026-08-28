@@ -192,10 +192,19 @@ for (const l of rows) {
   //     1st-to-month-end and another billing 22nd-to-21st, and they cannot
   //     share a contract.
   const anchor = new Date(groupStart + 'T00:00:00Z');
-  const anchorLabel = isNaN(anchor.getTime()) ? groupStart
-    : (termMonths === 12
-      ? longDate(groupStart) + ' to ' + longDate(groupEnd)
-      : 'day ' + anchor.getUTCDate());
+  const anchorDay = isNaN(anchor.getTime()) ? 0 : anchor.getUTCDate();
+  // What identifies the group. One customer can run several month-to-month
+  // cycles - B E Smart bills some subscriptions 1st-to-month-end and others
+  // 22nd-to-21st - and Autotask bills every service on a contract against
+  // that contract's own period grid, so the two cannot share one. The
+  // grouping is therefore always by cycle; only the NAME differs.
+  const groupId = termMonths === 12
+    ? groupStart + '..' + groupEnd
+    : 'cycle-day-' + anchorDay;
+  // Annual contracts are named for their term. Month-to-month names are
+  // filled in below, once every line has been seen.
+  const anchorLabel = termMonths === 12
+    ? longDate(groupStart) + ' to ' + longDate(groupEnd) : '';
 
   let contractStart = groupStart;
   const contractEnd = groupEnd;
@@ -226,7 +235,7 @@ for (const l of rows) {
   // contract SERVICE's invoice description, so it still reaches the invoice
   // line the customer sees.
   const contractName = 'CSP - ' + billing.short + ' - ' + anchorLabel;
-  const groupKey = String(l.tenant_name || '') + '|' + billing.key + '|' + anchorLabel;
+  const groupKey = String(l.tenant_name || '') + '|' + billing.key + '|' + groupId;
 
   out.push({ json: Object.assign({}, l, {
     line_key: l.subscription_id + '|' + l.stock_code,
@@ -243,6 +252,7 @@ for (const l of rows) {
     contract_name: contractName.slice(0, 100), // Autotask contractName max length
     contract_group_key: groupKey,
     contract_anchor: anchorLabel,
+    billing_short: billing.short,
     service_invoice_description:
       (String(l.offer_name || '') + ' - sub ' + l.subscription_id).slice(0, 100),
     effective_sell: Math.round(effectiveSell * 100) / 100,
@@ -262,5 +272,29 @@ for (const l of rows) {
     price_effective_date: effectiveDate,
     today: today,
   }) });
+}
+
+// ---- Month-to-month contract names --------------------------------------
+// A month-to-month contract is created once and lives forever, so its name
+// cannot carry a term the way an annual one does. It is named for when the
+// subscriptions on it first started - the EARLIEST first-start among the
+// group's members, since a cycle can hold several subscriptions that joined
+// at different times. Needs a second pass because that minimum is only
+// known once every line has been read.
+const groupFirstStart = {};
+for (const i of out) {
+  const j = i.json;
+  if (j.term_months === 12) continue;
+  const cur = groupFirstStart[j.contract_group_key];
+  if (j.first_started && (!cur || j.first_started < cur)) {
+    groupFirstStart[j.contract_group_key] = j.first_started;
+  }
+}
+for (const i of out) {
+  const j = i.json;
+  if (j.term_months === 12) continue;
+  const started = groupFirstStart[j.contract_group_key] || j.member_start;
+  j.contract_anchor = 'Started ' + started;
+  j.contract_name = ('CSP - ' + j.billing_short + ' - Started ' + started).slice(0, 100);
 }
 return out;

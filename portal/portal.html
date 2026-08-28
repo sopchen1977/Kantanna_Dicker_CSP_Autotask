@@ -215,22 +215,46 @@ var BILLING_SHORT = { annual_monthly: 'Annual Commit Monthly', annual_upfront: '
 // periods from the contract start date, and Dicker bills every co-termed
 // subscription on the group's anchor day, so they have to be the same date.
 // Mirrors the same derivation as the sync (Prepare Lines).
-function groupContract(l) {
+function groupWindow(l) {
   var w = contractWindow(l);
   var months = Number(l.term_months) || 12;
   var end = w.end;
-  if (!end) return { name: '', start: '', end: '' };
+  if (!end) return null;
   var start = addMonthsIso(addDaysIso(end, 1), -months);
   var d = new Date(start + 'T00:00:00Z');
-  // Annual contracts are named for their term (so a renewal is a new
-  // contract); month-to-month rolls forever and carries only its billing
-  // anchor day, which says which cycle the subscription sits on.
-  var anchor = isNaN(d.getTime()) ? start
-    : (months === 12 ? longDateIso(start) + ' to ' + longDateIso(end) : 'day ' + d.getUTCDate());
+  if (isNaN(d.getTime())) return null;
+  return { start: start, end: end, months: months, day: d.getUTCDate() };
+}
+// Same group key as the sync: always by billing cycle, because Autotask
+// bills every service on a contract against that contract's period grid.
+function groupKey(l) {
+  var g = groupWindow(l);
+  if (!g) return '';
+  var id = g.months === 12 ? g.start + '..' + g.end : 'cycle-day-' + g.day;
+  return (l.tenant_name || '') + '|' + (l.billing_type || '') + '|' + id;
+}
+// Month-to-month contracts live forever, so they are named for when the
+// subscriptions on them first started - the earliest first-start across the
+// cycle, since several subscriptions can join a cycle at different times.
+var MTM_FIRST_START = {};
+LINES.forEach(function (l) {
+  if ((Number(l.term_months) || 12) === 12) return;
+  var k = groupKey(l);
+  var su = /^\d{4}-\d{2}-\d{2}$/.test(String(l.usage_start || '')) ? String(l.usage_start) : '';
+  if (!k || !su) return;
+  if (!MTM_FIRST_START[k] || su < MTM_FIRST_START[k]) MTM_FIRST_START[k] = su;
+});
+function groupContract(l) {
+  var g = groupWindow(l);
+  if (!g) return { name: '', start: '', end: '' };
+  var start = g.start;
   var short = BILLING_SHORT[l.billing_type] || 'Month to Month';
+  var label = g.months === 12
+    ? longDateIso(g.start) + ' to ' + longDateIso(g.end)
+    : 'Started ' + (MTM_FIRST_START[groupKey(l)] || contractWindow(l).start || g.start);
   var firstUsage = earliestUsageIso(l);
   if (firstUsage && firstUsage < start) start = firstUsage;
-  return { name: 'CSP - ' + short + ' - ' + anchor, start: start, end: end };
+  return { name: 'CSP - ' + short + ' - ' + label, start: start, end: g.end };
 }
 function marginPct(l) {
   var s = effSell(l), c = periodCost(l);

@@ -163,10 +163,10 @@ for (const i of prepared) {
     assert.ok(/ - \d{1,2} \w{3} \d{4} to \d{1,2} \w{3} \d{4}$/.test(i.json.contract_name),
       'annual contract names carry start and end dates: ' + i.json.contract_name);
   } else {
-    // Month to month rolls forever, so no dates - only the billing anchor.
-    assert.ok(!/\d{4}/.test(i.json.contract_name),
-      'month-to-month contract names carry no dates: ' + i.json.contract_name);
-    assert.ok(/ - day \d{1,2}$/.test(i.json.contract_name), i.json.contract_name);
+    // Month to month rolls forever, so it carries no TERM - it is named for
+    // when the subscriptions on that cycle first started.
+    assert.ok(/ - Started \d{4}-\d{2}-\d{2}$/.test(i.json.contract_name),
+      i.json.contract_name);
   }
   assert.strictEqual(i.json.effective_sell, i.json.period_rrp, 'default sell price is the per-period RRP');
 }
@@ -186,7 +186,10 @@ assert.ok(pMtm.service_name.includes('Month to Month'));
 assert.strictEqual(pAnnMo.contract_name, 'CSP - Annual Commit Monthly - 31 Aug 2025 to 30 Aug 2026');
 assert.strictEqual(pAnnMo.contract_start, '2025-08-31', 'grid anchored on the 31st, as Dicker invoices');
 assert.strictEqual(pAnnMo.contract_end, '2026-08-30');
-assert.strictEqual(pMtm.contract_name, 'CSP - Month to Month - day 1');
+// SUB-2, SUB-6 and SUB-8 are all Galilee month-to-month on a 1st-to-month-end
+// cycle, so they share one contract, named for the earliest first-start
+// among them (SUB-8, 31 May 2025).
+assert.strictEqual(pMtm.contract_name, 'CSP - Month to Month - Started 2025-05-31');
 const pAnnYr = prepared.find((i) => i.json.subscription_id === 'SUB-4').json;
 assert.strictEqual(pAnnYr.service_key, 'ANN-YR:CFQ7TTC0LFLZ:0002');
 assert.strictEqual(pAnnYr.service_period_type, 5, 'upfront billing -> yearly service period (Autotask picklist 5)');
@@ -223,7 +226,7 @@ assert.strictEqual(pRenewed.contract_window_source, 'renewed');
 assert.strictEqual(pRenewed.member_start, '2026-08-01');
 assert.strictEqual(pRenewed.contract_end, '2026-08-31', 'renewal extends to the revaluation period');
 assert.strictEqual(pRenewed.contract_start, '2026-07-01', 'window reaches the invoice line it replays');
-assert.strictEqual(pRenewed.contract_name, 'CSP - Month to Month - day 1');
+assert.strictEqual(pRenewed.contract_name, 'CSP - Month to Month - Started 2025-05-31');
 
 // Month-end arithmetic must clamp, not overflow: 31-MAR minus one month is
 // 28-FEB, so the cycle starts 01-MAR (not 04-MAR).
@@ -232,7 +235,11 @@ assert.strictEqual(pMonthEnd.contract_start, '2027-03-01');
 assert.strictEqual(pMonthEnd.contract_end, '2027-03-31');
 // A month-end monthly cycle always anchors on day 1, in every month length -
 // otherwise February would fork the group onto a "day 29" contract.
-assert.strictEqual(pMonthEnd.contract_name, 'CSP - Month to Month - day 1');
+assert.strictEqual(pMonthEnd.contract_name, 'CSP - Month to Month - Started 2025-05-31');
+assert.strictEqual(pMtm.contract_group_key, pMonthEnd.contract_group_key,
+  'same customer, same billing type, same cycle day -> one contract');
+assert.ok(pMtm.contract_group_key.endsWith('cycle-day-1'),
+  'month-to-month groups key on the cycle day, not on the name');
 
 
 // A co-termed subscription with no invoice row: the inferred 12-month term
