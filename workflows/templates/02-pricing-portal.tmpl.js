@@ -70,7 +70,12 @@ const respondPage = node({
     parameters: {
       respondWith: 'text',
       responseBody: expr('{{ $json.html }}'),
-      options: { responseHeaders: { entries: [{ name: 'Content-Type', value: 'text/html; charset=utf-8' }] } }
+      // No caching: the page carries the current pricing data and the current
+      // portal code, so a browser-cached copy would silently show stale lines.
+      options: { responseHeaders: { entries: [
+        { name: 'Content-Type', value: 'text/html; charset=utf-8' },
+        { name: 'Cache-Control', value: 'no-store, must-revalidate' }
+      ] } }
     }
   }
 });

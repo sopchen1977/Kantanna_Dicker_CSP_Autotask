@@ -674,7 +674,7 @@ function customerHtml(name, lines) {
     return a < b ? -1 : (a > b ? 1 : 0);
   });
 
-  var head = '<div class="chead-cust js-toggle" data-key="' + escapeHtml(key) + '">' +
+  var head = '<div class="chead-cust js-toggle" data-key="' + attr(key) + '">' +
     '<span class="caret">&#9660;</span>' +
     '<h2>' + escapeHtml(name) + '</h2>' +
     (mapping
@@ -715,7 +715,7 @@ function contractHtml(customer, cname, block) {
       '<span class="cdates">usage-billed &mdash; excluded from the sync</span></div>';
     meta = '<div class="cmeta"><span>' + lines.length + (lines.length === 1 ? ' line' : ' lines') + '</span></div>';
   } else {
-    title = '<div class="ctitle" title="' + escapeHtml(cname) + '">' +
+    title = '<div class="ctitle" title="' + attr(cname) + '">' +
       '<span class="cpre">CSP MICROSOFT</span>' +
       '<span class="cname">' + escapeHtml(block.grp.kind || '') + '</span>' +
       '<span class="cdates">' + escapeHtml(block.grp.label || '') + '</span></div>';
@@ -734,7 +734,7 @@ function contractHtml(customer, cname, block) {
   var rows = lines.map(lineHtml).join('');
 
   return '<div class="contract' + (cname ? '' : ' usage') + (closed ? ' collapsed' : '') + '">' +
-    '<div class="chead js-toggle" data-key="' + escapeHtml(key) + '">' +
+    '<div class="chead js-toggle" data-key="' + attr(key) + '">' +
       '<span class="caret">&#9660;</span>' + title + meta +
     '</div>' +
     '<div class="tablewrap"><table>' + COLS + '<tbody>' + rows + '</tbody></table></div></div>';
@@ -795,10 +795,10 @@ function lineHtml(l) {
   var main = '<tr class="line' + (on ? '' : ' off') + '" data-i="' + i + '">' +
     '<td class="pick"><input type="checkbox" class="js-incl" data-i="' + i + '"' + (on ? ' checked' : '') +
       ' title="Include this line in the Autotask sync"></td>' +
-    '<td><div class="svc"' + (cut ? ' title="' + escapeHtml(String(l.stock_description || '')) +
+    '<td><div class="svc"' + (cut ? ' title="' + attr(String(l.stock_description || '')) +
         ' (Dicker truncates the product name at 30 characters)"' : '') + '>' +
       escapeHtml(nm) + (cut ? '<span class="muted">…</span>' : '') + '</div>' +
-      '<div class="svcsub" title="' + escapeHtml(subTitle) + '">' + bits.join('<span class="dot">·</span>') + '</div>' +
+      '<div class="svcsub" title="' + attr(subTitle) + '">' + bits.join('<span class="dot">·</span>') + '</div>' +
       invoiceHtml(l, i) + '</td>' +
     '<td class="num">' + escapeHtml(String(l.qty || 0)) + '</td>' +
     '<td class="num muted">' + fmt(periodCost(l)) + '<span class="per">' + suffix + '</span></td>' +
@@ -812,7 +812,7 @@ function lineHtml(l) {
       '<div class="selledit">' +
         '<input type="number" step="0.01" min="0" class="js-sell" data-i="' + i + '" value="' + fmt(effSell(l)) + '">' +
         '<div class="fromlbl">effective from</div>' +
-        '<input type="date" class="js-date" data-i="' + i + '" value="' + escapeHtml(l.price_effective_date) + '">' +
+        '<input type="date" class="js-date" data-i="' + i + '" value="' + attr(l.price_effective_date) + '">' +
         '<div class="picks"><a class="js-pick" data-i="' + i + '" data-p="post" title="The next Approve &amp; Post billing start">next post</a>' +
         ' <span class="dot">·</span> <a class="js-pick" data-i="' + i + '" data-p="start" title="The contract start date">contract start</a>' +
         ' <span class="dot">·</span> <a class="js-cancel" data-i="' + i + '" title="Leave the Autotask price as it is">keep current</a></div>' +
@@ -837,12 +837,12 @@ function invoiceHtml(l, i) {
       : 'No contract service yet - this is what the first sync will set. Click to change it.');
   return '<div class="inv"><span class="lbl">Invoice' + (d.state === 'default' ? ' (unset)' : '') + '</span>' +
       '<button class="invtext ' + d.state + ' js-invedit" data-i="' + i + '" ' +
-        'title="' + escapeHtml(d.text + ' — ' + hint) + '">' + escapeHtml(d.text) +
+        'title="' + attr(d.text + ' — ' + hint) + '">' + escapeHtml(d.text) +
       '</button></div>' +
     '<div class="invedit">' +
       '<input type="text" maxlength="100" class="js-invtext" data-i="' + i + '" ' +
-        'value="' + escapeHtml(customInvoiceDesc(l) || d.text) + '" ' +
-        'placeholder="' + escapeHtml(defaultInvoiceDesc(l)) + '">' +
+        'value="' + attr(customInvoiceDesc(l) || d.text) + '" ' +
+        'placeholder="' + attr(defaultInvoiceDesc(l)) + '">' +
       '<span class="count" data-invcount="' + i + '"></span>' +
       '<button class="btn link js-invdone" data-i="' + i + '">done</button>' +
       '<button class="btn link js-invreset" data-i="' + i + '" ' +
@@ -867,9 +867,9 @@ function syncHtml(l) {
   var st = String(l.sync_status || 'pending');
   var msg = l.sync_message ? String(l.sync_message).slice(0, 200) : '';
   if (st === 'synced') {
-    return '<span class="ok-tick" title="Synced to Autotask' + (msg ? ' — ' + escapeHtml(msg) : '') + '">&#10003;</span>';
+    return '<span class="ok-tick" title="Synced to Autotask' + (msg ? ' — ' + attr(msg) : '') + '">&#10003;</span>';
   }
-  return '<span class="badge ' + escapeHtml(st) + '"' + (msg ? ' title="' + escapeHtml(msg) + '"' : '') +
+  return '<span class="badge ' + escapeHtml(st) + '"' + (msg ? ' title="' + attr(msg) + '"' : '') +
     '>' + escapeHtml(st) + '</span>';
 }
 
@@ -904,7 +904,7 @@ function contractLink(contractId) {
 
 function mapperHtml(tenantName) {
   return '<span class="map-box" onclick="event.stopPropagation()">' +
-    '<input type="text" class="js-map" data-t="' + escapeHtml(tenantName) + '" placeholder="Search Autotask companies…">' +
+    '<input type="text" class="js-map" data-t="' + attr(tenantName) + '" placeholder="Search Autotask companies…">' +
     '<div class="map-results" style="display:none"></div></span>';
 }
 
@@ -993,16 +993,23 @@ function wire() {
   });
   each('.js-invtext', function (el) {
     var i = +el.getAttribute('data-i');
-    var sync = function () {
-      var v = el.value.trim();
-      // Typing the generated default back in is the same as no override.
-      LINES[i].invoice_description = (v === defaultInvoiceDesc(LINES[i])) ? '' : v;
+    var count = function () {
       var c = document.querySelector('[data-invcount="' + i + '"]');
       if (c) c.textContent = el.value.length + '/100';
     };
-    el.oninput = sync;
-    el.onchange = sync;
-    sync();
+    var edited = function () {
+      var l = LINES[i];
+      var v = el.value.trim();
+      // An override only means "different from what Autotask would otherwise
+      // show" - typing back the live text or the generated default clears it.
+      // Only a real edit assigns; the initial value never does, or every line
+      // whose Autotask wording differs from the default would look overridden.
+      l.invoice_description = (v === defaultInvoiceDesc(l) || v === liveInvoiceDesc(l)) ? '' : v;
+      count();
+    };
+    el.oninput = edited;
+    el.onchange = edited;
+    count();
   });
 
   each('.js-map', function (el) { wireMapper(el); });
@@ -1147,11 +1154,22 @@ function doSave() {
   }).then(function (r) { return r.json(); });
 }
 
+// How many lines are carrying wording of your own, so a save visibly
+// accounts for them rather than just reporting a row count.
+function customDescCount() {
+  return LINES.filter(function (l) { return customInvoiceDesc(l); }).length;
+}
+function savedMsg(res) {
+  var n = customDescCount();
+  return 'Saved ' + (res.updated || 0) + ' lines' +
+    (n ? ', ' + n + ' with your own invoice description' : '') + '.';
+}
+
 function saveAll(btn) {
   btn.disabled = true;
   setMsg('Saving…');
   doSave()
-    .then(function (res) { setMsg('Saved ' + (res.updated || 0) + ' lines.'); btn.disabled = false; })
+    .then(function (res) { setMsg(savedMsg(res)); btn.disabled = false; })
     .catch(function (e) { setMsg('Save failed: ' + e.message); btn.disabled = false; });
 }
 
@@ -1163,7 +1181,7 @@ function syncNow(btn) {
   setMsg('Saving prices…');
   doSave()
     .then(function (res) {
-      setMsg('Saved ' + (res.updated || 0) + ' lines. Starting sync…');
+      setMsg(savedMsg(res) + ' Starting sync…');
       return fetch(BASE + '/csp-autotask-sync', { method: 'POST' });
     })
     .then(function () { setMsg('Sync running — ~2–3 minutes. Refresh after that to see results.'); btn.disabled = false; })
@@ -1173,6 +1191,9 @@ function syncNow(btn) {
 function setMsg(t) { document.getElementById('msg').textContent = t; }
 function each(sel, fn) { Array.prototype.forEach.call(document.querySelectorAll(sel), fn); }
 function escapeHtml(s) { var d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; }
+// escapeHtml leaves double quotes alone, which is fine for text but breaks
+// out of a quoted attribute. Anything going into an attribute uses this.
+function attr(s) { return escapeHtml(s).replace(/"/g, '&quot;'); }
 
 render();
 </script>
