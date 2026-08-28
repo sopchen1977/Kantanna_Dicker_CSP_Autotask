@@ -69,6 +69,12 @@ const annuity = [
     'STOCK CODE': 'P1Y:CFQ7TTC0LSGZ:0001:1:', 'STOCK DESCRIPTION': 'MS NCE POWER AUTOMATE PREMIUM 1YR COMMIT', 'REFERENCE': 'Power Automate Premium',
     'QTY': '1.00', 'CHARGE TYPE': 'NCE', 'STATUS': 'Active', 'START USAGE': '13-MAY-2026', 'END USAGE': '13-MAY-2026',
     'REVALUATION PERIOD': '28-DEC-2026', 'UNIT PRICE': '$239.90', 'UNIT RRP': '$282.24' },
+  // Bought the same day as SUB-6 and on the same cycle, so it shares that
+  // subscription's contract.
+  { 'TENANT ID': 'T2', 'TENANT NAME': 'Galilee Solicitors', 'SUBSCRIPTION ID': 'SUB-12',
+    'STOCK CODE': 'P1M:CFQ7TTC0LH1P:0001:1:', 'STOCK DESCRIPTION': 'MS NCE EXCHANGE ONLINE PLAN 2', 'REFERENCE': 'Exchange Online (Plan 2)',
+    'QTY': '4.00', 'CHARGE TYPE': 'NCE', 'STATUS': 'Active', 'START USAGE': '11-NOV-2025', 'END USAGE': '11-NOV-2025',
+    'REVALUATION PERIOD': '31-AUG-2026', 'UNIT PRICE': '$11.32', 'UNIT RRP': '$13.32' },
   { 'TENANT ID': 'T9', 'TENANT NAME': 'Some Other Customer', 'SUBSCRIPTION ID': 'SUB-9',
     'STOCK CODE': 'P1Y:XXXX:0001:1:', 'STOCK DESCRIPTION': 'Other', 'REFERENCE': 'Other',
     'QTY': '1.00', 'CHARGE TYPE': 'NCE', 'STATUS': 'Active', 'START USAGE': '', 'END USAGE': '',
@@ -103,7 +109,7 @@ const nodes = {
 const parsed = runNode('parse-lines.js', [{ json: {} }], nodes);
 
 // Pilot filter keeps only pilot customers
-assert.strictEqual(parsed.length, 10, 'pilot filter should keep 10 lines');
+assert.strictEqual(parsed.length, 11, 'pilot filter should keep 11 lines');
 assert.ok(!parsed.some((i) => i.json.tenant_name === 'Some Other Customer'));
 
 // Billing type 1: Annual Commit paid Monthly (P1Y:...:1:)
@@ -146,7 +152,7 @@ assert.strictEqual(azure.charge_type, 'MODN');
 // prepare-lines: default include rule + subscription id in contract name
 const tableRows = parsed.map((i) => ({ json: Object.assign({}, i.json, { include: null, use_custom_price: null, sell_price: null }) }));
 const prepared = runNode('prepare-lines.js', tableRows, {});
-assert.strictEqual(prepared.length, 9, 'Azure/MODN line must be excluded by default; $0 NCE lines stay in');
+assert.strictEqual(prepared.length, 10, 'Azure/MODN line must be excluded by default; $0 NCE lines stay in');
 // $0 NCE line (Teams Phone Resource) is included and sells at $0
 const pZero = prepared.find((i) => i.json.subscription_id === 'SUB-5').json;
 assert.strictEqual(pZero.effective_sell, 0);
@@ -186,10 +192,10 @@ assert.ok(pMtm.service_name.includes('Month to Month'));
 assert.strictEqual(pAnnMo.contract_name, 'CSP - Annual Commit Monthly - 31 Aug 2025 to 30 Aug 2026');
 assert.strictEqual(pAnnMo.contract_start, '2025-08-31', 'grid anchored on the 31st, as Dicker invoices');
 assert.strictEqual(pAnnMo.contract_end, '2026-08-30');
-// SUB-2, SUB-6 and SUB-8 are all Galilee month-to-month on a 1st-to-month-end
-// cycle, so they share one contract, named for the earliest first-start
-// among them (SUB-8, 31 May 2025).
-assert.strictEqual(pMtm.contract_name, 'CSP - Month to Month - Started 2025-05-31');
+// Month-to-month splits by the date the subscription first started, so
+// SUB-2, SUB-6 and SUB-8 each get their own contract even though all three
+// are Galilee on the same 1st-to-month-end cycle.
+assert.strictEqual(pMtm.contract_name, 'CSP - Month to Month - Started 2025-12-18');
 const pAnnYr = prepared.find((i) => i.json.subscription_id === 'SUB-4').json;
 assert.strictEqual(pAnnYr.service_key, 'ANN-YR:CFQ7TTC0LFLZ:0002');
 assert.strictEqual(pAnnYr.service_period_type, 5, 'upfront billing -> yearly service period (Autotask picklist 5)');
@@ -226,7 +232,7 @@ assert.strictEqual(pRenewed.contract_window_source, 'renewed');
 assert.strictEqual(pRenewed.member_start, '2026-08-01');
 assert.strictEqual(pRenewed.contract_end, '2026-08-31', 'renewal extends to the revaluation period');
 assert.strictEqual(pRenewed.contract_start, '2026-07-01', 'window reaches the invoice line it replays');
-assert.strictEqual(pRenewed.contract_name, 'CSP - Month to Month - Started 2025-05-31');
+assert.strictEqual(pRenewed.contract_name, 'CSP - Month to Month - Started 2025-11-11');
 
 // Month-end arithmetic must clamp, not overflow: 31-MAR minus one month is
 // 28-FEB, so the cycle starts 01-MAR (not 04-MAR).
@@ -236,10 +242,22 @@ assert.strictEqual(pMonthEnd.contract_end, '2027-03-31');
 // A month-end monthly cycle always anchors on day 1, in every month length -
 // otherwise February would fork the group onto a "day 29" contract.
 assert.strictEqual(pMonthEnd.contract_name, 'CSP - Month to Month - Started 2025-05-31');
-assert.strictEqual(pMtm.contract_group_key, pMonthEnd.contract_group_key,
-  'same customer, same billing type, same cycle day -> one contract');
-assert.ok(pMtm.contract_group_key.endsWith('cycle-day-1'),
-  'month-to-month groups key on the cycle day, not on the name');
+assert.notStrictEqual(pMtm.contract_group_key, pMonthEnd.contract_group_key,
+  'different start dates -> different contracts');
+// The cycle day stays in the KEY even though only the date is in the name:
+// one customer can run several month-to-month cycles and they must never
+// merge onto one contract, whatever their start dates.
+assert.ok(pMtm.contract_group_key.indexOf('cycle-day-1|started-2025-12-18') !== -1,
+  pMtm.contract_group_key);
+// Subscriptions bought together on the same day, on the same cycle, DO
+// share one contract - the split is by start date, not by subscription.
+const pSameDay = prepared.find((i) => i.json.subscription_id === 'SUB-12').json;
+assert.strictEqual(pSameDay.contract_name, pRenewed.contract_name);
+assert.strictEqual(pSameDay.contract_group_key, pRenewed.contract_group_key);
+// Distinct start dates on the same cycle stay on distinct contracts.
+const mtmNames = new Set(prepared.filter((i) => i.json.term_months !== 12)
+  .map((i) => i.json.contract_name));
+assert.strictEqual(mtmNames.size, 3, [...mtmNames].join(' | '));
 
 
 // A co-termed subscription with no invoice row: the inferred 12-month term
@@ -324,8 +342,9 @@ assert.strictEqual(pOld.service_effective_date, pOld.contract_start);
 // contract: CFQ7TTC0LCHC:0002 is Business Premium, :001J is Defender Suite.
 assert.strictEqual(pAnnMo.service_key, 'ANN-MO:CFQ7TTC0LCHC:0002');
 assert.strictEqual(pMtm.service_key, 'MTM:CFQ7TTC0LCHC:0002');
-const keys = prepared.map((i) => i.json.service_key);
-assert.strictEqual(new Set(keys).size, keys.length, 'service keys must be unique per line here');
+assert.strictEqual(pSameDay.service_key, 'MTM:CFQ7TTC0LH1P:0001');
+assert.notStrictEqual(pSameDay.service_key, pRenewed.service_key,
+  'two subscriptions sharing a contract still need distinct services');
 
 // custom price override wins
 tableRows[0].json.use_custom_price = true;

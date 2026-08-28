@@ -225,33 +225,19 @@ function groupWindow(l) {
   if (isNaN(d.getTime())) return null;
   return { start: start, end: end, months: months, day: d.getUTCDate() };
 }
-// Same group key as the sync: always by billing cycle, because Autotask
-// bills every service on a contract against that contract's period grid.
-function groupKey(l) {
-  var g = groupWindow(l);
-  if (!g) return '';
-  var id = g.months === 12 ? g.start + '..' + g.end : 'cycle-day-' + g.day;
-  return (l.tenant_name || '') + '|' + (l.billing_type || '') + '|' + id;
-}
-// Month-to-month contracts live forever, so they are named for when the
-// subscriptions on them first started - the earliest first-start across the
-// cycle, since several subscriptions can join a cycle at different times.
-var MTM_FIRST_START = {};
-LINES.forEach(function (l) {
-  if ((Number(l.term_months) || 12) === 12) return;
-  var k = groupKey(l);
-  var su = /^\d{4}-\d{2}-\d{2}$/.test(String(l.usage_start || '')) ? String(l.usage_start) : '';
-  if (!k || !su) return;
-  if (!MTM_FIRST_START[k] || su < MTM_FIRST_START[k]) MTM_FIRST_START[k] = su;
-});
 function groupContract(l) {
   var g = groupWindow(l);
   if (!g) return { name: '', start: '', end: '' };
   var start = g.start;
   var short = BILLING_SHORT[l.billing_type] || 'Month to Month';
+  // Annual contracts are named for their co-term anniversary; month-to-month
+  // for the date the subscription first started, so subscriptions bought at
+  // different times get their own contract.
+  var su = /^\d{4}-\d{2}-\d{2}$/.test(String(l.usage_start || ''))
+    ? String(l.usage_start) : contractWindow(l).start || g.start;
   var label = g.months === 12
     ? longDateIso(g.start) + ' to ' + longDateIso(g.end)
-    : 'Started ' + (MTM_FIRST_START[groupKey(l)] || contractWindow(l).start || g.start);
+    : 'Started ' + su;
   var firstUsage = earliestUsageIso(l);
   if (firstUsage && firstUsage < start) start = firstUsage;
   return { name: 'CSP - ' + short + ' - ' + label, start: start, end: g.end };
