@@ -170,6 +170,36 @@ const n4 = { 'Current Line': [{ json: line }], 'CS Decision': [{ json: { line_ke
 const ud4 = runNode('units-decision.js', [{ json: { items: [{ startDate: '2026-06-01', units: 45 }] } }], n4)[0].json;
 assert.deepStrictEqual(ud4.plan, [{ change: 6, date: '2026-07-31' }], 'existing units -> one delta at the billing cycle start');
 
+// A fresh service whose cycle quantity is short of the annuity quantity plans
+// the cycle set AND a correction, both dated at the cycle start. Autotask keys
+// a contract service period on (service, period start, period end) and rejects
+// the second insert with "Attempt to insert duplicate data into
+// contract_service_period", so same-day changes must be merged into one.
+const nDup = { 'Current Line': [{ json: Object.assign({}, line, {
+  qty: 2,
+  contract_start: '2025-12-21',
+  contract_end: '2026-09-21',
+  invoice_lines: JSON.stringify([{ s: '2026-06-22', e: '2026-07-21', q: 1, u: 65.2 }]),
+}) }], 'CS Decision': [{ json: { line_key: line.line_key, contract_id: 7001, service_id: 9001, cs_id: 8001, sell: 76.7 } }] };
+const udDup = runNode('units-decision.js', [{ json: { items: [] } }], nDup)[0].json;
+assert.deepStrictEqual(udDup.plan, [{ change: 2, date: '2026-06-22' }],
+  'two same-day changes must post as one adjustment, not two');
+assert.strictEqual(udDup.plan_summary, '+2 @2026-06-22');
+
+// Merging must not collapse changes on different dates, and must drop a pair
+// that nets to zero.
+const nNet = { 'Current Line': [{ json: Object.assign({}, line, {
+  qty: 3,
+  invoice_lines: JSON.stringify([
+    { s: '2026-07-13', e: '2026-08-30', q: 5, u: 16.37 },
+    { s: '2026-07-31', e: '2026-08-30', q: 3, u: 29.37 },
+  ]),
+}) }], 'CS Decision': [{ json: { line_key: line.line_key, contract_id: 7001, service_id: 9001, cs_id: 8001, sell: 34.55 } }] };
+const udNet = runNode('units-decision.js', [{ json: { items: [] } }], nNet)[0].json;
+assert.strictEqual(udNet.plan.length, 2, 'different dates stay separate');
+assert.deepStrictEqual(udNet.plan.map((p) => p.date), ['2026-07-13', '2026-07-31']);
+assert.ok(udNet.plan.every((p) => p.change !== 0), 'a no-op change is never posted');
+
 // -- Cycle-understanding edge cases --
 // (a) In-cycle addition: change made AFTER cycle start, pro-rated to cycle end
 const lineB = Object.assign({}, line, {

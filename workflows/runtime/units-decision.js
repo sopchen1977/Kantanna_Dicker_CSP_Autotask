@@ -87,7 +87,9 @@ if (invLines.length) {
     }
   }
   // Correct to the annuity quantity (also the single-delta path when the
-  // contract already has unit history).
+  // contract already has unit history). Dated at the billing cycle start so
+  // Autotask bills the corrected quantity for the whole cycle, the way Dicker
+  // invoices it.
   if (running !== target) {
     plan.push({ change: target - running, date: clampDate(lastDate || line.price_effective_date || line.today) });
   }
@@ -103,6 +105,23 @@ if (invLines.length) {
   plan.push({ change: target - current, date: clampDate(startDate) });
 }
 
+// Autotask keys a contract service period on (contract service, period start,
+// period end) and rejects a second insert for the same one with "Attempt to
+// insert duplicate data into contract_service_period". Two changes dated the
+// same day are one net change anyway, so they are merged before posting.
+function mergeSameDate(entries) {
+  const byDate = {};
+  const order = [];
+  for (const p of entries) {
+    if (!(p.date in byDate)) { byDate[p.date] = 0; order.push(p.date); }
+    byDate[p.date] += p.change;
+  }
+  return order
+    .map((d) => ({ change: byDate[d], date: d }))
+    .filter((p) => p.change !== 0);
+}
+const finalPlan = mergeSameDate(plan);
+
 return [{ json: {
   line_key: line.line_key,
   contract_id: carried.contract_id || null,
@@ -113,7 +132,7 @@ return [{ json: {
   target_units: target,
   cycle_start: cycleStart,
   cycle_end: cycleEnd,
-  plan: plan,
-  plan_count: plan.length,
-  plan_summary: plan.map((p) => (p.change > 0 ? '+' : '') + p.change + ' @' + p.date).join(', '),
+  plan: finalPlan,
+  plan_count: finalPlan.length,
+  plan_summary: finalPlan.map((p) => (p.change > 0 ? '+' : '') + p.change + ' @' + p.date).join(', '),
 } }];

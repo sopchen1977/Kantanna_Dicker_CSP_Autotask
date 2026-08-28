@@ -545,6 +545,15 @@ function pendingCount(l) {
   if (!effInclude(l) || !l.billing_last) return 0;
   return pendingItems(l).filter(function (i) { return i.type !== 'next cycle'; }).length;
 }
+// The date Autotask last approved & posted this service, or '' if it never
+// has. A line with no pending charges is only "posted" if something was
+// actually posted; a subscription with no rows in the CSP report has nothing
+// pending and nothing posted, which is a different thing entirely.
+function lastPostedIso(l) {
+  if (l.billing_last_date) return String(l.billing_last_date);
+  var m = String(l.billing_last || '').match(/^\d{4}-\d{2}-\d{2}/);
+  return m ? m[0] : '';
+}
 function needsAttention(l) {
   var s = String(l.sync_status || '');
   return s === 'error' || s === 'needs_mapping' || s === 'unmapped' || s === 'partial';
@@ -713,12 +722,13 @@ function contractHtml(customer, cname, block) {
   var key = 'k:' + customer + '|' + cname;
   var closed = !!UI.closed[key];
 
-  var due = 0, monthly = 0, checked = false, pend = 0;
+  var due = 0, monthly = 0, checked = false, pend = 0, posted = 0;
   lines.forEach(function (l) {
     if (effInclude(l)) monthly += monthlyValue(l);
     if (effInclude(l) && l.billing_last) checked = true;
     due += dueNow(l);
     pend += pendingCount(l);
+    if (effInclude(l) && lastPostedIso(l)) posted++;
   });
   var atId = (lines.filter(function (l) { return l.autotask_contract_id; })[0] || {}).autotask_contract_id;
 
@@ -738,7 +748,9 @@ function contractHtml(customer, cname, block) {
       (checked
         ? (pend > 0
           ? '<span class="pill due" style="cursor:default"><span class="tick">&#9679;</span>' + money(due) + ' to post</span>'
-          : '<span class="pill clear" style="cursor:default"><span class="tick">&#10003;</span>all posted</span>')
+          : (posted
+            ? '<span class="pill clear" style="cursor:default"><span class="tick">&#10003;</span>all posted</span>'
+            : '<span class="pill none" style="cursor:default">nothing to bill</span>'))
         : '') +
       (atId ? contractLink(atId) : '') +
     '</div>';
@@ -798,10 +810,15 @@ function lineHtml(l) {
     pill = '<span class="pill none" title="Run a sync to read Autotask billing state">not checked yet</span>';
   } else {
     var n = pendingCount(l);
-    pill = n > 0
-      ? '<button class="pill due js-bill" data-i="' + i + '"><span class="tick">&#9679;</span>' +
-        money(due) + (n > 1 ? ' <span class="n">' + n + ' items</span>' : '') + '</button>'
-      : '<button class="pill clear js-bill" data-i="' + i + '"><span class="tick">&#10003;</span>posted</button>';
+    if (n > 0) {
+      pill = '<button class="pill due js-bill" data-i="' + i + '"><span class="tick">&#9679;</span>' +
+        money(due) + (n > 1 ? ' <span class="n">' + n + ' items</span>' : '') + '</button>';
+    } else if (lastPostedIso(l)) {
+      pill = '<button class="pill clear js-bill" data-i="' + i + '"><span class="tick">&#10003;</span>posted</button>';
+    } else {
+      pill = '<button class="pill none js-bill" style="cursor:pointer" data-i="' + i + '" ' +
+        'title="This subscription has no charges in the CSP report and nothing posted in Autotask yet">nothing to bill</button>';
+    }
   }
 
   var main = '<tr class="line' + (on ? '' : ' off') + '" data-i="' + i + '">' +
@@ -929,14 +946,21 @@ function detailHtml(l) {
       '<span class="muted">qty ' + escapeHtml(String(x.q)) + '</span>' +
       '<span class="amt">' + money(x.amount) + '</span></div>';
   }).join('');
-  var allPosted = !items.filter(function (x) { return x.type !== 'next cycle'; }).length;
+  var nothingPending = !items.filter(function (x) { return x.type !== 'next cycle'; }).length;
+  var everPosted = !!lastPostedIso(l);
+  var foot;
+  if (!nothingPending) {
+    foot = 'Estimated at the sell price on this screen.';
+  } else if (everPosted) {
+    foot = 'The whole CSP report is posted for this service — the line above is next cycle&#39;s estimate.';
+  } else {
+    foot = 'This subscription has no charges in the CSP report yet — the line above is what the first ' +
+      'cycle is expected to bill.';
+  }
   return '<tr class="detail" data-d="' + l._i + '"><td colspan="9"><div class="dpanel">' +
-    '<div class="dsec">' + (allPosted ? 'Next cycle (estimate)' : 'Waiting to be approved &amp; posted') + '</div>' +
+    '<div class="dsec">' + (nothingPending ? 'Next cycle (estimate)' : 'Waiting to be approved &amp; posted') + '</div>' +
     rows +
-    '<div class="dfoot">' +
-      (allPosted ? 'The whole CSP report is posted for this service — the line above is next cycle&#39;s estimate.'
-                 : 'Estimated at the sell price on this screen.') +
-    '</div>' +
+    '<div class="dfoot">' + foot + '</div>' +
     '<div class="dsec">Last approved &amp; posted</div>' +
     lastPostedHtml(l) +
     '</div></td></tr>';
