@@ -6,89 +6,255 @@
 <title>Kantanna CSP Pricing Portal</title>
 <style>
   :root {
-    --bg:#f4f6f9; --card:#fff; --ink:#182233; --muted:#6b7686; --line:#e3e8ef;
-    --brand:#0b5fff; --ok:#15803d; --warn:#b45309; --err:#b91c1c;
+    --bg:#f1f4f8; --card:#fff; --ink:#0f172a; --ink2:#334155; --muted:#64748b;
+    --line:#e2e8f0; --line2:#eef2f7;
+    --brand:#2563eb; --ok:#047857; --okbg:#ecfdf5; --warn:#b45309; --warnbg:#fffbeb;
+    --err:#b91c1c; --errbg:#fef2f2; --violet:#6d28d9; --violetbg:#f5f3ff;
+    --shadow:0 1px 2px rgba(15,23,42,.05), 0 1px 3px rgba(15,23,42,.06);
   }
   * { box-sizing:border-box; }
-  body { margin:0; font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif; background:var(--bg); color:var(--ink); }
-  header { background:#10233f; color:#fff; padding:14px 24px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
-  header h1 { font-size:17px; margin:0; flex:1; }
-  .wrap { max-width:1280px; margin:0 auto; padding:20px 24px 60px; }
-  .customer { background:var(--card); border:1px solid var(--line); border-radius:10px; margin-bottom:22px; overflow:hidden; }
-  .customer > .head { padding:12px 16px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; border-bottom:1px solid var(--line); background:#f8fafc; }
-  .customer h2 { font-size:15px; margin:0; }
-  .contract { border-top:1px solid var(--line); }
-  .contract:first-of-type { border-top:none; }
-  .chead { padding:10px 16px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:#eef2f7; }
-  .cname { font-weight:600; font-size:13px; }
-  .cdates { color:var(--muted); }
-  .ctotal { margin-left:auto; font-size:11.5px; font-weight:600; color:var(--ok); }
-  .ctotal.cdue { color:var(--warn); }
-  .chead .atlink { margin-left:0; }
-  table { width:100%; border-collapse:collapse; font-size:13.5px; }
-  th,td { padding:8px 10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:middle; }
-  th { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); background:#fbfcfe; }
-  tr:last-child td { border-bottom:none; }
-  .num { text-align:right; }
-  .mono { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11.5px; color:var(--muted); }
-  .badge { display:inline-block; padding:1px 8px; border-radius:99px; font-size:11px; background:var(--line); }
-  .badge.synced { background:#dcfce7; color:var(--ok); }
-  .badge.pending { background:#e0e7ff; color:#3730a3; }
-  .badge.needs_mapping,.badge.partial { background:#fef3c7; color:var(--warn); }
-  .badge.error { background:#fee2e2; color:var(--err); }
-  .badge.unmapped { background:#fee2e2; color:var(--err); }
-  .badge.coterm { background:#ede9fe; color:#5b21b6; margin-left:4px; cursor:help; }
-  input[type=number] { width:92px; padding:4px 6px; border:1px solid var(--line); border-radius:6px; font:inherit; text-align:right; }
-  input[type=number]:disabled { background:#f1f5f9; color:var(--muted); }
-  input[type=text] { padding:6px 8px; border:1px solid var(--line); border-radius:6px; font:inherit; width:260px; }
-  input[type=date] { padding:4px 6px; border:1px solid var(--line); border-radius:6px; font:inherit; width:135px; }
-  input[type=date]:disabled { background:#f1f5f9; color:var(--muted); }
-  .btn { padding:8px 16px; border-radius:7px; border:1px solid var(--line); background:#fff; cursor:pointer; font:inherit; font-size:13.5px; }
-  .btn.primary { background:var(--brand); border-color:var(--brand); color:#fff; }
-  .btn.sync { background:#15803d; border-color:#15803d; color:#fff; }
-  .btn:disabled { opacity:.5; cursor:default; }
-  .toolbar { position:sticky; top:0; z-index:10; background:var(--bg); padding:12px 0; display:flex; gap:10px; align-items:center; }
-  .toolbar .msg { color:var(--muted); font-size:13px; }
-  .toolbar a.btn { text-decoration:none; color:var(--ink); }
-  .map-box { position:relative; }
-  .map-results { position:absolute; top:100%; left:0; width:320px; background:#fff; border:1px solid var(--line); border-radius:6px; box-shadow:0 6px 16px rgba(0,0,0,.12); z-index:20; max-height:240px; overflow:auto; }
-  .map-results div { padding:7px 10px; cursor:pointer; font-size:13px; }
-  .map-results div:hover { background:#eef2f7; }
-  .margin-pos { color:var(--ok); }
-  .margin-neg { color:var(--err); }
+  html { -webkit-text-size-adjust:100%; }
+  body {
+    margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-variant-numeric:tabular-nums;
+  }
+  .num, td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .mono { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
   .muted { color:var(--muted); }
-  .small { font-size:11.5px; }
-  tr.mainrow td { border-bottom:none; }
-  tr.subrow td { padding:0 10px 10px; font-size:11.5px; background:transparent; }
-  .pend { border-left:3px solid #f59e0b; background:#fffbeb; border-radius:6px; padding:7px 12px; }
-  .pend.allposted { border-left-color:#16a34a; background:#f0fdf4; }
-  .pend.nodata { border-left-color:var(--line); background:#f8fafc; }
-  .pend-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-  .pend-title { font-weight:600; font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; color:#92400e; }
-  .pend.allposted .pend-title { color:var(--ok); }
-  .pend.nodata .pend-title { color:var(--muted); }
-  .pend-total { font-weight:600; }
-  .pend-item { display:block; padding:1.5px 0 0; }
-  .pend-item .mono { color:var(--ink); }
-  .atlink { margin-left:auto; font-weight:600; color:var(--brand); text-decoration:none; white-space:nowrap; }
+
+  /* ---------- top bar ---------- */
+  .topbar {
+    position:sticky; top:0; z-index:40; background:#0d1b30; color:#fff;
+    display:flex; align-items:center; gap:20px; flex-wrap:wrap;
+    padding:11px 26px; box-shadow:0 1px 0 rgba(255,255,255,.06), 0 2px 12px rgba(13,27,48,.28);
+  }
+  .brand { display:flex; align-items:center; gap:12px; flex:1; min-width:260px; }
+  .logo {
+    width:34px; height:34px; border-radius:9px; background:#2563eb; color:#fff;
+    display:grid; place-items:center; font-size:12px; font-weight:700; letter-spacing:.06em;
+  }
+  .topbar h1 { margin:0; font-size:15px; font-weight:600; letter-spacing:-.01em; }
+  .topbar p { margin:1px 0 0; font-size:12px; color:#9fb3d1; }
+  .actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .actions .msg { font-size:12.5px; color:#a9c4ea; max-width:340px; }
+
+  .btn {
+    padding:7px 14px; border-radius:8px; border:1px solid var(--line); background:#fff;
+    color:var(--ink); cursor:pointer; font:inherit; font-size:13.5px; font-weight:500;
+    white-space:nowrap; transition:filter .12s, background .12s;
+  }
+  .btn:hover:not(:disabled) { filter:brightness(.97); }
+  .btn:disabled { opacity:.45; cursor:default; }
+  .btn.primary { background:var(--brand); border-color:var(--brand); color:#fff; }
+  .btn.go { background:#047857; border-color:#047857; color:#fff; }
+  .btn.ghost { background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.22); color:#e7eefb; text-decoration:none; }
+  .btn.tiny { padding:4px 10px; font-size:12px; }
+  .btn.link { border:none; background:none; padding:0; color:var(--brand); font-size:12px; }
+  .btn.link:hover { text-decoration:underline; }
+
+  .wrap { max-width:1240px; margin:0 auto; padding:22px 26px 80px; }
+
+  /* ---------- stats ---------- */
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(178px,1fr)); gap:12px; margin-bottom:16px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:11px; padding:13px 15px; box-shadow:var(--shadow); }
+  .stat .k { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:600; }
+  .stat .v { font-size:22px; font-weight:650; letter-spacing:-.02em; margin-top:3px; }
+  .stat .s { font-size:12px; color:var(--muted); margin-top:1px; }
+  .stat.due .v { color:var(--warn); }
+  .stat.attn .v { color:var(--err); }
+  .stat.clear .v { color:var(--ok); }
+
+  /* ---------- filter bar ---------- */
+  .filterbar {
+    position:sticky; top:57px; z-index:30; display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+    background:var(--bg); padding:10px 0 12px; margin-bottom:2px;
+    box-shadow:0 12px 12px -12px rgba(15,23,42,.10);
+  }
+  .filterbar input[type=search] {
+    flex:1; min-width:220px; max-width:400px; padding:8px 12px; font:inherit; font-size:13.5px;
+    border:1px solid var(--line); border-radius:8px; background:#fff;
+  }
+  .filterbar input[type=search]:focus { outline:2px solid #bfdbfe; outline-offset:-1px; border-color:var(--brand); }
+  .chk { display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--ink2); cursor:pointer; user-select:none; }
+  .spacer { flex:1; }
+
+  /* ---------- customer ---------- */
+  .customer { background:var(--card); border:1px solid var(--line); border-radius:13px; margin-bottom:18px; box-shadow:var(--shadow); overflow:hidden; }
+  .chead-cust {
+    display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:14px 18px;
+    border-bottom:1px solid var(--line); cursor:pointer;
+  }
+  .chead-cust:hover { background:#fafbfd; }
+  .chead-cust h2 { margin:0; font-size:16px; font-weight:650; letter-spacing:-.01em; }
+  .custsum { margin-left:auto; display:flex; align-items:center; gap:16px; font-size:12.5px; color:var(--muted); }
+  .custsum b { color:var(--ink); font-weight:600; }
+  .caret { width:16px; color:var(--muted); font-size:11px; transition:transform .15s; flex:none; }
+  .collapsed > .caret, .collapsed .caret { transform:rotate(-90deg); }
+  .customer.collapsed .cbody { display:none; }
+  .contract.collapsed .tablewrap { display:none; }
+
+  /* ---------- contract ---------- */
+  .contract { border-top:1px solid var(--line2); }
+  .contract:first-child { border-top:none; }
+  .chead {
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:11px 18px;
+    background:#f8fafc; cursor:pointer;
+  }
+  .chead:hover { background:#f1f5f9; }
+  .ctitle { display:flex; align-items:baseline; gap:9px; flex-wrap:wrap; min-width:0; }
+  .cpre { font-size:10.5px; font-weight:700; letter-spacing:.08em; color:#94a3b8; }
+  .cname { font-size:13.5px; font-weight:650; letter-spacing:-.01em; }
+  .cdates { font-size:12.5px; color:var(--muted); }
+  .cmeta { margin-left:auto; display:flex; align-items:center; gap:14px; font-size:12.5px; color:var(--muted); white-space:nowrap; }
+  .cmeta .cval { color:var(--ink); font-weight:600; }
+  .contract.usage .chead { background:#fbfcfd; }
+  .contract.usage .cname { color:var(--muted); font-weight:500; }
+
+  .atlink { color:var(--brand); text-decoration:none; font-weight:600; font-size:12.5px; white-space:nowrap; }
   .atlink:hover { text-decoration:underline; }
-  .datepicks { font-size:10.5px; margin-top:2px; white-space:nowrap; color:var(--muted); }
-  .datepicks a { color:var(--brand); text-decoration:none; cursor:pointer; }
-  .datepicks a:hover { text-decoration:underline; }
+
+  /* ---------- table ---------- */
+  /* Every table shares one fixed column grid so the numbers line up all
+     the way down the page, across contracts and customers. */
+  .cbody { overflow-x:auto; }
+  .cinner { min-width:940px; }
+  table { width:100%; border-collapse:collapse; table-layout:fixed; }
+  th {
+    font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
+    text-align:left; padding:9px 12px 8px; background:#fff; border-bottom:1px solid var(--line);
+    white-space:nowrap;
+  }
+  th[title] { cursor:help; text-decoration:underline dotted #cbd5e1; text-underline-offset:3px; }
+  .colhead { background:#fff; border-bottom:1px solid var(--line); }
+  .colhead table { border-collapse:collapse; }
+  .colhead th { border-bottom:none; }
+  td { padding:11px 12px; border-bottom:1px solid var(--line2); vertical-align:top; font-size:13.5px; }
+  tr.line:last-child td, tr.detail:last-child td { border-bottom:none; }
+  tr.line:hover td { background:#fafcff; }
+  tr.line.off td { opacity:.5; }
+  tr.line.off:hover td { opacity:.75; }
+  td.pick { width:34px; padding-left:18px; padding-right:0; }
+  td.pick input { width:15px; height:15px; accent-color:var(--brand); cursor:pointer; }
+
+  .svc { font-weight:550; letter-spacing:-.005em; line-height:1.3; }
+  .svcsub { font-size:11.5px; color:var(--muted); margin-top:3px; display:flex; flex-wrap:wrap; gap:4px 8px; align-items:center; }
+  .svcsub .sku { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; }
+  .dot { color:#cbd5e1; }
+
+  .badge {
+    display:inline-block; padding:1.5px 8px; border-radius:99px; font-size:11px; font-weight:600;
+    background:#eef2f7; color:var(--ink2); white-space:nowrap; line-height:1.5;
+  }
+  .badge.b-annual_monthly { background:#eff6ff; color:#1d4ed8; }
+  .badge.b-annual_upfront { background:#eef2ff; color:#4338ca; }
+  .badge.b-monthly { background:#f0fdfa; color:#0f766e; }
+  .badge.b-usage { background:#f1f5f9; color:var(--muted); }
+  .badge.coterm { background:var(--violetbg); color:var(--violet); cursor:help; }
+  .badge.synced { background:var(--okbg); color:var(--ok); }
+  .badge.pending { background:#eef2ff; color:#4338ca; }
+  .badge.needs_mapping, .badge.partial { background:var(--warnbg); color:var(--warn); }
+  .badge.error, .badge.unmapped { background:var(--errbg); color:var(--err); }
+  .badge.mapped { background:var(--okbg); color:var(--ok); }
+
+  .rate { font-weight:600; }
+  .per { font-size:11px; color:var(--muted); font-weight:400; }
+  /* Margin is neutral when healthy so the exceptions are the only thing
+     that catches the eye. */
+  .marg { color:var(--ink2); }
+  .marg.thin { color:var(--warn); font-weight:650; }
+  .marg.neg { color:var(--err); font-weight:650; }
+  .ok-tick { color:#94a3b8; font-size:13px; cursor:help; }
+
+  /* ---------- sell cell ---------- */
+  td.sell { white-space:nowrap; }
+  .sellview { display:flex; align-items:center; justify-content:flex-end; }
+  .sellview .amt {
+    font:inherit; font-weight:650; font-variant-numeric:tabular-nums; border:none; background:none;
+    padding:0; cursor:pointer; color:var(--ink); border-bottom:1px dashed transparent; line-height:1.3;
+  }
+  .sellview .amt:hover { color:var(--brand); border-bottom-color:#93c5fd; }
+  .sellview .amt.custom { color:var(--brand); }
+  .editing .sellview { display:none; }
+  .selledit { display:none; }
+  .editing .selledit { display:block; }
+  .selledit input[type=number] {
+    width:100%; max-width:120px; padding:5px 7px; border:1px solid var(--brand); border-radius:7px; font:inherit;
+    font-size:13.5px; text-align:right; font-variant-numeric:tabular-nums;
+  }
+  .selledit input[type=date] { width:100%; max-width:140px; padding:4px 6px; border:1px solid var(--line); border-radius:7px; font:inherit; font-size:12px; margin-top:5px; }
+  .fromlbl { font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-top:6px; }
+  .picks { font-size:11px; margin-top:3px; white-space:nowrap; }
+  .picks a { color:var(--brand); cursor:pointer; text-decoration:none; }
+  .picks a:hover { text-decoration:underline; }
+
+  /* ---------- billing pill + detail ---------- */
+  .pill {
+    display:inline-flex; align-items:center; gap:7px; padding:4px 10px 4px 8px; border-radius:8px;
+    font-size:12.5px; font-weight:600; border:1px solid transparent; cursor:pointer; background:none;
+    font-family:inherit; color:inherit; white-space:nowrap;
+  }
+  .pill .tick { font-size:9px; opacity:.85; }
+  .pill.due { background:var(--warnbg); border-color:#fde68a; color:var(--warn); }
+  .pill.clear { background:var(--okbg); border-color:#a7f3d0; color:var(--ok); }
+  .pill.none { background:#f8fafc; border-color:var(--line); color:var(--muted); font-weight:500; cursor:default; }
+  .pill.due:hover, .pill.clear:hover { filter:brightness(.97); }
+  .pill .n { font-weight:500; opacity:.85; font-size:11.5px; }
+
+  tr.detail { display:none; }
+  tr.detail.open { display:table-row; }
+  tr.detail td { padding:0 12px 13px 46px; border-bottom:1px solid var(--line2); background:#fcfdfe; }
+  .dpanel { border-left:2px solid var(--line); padding:2px 0 2px 14px; }
+  .dline { display:flex; align-items:baseline; gap:10px; font-size:12.5px; padding:3px 0; flex-wrap:wrap; }
+  .dline .when { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11.5px; color:var(--ink2); min-width:186px; }
+  .dline .amt { font-weight:600; margin-left:auto; }
+  .dtag { font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; font-weight:600; padding:1px 6px; border-radius:5px; background:#eef2f7; color:var(--muted); }
+  .dtag.cycle { background:#eff6ff; color:#1d4ed8; }
+  .dtag.prorata { background:var(--violetbg); color:var(--violet); }
+  .dfoot { font-size:11.5px; color:var(--muted); margin-top:6px; }
+
+  /* ---------- mapper ---------- */
+  .map-box { position:relative; }
+  .map-box input { padding:6px 10px; border:1px solid var(--line); border-radius:8px; font:inherit; font-size:13px; width:250px; }
+  .map-results { position:absolute; top:calc(100% + 4px); left:0; width:320px; background:#fff; border:1px solid var(--line); border-radius:9px; box-shadow:0 8px 24px rgba(15,23,42,.14); z-index:20; max-height:250px; overflow:auto; }
+  .map-results div { padding:8px 11px; cursor:pointer; font-size:13px; }
+  .map-results div:hover { background:#eff6ff; }
+
+  .empty { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:40px; text-align:center; color:var(--muted); }
+  @media (max-width:860px) {
+    .wrap { padding:16px 14px 60px; }
+    .custsum, .cmeta { margin-left:0; width:100%; }
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1>Kantanna &middot; Dicker CSP &rarr; Autotask Pricing Portal</h1>
-  <span id="meta" class="small" style="color:#cdd9ee"></span>
-</header>
-<div class="wrap">
-  <div class="toolbar">
-    <button class="btn primary" onclick="saveAll(this)">Save prices</button>
-    <button class="btn sync" onclick="syncNow(this)">Sync to Autotask</button>
-    <button class="btn" onclick="location.reload()">Refresh</button>
-    <a class="btn" href="https://ww31.autotask.net/" target="_blank" rel="noopener" title="Approve &amp; Post lives under Contracts &gt; Approve &amp; Post">Autotask ↗</a>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">CSP</span>
+    <div>
+      <h1>Dicker Data &rarr; Autotask pricing</h1>
+      <p id="meta"></p>
+    </div>
+  </div>
+  <div class="actions">
     <span class="msg" id="msg"></span>
+    <a class="btn ghost" href="https://ww31.autotask.net/" target="_blank" rel="noopener"
+       title="Approve &amp; Post lives under Contracts &gt; Approve &amp; Post">Autotask &#8599;</a>
+    <button class="btn ghost" onclick="location.reload()">Refresh</button>
+    <button class="btn primary" onclick="saveAll(this)">Save prices</button>
+    <button class="btn go" onclick="syncNow(this)">Sync to Autotask</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <section class="stats" id="stats"></section>
+  <div class="filterbar">
+    <input id="q" type="search" placeholder="Filter by customer, product or SKU…" autocomplete="off">
+    <label class="chk"><input type="checkbox" id="onlyDue"> Awaiting posting only</label>
+    <label class="chk"><input type="checkbox" id="onlyOff"> Include excluded lines</label>
+    <span class="spacer"></span>
+    <button class="btn tiny" onclick="setAll(true)">Expand all</button>
+    <button class="btn tiny" onclick="setAll(false)">Collapse all</button>
   </div>
   <div id="app"></div>
 </div>
@@ -101,7 +267,17 @@ var LINES = DATA.lines || [];
 var MAPPINGS = {};
 (DATA.mappings || []).forEach(function (m) { MAPPINGS[(m.tenant_name || '').toLowerCase()] = m; });
 
+/* ============================================================
+   Pricing / term maths. Unchanged from the previous portal —
+   these mirror the sync (Prepare Lines) exactly.
+   ============================================================ */
 function fmt(n) { return (Number(n) || 0).toFixed(2); }
+function money(n) {
+  return '$' + (Number(n) || 0).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function money0(n) {
+  return '$' + Math.round(Number(n) || 0).toLocaleString('en-AU');
+}
 function fullPeriodRrp(l) { return Number(l.period_rrp !== null && l.period_rrp !== undefined ? l.period_rrp : l.monthly_rrp) || 0; }
 function fullPeriodCost(l) { return Number(l.period_cost !== null && l.period_cost !== undefined ? l.period_cost : l.monthly_cost) || 0; }
 // Co-terming: Microsoft aligns a new annual subscription to an existing
@@ -129,10 +305,10 @@ function periodRrp(l) { return Math.round(fullPeriodRrp(l) * termScale(l) * 100)
 function periodCost(l) { return Math.round(fullPeriodCost(l) * termScale(l) * 100) / 100; }
 function periodSuffix(l) { return l.billing_months === 12 ? '/yr' : '/mo'; }
 function billingLabel(l) {
-  if (l.billing_type === 'annual_upfront') return 'Annual · Upfront';
-  if (l.billing_type === 'annual_monthly') return 'Annual · Monthly';
+  if (l.billing_type === 'annual_upfront') return 'Annual · upfront';
+  if (l.billing_type === 'annual_monthly') return 'Annual · monthly';
   if (l.billing_type === 'usage') return 'Usage';
-  return 'Month to Month';
+  return 'Month to month';
 }
 // The line's CURRENT contract price (read back from Autotask on the last
 // sync); RRP only as the default for lines with no contract service yet.
@@ -150,6 +326,11 @@ function effInclude(l) {
   // $0 lines (e.g. Teams Phone Resource accounts) are included too and
   // simply sync at a $0 sell price.
   return l.charge_type === 'NCE' && l.status === 'Active';
+}
+// Monthly run rate for one line: annual-upfront prices are spread over 12.
+function monthlyValue(l) {
+  var per = effSell(l) * (Number(l.qty) || 0);
+  return l.billing_months === 12 ? per / 12 : per;
 }
 // Calendar-safe month arithmetic: clamp to the last day of the target
 // month rather than overflowing (31-MAR minus a month is 28-FEB).
@@ -216,6 +397,11 @@ function longDateIso(iso) {
   if (isNaN(d.getTime())) return String(iso || '');
   return d.getUTCDate() + ' ' + MONTH_ABBR[d.getUTCMonth()] + ' ' + d.getUTCFullYear();
 }
+function shortDateIso(iso) {
+  var d = new Date(iso + 'T00:00:00Z');
+  if (isNaN(d.getTime())) return String(iso || '');
+  return d.getUTCDate() + ' ' + MONTH_ABBR[d.getUTCMonth()];
+}
 var BILLING_SHORT = { annual_monthly: 'Annual Commit Monthly', annual_upfront: 'Annual Commit Yearly',
   monthly: 'Month to Month', usage: 'Usage' };
 // The Autotask contract belongs to the CO-TERM GROUP, not the subscription:
@@ -248,128 +434,13 @@ function groupContract(l) {
     : 'Started ' + su;
   var firstUsage = earliestUsageIso(l);
   if (firstUsage && firstUsage < start) start = firstUsage;
-  return { name: 'CSP - ' + short + ' - ' + label, start: start, end: g.end };
+  return { name: 'CSP - ' + short + ' - ' + label, start: start, end: g.end, label: label, kind: short };
 }
 function marginPct(l) {
   var s = effSell(l), c = periodCost(l);
   if (!s) return null;
   return ((s - c) / s) * 100;
 }
-
-function render() {
-  var byCustomer = {};
-  LINES.forEach(function (l) { (byCustomer[l.tenant_name] = byCustomer[l.tenant_name] || []).push(l); });
-  var names = Object.keys(byCustomer).sort();
-  var app = document.getElementById('app');
-  app.innerHTML = '';
-  document.getElementById('meta').textContent = LINES.length + ' subscription lines · ' +
-    names.length + ' customers' + (LINES[0] && LINES[0].imported_at ? ' · imported ' + String(LINES[0].imported_at).slice(0, 10) : '');
-
-  if (!names.length) {
-    app.innerHTML = '<p class="muted">No subscription lines yet. Run the "01 · Annuity Import" workflow form first.</p>';
-    return;
-  }
-
-  names.forEach(function (name) {
-    var mapping = MAPPINGS[name.toLowerCase()];
-    var card = document.createElement('div');
-    card.className = 'customer';
-
-    var head = document.createElement('div');
-    head.className = 'head';
-    var h2 = document.createElement('h2');
-    h2.textContent = name;
-    head.appendChild(h2);
-
-    if (mapping) {
-      var ok = document.createElement('span');
-      ok.className = 'badge synced';
-      ok.textContent = 'Autotask: ' + mapping.autotask_company_name + ' (#' + mapping.autotask_company_id + ')';
-      head.appendChild(ok);
-    } else {
-      var bad = document.createElement('span');
-      bad.className = 'badge unmapped';
-      bad.textContent = 'not mapped';
-      head.appendChild(bad);
-      head.appendChild(buildMapper(name));
-    }
-    card.appendChild(head);
-
-    // One block per Autotask contract, with its services listed underneath -
-    // the same shape you Approve & Post in.
-    var byContract = {};
-    byCustomer[name].forEach(function (l) {
-      var g = groupContract(l);
-      var k = g.name || '';
-      (byContract[k] = byContract[k] || { grp: g, lines: [] }).lines.push(l);
-    });
-    Object.keys(byContract).sort(function (a, b) {
-      if (!a !== !b) return a ? -1 : 1;   // unbilled lines last
-      return a < b ? -1 : (a > b ? 1 : 0);
-    }).forEach(function (cname) {
-      card.appendChild(buildContract(cname, byContract[cname]));
-    });
-    app.appendChild(card);
-  });
-}
-
-// A contract and every service billing on it.
-function buildContract(cname, block) {
-  var lines = block.lines.slice().sort(function (a, b) {
-    return String(a.offer_name || '').localeCompare(String(b.offer_name || ''));
-  });
-  var wrap = document.createElement('div');
-  wrap.className = 'contract';
-
-  // Everything on this contract still waiting to be approved and posted.
-  var due = 0;
-  var anyChecked = false;
-  lines.forEach(function (l) {
-    if (!effInclude(l) || !l.billing_last) return;
-    anyChecked = true;
-    pendingItems(l).forEach(function (i) { if (i.type !== 'next cycle') due += i.amount; });
-  });
-
-  var atId = (lines.find(function (l) { return l.autotask_contract_id; }) || {}).autotask_contract_id;
-  var head = document.createElement('div');
-  head.className = 'chead';
-  if (!cname) {
-    // Lines with no Autotask contract: Azure and other usage-billed items,
-    // which the sync leaves alone.
-    head.innerHTML = '<span class="cname muted">Not billed through Autotask</span>' +
-      '<span class="badge">' + lines.length + (lines.length === 1 ? ' line' : ' lines') + '</span>' +
-      '<span class="cdates">usage-billed — excluded from the sync</span>';
-  } else {
-    head.innerHTML = '<span class="cname">' + escapeHtml(cname) + '</span>' +
-      '<span class="cdates mono">' + escapeHtml(block.grp.start || '?') + ' → ' +
-        escapeHtml(block.grp.end || '?') + '</span>' +
-      '<span class="badge">' + lines.length + (lines.length === 1 ? ' service' : ' services') + '</span>' +
-      (atId ? '<span class="mono">#' + escapeHtml(String(atId)) + '</span>' : '') +
-      (anyChecked
-        ? '<span class="ctotal' + (due > 0 ? ' cdue' : '') + '">' +
-          (due > 0 ? 'Awaiting Approve &amp; Post: $' + due.toFixed(2) : 'Nothing awaiting posting') + '</span>'
-        : '') +
-      contractLink(atId);
-  }
-  wrap.appendChild(head);
-
-  var table = document.createElement('table');
-  table.innerHTML = '<thead><tr><th>Incl.</th><th>Offer</th><th>Billing</th>' +
-    '<th>Subscription ID</th>' +
-    '<th title="Start of the CURRENT term (month-to-month: the current billing cycle). Hover the date for when the subscription first started.">Start</th>' +
-    '<th title="End of the current term — the annuity report&#39;s REVALUATION PERIOD. Renewals extend the Autotask contract to this date.">End</th>' +
-    '<th class="num">Qty</th><th class="num">Cost</th><th class="num">RRP</th>' +
-    '<th title="Tick to change the contract price; unticked, the contract keeps its current price">Edit price</th><th class="num">Sell</th><th title="Date the price change takes effect in Autotask">From</th><th class="num">Margin</th><th>Status</th></tr></thead>';
-  var tbody = document.createElement('tbody');
-  lines.forEach(function (l) {
-    tbody.appendChild(buildRow(l));
-    tbody.appendChild(buildBillingRow(l));
-  });
-  table.appendChild(tbody);
-  wrap.appendChild(table);
-  return wrap;
-}
-
 // Everything for this subscription that Autotask has NOT yet approved &
 // posted: each pro-rata change from the CSP report plus the billing-cycle
 // charge, valued at the sell price (pro-rata scaled by the same day
@@ -410,214 +481,471 @@ function pendingItems(l) {
   }
   return items;
 }
+// The one number that matters per line: what is still waiting to be
+// approved and posted (the "next cycle" placeholder is not owed yet).
+function dueNow(l) {
+  if (!effInclude(l) || !l.billing_last) return 0;
+  return pendingItems(l).reduce(function (s, i) {
+    return i.type === 'next cycle' ? s : s + i.amount;
+  }, 0);
+}
+function needsAttention(l) {
+  var s = String(l.sync_status || '');
+  return s === 'error' || s === 'needs_mapping' || s === 'unmapped' || s === 'partial';
+}
+
+/* ============================================================
+   View state
+   ============================================================ */
+var UI = { q: '', onlyDue: false, showOff: true, closed: {} };
+try {
+  var saved = JSON.parse(localStorage.getItem('csp-portal-closed') || '{}');
+  if (saved && typeof saved === 'object') UI.closed = saved;
+} catch (e) {}
+function persist() {
+  try { localStorage.setItem('csp-portal-closed', JSON.stringify(UI.closed)); } catch (e) {}
+}
+
+// Every line carries an effective date even if it is filtered out of view,
+// because Save posts the whole book, not just what is on screen.
+var TODAY = new Date().toISOString().slice(0, 10);
+LINES.forEach(function (l, i) {
+  l._i = i;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(l.price_effective_date || ''))) l.price_effective_date = TODAY;
+});
+
+function matches(l) {
+  if (UI.onlyDue && dueNow(l) <= 0) return false;
+  if (!UI.showOff && !effInclude(l)) return false;
+  if (!UI.q) return true;
+  var hay = [l.tenant_name, l.offer_name, l.stock_description, l.sku, l.subscription_id,
+    groupContract(l).name].join(' ').toLowerCase();
+  return hay.indexOf(UI.q) >= 0;
+}
+
+/* ============================================================
+   Render
+   ============================================================ */
+function render() {
+  var app = document.getElementById('app');
+  var visible = LINES.filter(matches);
+
+  renderStats(visible);
+
+  document.getElementById('meta').textContent =
+    LINES.length + ' subscription lines' +
+    (LINES[0] && LINES[0].imported_at ? ' · imported ' + String(LINES[0].imported_at).slice(0, 10) : '');
+
+  if (!LINES.length) {
+    app.innerHTML = '<div class="empty">No subscription lines yet.<br>Run the ' +
+      '<b>01 · Annuity Import</b> form first.</div>';
+    return;
+  }
+  if (!visible.length) {
+    app.innerHTML = '<div class="empty">No lines match this filter.</div>';
+    return;
+  }
+
+  var byCustomer = {};
+  visible.forEach(function (l) { (byCustomer[l.tenant_name] = byCustomer[l.tenant_name] || []).push(l); });
+
+  app.innerHTML = Object.keys(byCustomer).sort().map(function (name) {
+    return customerHtml(name, byCustomer[name]);
+  }).join('');
+  wire();
+}
+
+function renderStats(visible) {
+  var due = 0, monthly = 0, attn = 0, incl = 0;
+  var contracts = {}, custs = {};
+  visible.forEach(function (l) {
+    custs[l.tenant_name] = 1;
+    var g = groupContract(l);
+    if (g.name) contracts[l.tenant_name + '|' + g.name] = 1;
+    if (effInclude(l)) { incl++; monthly += monthlyValue(l); }
+    due += dueNow(l);
+    if (needsAttention(l)) attn++;
+  });
+  Object.keys(custs).forEach(function (n) { if (!MAPPINGS[n.toLowerCase()]) attn++; });
+
+  var tiles = [
+    { k: 'Customers', v: Object.keys(custs).length, s: Object.keys(contracts).length + ' Autotask contracts' },
+    { k: 'Services billing', v: incl, s: visible.length - incl + ' excluded' },
+    { k: 'Monthly recurring', v: money0(monthly), s: 'at current sell prices' },
+    { k: 'Awaiting Approve & Post', v: money(due), s: due > 0 ? 'sitting in Autotask now' : 'nothing outstanding',
+      cls: due > 0 ? 'due' : 'clear' },
+    { k: 'Needs attention', v: attn, s: attn ? 'unmapped or failed' : 'all clear',
+      cls: attn ? 'attn' : 'clear' }
+  ];
+  document.getElementById('stats').innerHTML = tiles.map(function (t) {
+    return '<div class="stat ' + (t.cls || '') + '"><div class="k">' + escapeHtml(t.k) + '</div>' +
+      '<div class="v">' + escapeHtml(String(t.v)) + '</div>' +
+      '<div class="s">' + escapeHtml(t.s) + '</div></div>';
+  }).join('');
+}
+
+// One fixed column grid, shared by the header strip and every contract
+// table beneath it.
+var COLS = '<colgroup>' +
+  '<col style="width:42px">' +
+  '<col>' +
+  '<col style="width:62px">' +
+  '<col style="width:92px">' +
+  '<col style="width:92px">' +
+  '<col style="width:150px">' +
+  '<col style="width:80px">' +
+  '<col style="width:168px">' +
+  '<col style="width:76px">' +
+'</colgroup>';
+var COLHEAD = '<div class="colhead"><table>' + COLS + '<thead><tr>' +
+  '<th></th>' +
+  '<th>Service</th>' +
+  '<th class="num">Qty</th>' +
+  '<th class="num" title="Dicker unit cost for one billing period">Cost</th>' +
+  '<th class="num" title="Dicker unit RRP for one billing period">RRP</th>' +
+  '<th class="num" title="What Autotask charges per unit. Click a price to change it.">Sell</th>' +
+  '<th class="num">Margin</th>' +
+  '<th title="What each service still has waiting in Autotask&#39;s Approve &amp; Post screen. Click an amount for the breakdown.">Billing</th>' +
+  '<th>Sync</th>' +
+'</tr></thead></table></div>';
+
+function customerHtml(name, lines) {
+  var mapping = MAPPINGS[name.toLowerCase()];
+  var key = 'c:' + name;
+  var closed = !!UI.closed[key];
+
+  var due = 0, monthly = 0;
+  lines.forEach(function (l) { due += dueNow(l); if (effInclude(l)) monthly += monthlyValue(l); });
+
+  // One block per Autotask contract, with its services listed underneath —
+  // the same shape you Approve & Post in.
+  var byContract = {};
+  lines.forEach(function (l) {
+    var g = groupContract(l);
+    var k = g.name || '';
+    (byContract[k] = byContract[k] || { grp: g, lines: [] }).lines.push(l);
+  });
+  var order = Object.keys(byContract).sort(function (a, b) {
+    if (!a !== !b) return a ? -1 : 1;   // usage-billed lines last
+    return a < b ? -1 : (a > b ? 1 : 0);
+  });
+
+  var head = '<div class="chead-cust js-toggle" data-key="' + escapeHtml(key) + '">' +
+    '<span class="caret">&#9660;</span>' +
+    '<h2>' + escapeHtml(name) + '</h2>' +
+    (mapping
+      ? '<span class="badge mapped">' + escapeHtml(mapping.autotask_company_name) + ' &middot; #' +
+        escapeHtml(String(mapping.autotask_company_id)) + '</span>'
+      : '<span class="badge unmapped">not mapped to Autotask</span>' + mapperHtml(name)) +
+    '<div class="custsum">' +
+      '<span>' + order.length + (order.length === 1 ? ' contract' : ' contracts') + '</span>' +
+      '<span><b>' + money0(monthly) + '</b> /mo</span>' +
+      (due > 0 ? '<span style="color:var(--warn)"><b style="color:var(--warn)">' + money(due) + '</b> awaiting</span>' : '') +
+    '</div>' +
+  '</div>';
+
+  return '<section class="customer' + (closed ? ' collapsed' : '') + '">' + head +
+    '<div class="cbody"><div class="cinner">' + COLHEAD + order.map(function (cn) {
+      return contractHtml(name, cn, byContract[cn]);
+    }).join('') + '</div></div></section>';
+}
+
+function contractHtml(customer, cname, block) {
+  var lines = block.lines.slice().sort(function (a, b) {
+    return String(a.offer_name || '').localeCompare(String(b.offer_name || ''));
+  });
+  var key = 'k:' + customer + '|' + cname;
+  var closed = !!UI.closed[key];
+
+  var due = 0, monthly = 0, checked = false;
+  lines.forEach(function (l) {
+    if (effInclude(l)) monthly += monthlyValue(l);
+    if (effInclude(l) && l.billing_last) checked = true;
+    due += dueNow(l);
+  });
+  var atId = (lines.filter(function (l) { return l.autotask_contract_id; })[0] || {}).autotask_contract_id;
+
+  var title, meta;
+  if (!cname) {
+    title = '<div class="ctitle"><span class="cname">Not billed through Autotask</span>' +
+      '<span class="cdates">usage-billed &mdash; excluded from the sync</span></div>';
+    meta = '<div class="cmeta"><span>' + lines.length + (lines.length === 1 ? ' line' : ' lines') + '</span></div>';
+  } else {
+    title = '<div class="ctitle" title="' + escapeHtml(cname) + '">' +
+      '<span class="cpre">CSP</span>' +
+      '<span class="cname">' + escapeHtml(block.grp.kind || '') + '</span>' +
+      '<span class="cdates">' + escapeHtml(block.grp.label || '') + '</span></div>';
+    meta = '<div class="cmeta">' +
+      '<span>' + lines.length + (lines.length === 1 ? ' service' : ' services') + '</span>' +
+      '<span><span class="cval">' + money0(monthly) + '</span> /mo</span>' +
+      (checked
+        ? (due > 0
+          ? '<span class="pill due" style="cursor:default"><span class="tick">&#9679;</span>' + money(due) + ' to post</span>'
+          : '<span class="pill clear" style="cursor:default"><span class="tick">&#10003;</span>all posted</span>')
+        : '') +
+      (atId ? contractLink(atId) : '') +
+    '</div>';
+  }
+
+  var rows = lines.map(lineHtml).join('');
+
+  return '<div class="contract' + (cname ? '' : ' usage') + (closed ? ' collapsed' : '') + '">' +
+    '<div class="chead js-toggle" data-key="' + escapeHtml(key) + '">' +
+      '<span class="caret">&#9660;</span>' + title + meta +
+    '</div>' +
+    '<div class="tablewrap"><table>' + COLS + '<tbody>' + rows + '</tbody></table></div></div>';
+}
+
+function lineHtml(l) {
+  var i = l._i;
+  var on = effInclude(l);
+  var win = contractWindow(l);
+  var ci = cotermInfo(l);
+  var suffix = periodSuffix(l);
+  var m = marginPct(l);
+
+  // Sub-line: SKU, subscription, billing type, and the term only when this
+  // line's own window differs from the contract it sits on (co-terms).
+  var bits = [];
+  if (l.sku) bits.push('<span class="sku">' + escapeHtml(l.sku) + '</span>');
+  // The billing type is already the contract's name, so it is only worth
+  // repeating on the lines that sit outside a contract (usage-billed).
+  if (!groupContract(l).name) {
+    bits.push('<span class="badge b-' + escapeHtml(l.billing_type || 'monthly') + '">' +
+      escapeHtml(billingLabel(l)) + '</span>');
+  }
+  if (ci.coterm) {
+    var mths = Math.round((ci.days / 365) * 12 * 10) / 10;
+    bits.push('<span class="badge coterm" title="Co-termed: this term runs ' + ci.days +
+      ' days (' + mths + ' months), aligned to the customer&#39;s other subscriptions and billing on their shared contract. ' +
+      (l.billing_type === 'annual_upfront'
+        ? 'The upfront charge is pro-rated to ' + (ci.factor * 100).toFixed(1) + '% of the annual price, as Dicker invoices it.'
+        : 'The monthly rate is unchanged — there are simply fewer charges before it renews for a full year.') +
+      '">co-term ' + mths + ' mo</span>');
+    bits.push('<span title="This subscription&#39;s own term">' +
+      escapeHtml(shortDateIso(win.start)) + ' &rarr; ' + escapeHtml(longDateIso(win.end)) + '</span>');
+  }
+  var firstStarted = /^\d{4}-\d{2}-\d{2}$/.test(String(l.usage_start || '')) ? String(l.usage_start) : '';
+  var subTitle = 'Subscription ' + (l.subscription_id || '') +
+    (firstStarted ? ' · first started ' + firstStarted : '') +
+    (win.start ? ' · current term ' + win.start + ' to ' + win.end : '');
+
+  var nm = String(l.offer_name || l.stock_description || '');
+  var cut = nm.length >= 30 && !!l.stock_description;
+
+  var due = dueNow(l);
+  var pill;
+  if (!on) {
+    pill = '<span class="pill none">excluded</span>';
+  } else if (!l.billing_last) {
+    pill = '<span class="pill none" title="Run a sync to read Autotask billing state">not checked yet</span>';
+  } else {
+    var items = pendingItems(l);
+    var n = items.filter(function (x) { return x.type !== 'next cycle'; }).length;
+    pill = due > 0
+      ? '<button class="pill due js-bill" data-i="' + i + '"><span class="tick">&#9679;</span>' +
+        money(due) + (n > 1 ? ' <span class="n">' + n + ' items</span>' : '') + '</button>'
+      : '<button class="pill clear js-bill" data-i="' + i + '"><span class="tick">&#10003;</span>posted</button>';
+  }
+
+  var main = '<tr class="line' + (on ? '' : ' off') + '" data-i="' + i + '">' +
+    '<td class="pick"><input type="checkbox" class="js-incl" data-i="' + i + '"' + (on ? ' checked' : '') +
+      ' title="Include this line in the Autotask sync"></td>' +
+    '<td><div class="svc"' + (cut ? ' title="' + escapeHtml(String(l.stock_description || '')) +
+        ' (Dicker truncates the product name at 30 characters)"' : '') + '>' +
+      escapeHtml(nm) + (cut ? '<span class="muted">…</span>' : '') + '</div>' +
+      '<div class="svcsub" title="' + escapeHtml(subTitle) + '">' + bits.join('<span class="dot">·</span>') + '</div></td>' +
+    '<td class="num">' + escapeHtml(String(l.qty || 0)) + '</td>' +
+    '<td class="num muted">' + fmt(periodCost(l)) + '<span class="per">' + suffix + '</span></td>' +
+    '<td class="num muted">' + fmt(periodRrp(l)) + '<span class="per">' + suffix + '</span></td>' +
+    '<td class="num sell' + (l.use_custom_price ? ' editing' : '') + '" data-i="' + i + '">' +
+      '<div class="sellview">' +
+        '<button class="amt js-edit' + (l.use_custom_price ? ' custom' : '') + '" data-i="' + i + '" ' +
+          'title="Click to change the price Autotask charges for this service">' +
+          fmt(effSell(l)) + '<span class="per">' + suffix + '</span></button>' +
+      '</div>' +
+      '<div class="selledit">' +
+        '<input type="number" step="0.01" min="0" class="js-sell" data-i="' + i + '" value="' + fmt(effSell(l)) + '">' +
+        '<div class="fromlbl">effective from</div>' +
+        '<input type="date" class="js-date" data-i="' + i + '" value="' + escapeHtml(l.price_effective_date) + '">' +
+        '<div class="picks"><a class="js-pick" data-i="' + i + '" data-p="post" title="The next Approve &amp; Post billing start">next post</a>' +
+        ' <span class="dot">·</span> <a class="js-pick" data-i="' + i + '" data-p="start" title="The contract start date">contract start</a>' +
+        ' <span class="dot">·</span> <a class="js-cancel" data-i="' + i + '" title="Leave the Autotask price as it is">keep current</a></div>' +
+      '</div>' +
+    '</td>' +
+    '<td class="num">' + marginHtml(l, i) + '</td>' +
+    '<td>' + pill + '</td>' +
+    '<td>' + syncHtml(l) + '</td>' +
+  '</tr>';
+
+  return main + detailHtml(l);
+}
+
+function marginClass(m) {
+  if (m === null) return '';
+  if (m < 0) return 'neg';
+  return m < 10 ? 'thin' : '';
+}
+function marginHtml(l, i) {
+  var m = marginPct(l);
+  return '<span class="marg ' + marginClass(m) + '" data-marg="' + i + '"' +
+    (m !== null && m < 10 ? ' title="Thin margin — cost ' + fmt(periodCost(l)) + ' against sell ' + fmt(effSell(l)) + '"' : '') +
+    '>' + (m === null ? '—' : m.toFixed(1) + '%') + '</span>';
+}
+// A green "synced" badge on every healthy row is just noise; only the rows
+// that need a human get a badge.
+function syncHtml(l) {
+  var st = String(l.sync_status || 'pending');
+  var msg = l.sync_message ? String(l.sync_message).slice(0, 200) : '';
+  if (st === 'synced') {
+    return '<span class="ok-tick" title="Synced to Autotask' + (msg ? ' — ' + escapeHtml(msg) : '') + '">&#10003;</span>';
+  }
+  return '<span class="badge ' + escapeHtml(st) + '"' + (msg ? ' title="' + escapeHtml(msg) + '"' : '') +
+    '>' + escapeHtml(st) + '</span>';
+}
+
+// The breakdown behind the billing pill — hidden until asked for.
+function detailHtml(l) {
+  if (!effInclude(l) || !l.billing_last) return '';
+  var items = pendingItems(l);
+  var rows = items.map(function (x) {
+    var when = longDateIso(x.s) + (x.e ? ' → ' + longDateIso(x.e) : '');
+    var tag = x.type === 'cycle' ? 'cycle' : (x.type === 'pro-rata' ? 'prorata' : '');
+    return '<div class="dline"><span class="when">' + escapeHtml(when) + '</span>' +
+      '<span class="dtag ' + tag + '">' + escapeHtml(x.type) + '</span>' +
+      '<span class="muted">qty ' + escapeHtml(String(x.q)) + '</span>' +
+      '<span class="amt">' + money(x.amount) + '</span></div>';
+  }).join('');
+  var allPosted = !items.filter(function (x) { return x.type !== 'next cycle'; }).length;
+  return '<tr class="detail" data-d="' + l._i + '"><td colspan="9"><div class="dpanel">' + rows +
+    '<div class="dfoot">' +
+      (allPosted ? 'The whole CSP report is posted for this service — the line above is next cycle&#39;s estimate. '
+                 : 'Estimated at the sell price on this screen. ') +
+      'Last posted in Autotask: ' + escapeHtml(String(l.billing_last)) +
+    '</div></div></td></tr>';
+}
 
 // Documented Autotask deep link: opens the contract's Summary page in the
 // ww31 zone (Approve & Post for its charges is one click from there).
 function contractLink(contractId) {
-  if (!contractId) return '';
-  return '<a class="atlink" target="_blank" rel="noopener" href="https://ww31.autotask.net/Autotask/AutotaskExtend/ExecuteCommand.aspx?Code=OpenContract&amp;ContractID=' +
-    encodeURIComponent(contractId) + '">Open contract in Autotask ↗</a>';
+  return '<a class="atlink" target="_blank" rel="noopener" onclick="event.stopPropagation()" ' +
+    'href="https://ww31.autotask.net/Autotask/AutotaskExtend/ExecuteCommand.aspx?Code=OpenContract&amp;ContractID=' +
+    encodeURIComponent(contractId) + '">Open #' + escapeHtml(String(contractId)) + ' &#8599;</a>';
 }
 
-function buildBillingRow(l) {
-  var tr = document.createElement('tr');
-  tr.className = 'subrow';
-  tr.appendChild(document.createElement('td'));
-  var td1 = document.createElement('td');
-  td1.colSpan = 13;
-
-  var box = document.createElement('div');
-  var lastTxt = l.billing_last || '';
-  if (!effInclude(l)) {
-    box.className = 'pend nodata';
-    box.innerHTML = '<div class="pend-head"><span class="pend-title">Not synced</span>' +
-      '<span class="muted">line excluded from Autotask</span></div>';
-  } else if (!lastTxt) {
-    box.className = 'pend nodata';
-    box.innerHTML = '<div class="pend-head"><span class="pend-title">Billing not checked yet</span>' +
-      '<span class="muted">run a sync to load Autotask billing state</span></div>';
-  } else {
-    var items = pendingItems(l);
-    var pending = items.filter(function (i) { return i.type !== 'next cycle'; });
-    var allPosted = pending.length === 0;
-    box.className = 'pend' + (allPosted ? ' allposted' : '');
-    var total = items.reduce(function (s, i) { return s + i.amount; }, 0);
-    var head = '<div class="pend-head">' +
-      '<span class="pend-title">' + (allPosted ? 'Report fully posted · next cycle' : 'Awaiting Approve &amp; Post') + '</span>' +
-      '<span class="pend-total">$' + total.toFixed(2) + (items.length > 1 ? ' · ' + items.length + ' items' : '') + '</span>' +
-      '<span class="muted">Last posted: ' + escapeHtml(lastTxt) + '</span>' +
-      '</div>';
-    var rows = items.map(function (i) {
-      return '<span class="pend-item"><span class="mono">' + escapeHtml(i.s) +
-        (i.e ? ' → ' + escapeHtml(i.e) : '') + '</span>' +
-        ' · <span class="badge">' + escapeHtml(i.type) + '</span>' +
-        ' · qty ' + escapeHtml(String(i.q)) +
-        ' · est <b>$' + i.amount.toFixed(2) + '</b></span>';
-    }).join('');
-    box.innerHTML = head + rows;
-  }
-  td1.appendChild(box);
-  tr.appendChild(td1);
-  return tr;
+function mapperHtml(tenantName) {
+  return '<span class="map-box" onclick="event.stopPropagation()">' +
+    '<input type="text" class="js-map" data-t="' + escapeHtml(tenantName) + '" placeholder="Search Autotask companies…">' +
+    '<div class="map-results" style="display:none"></div></span>';
 }
 
-function buildRow(l) {
-  var tr = document.createElement('tr');
-  tr.className = 'mainrow';
-
-  var incl = document.createElement('input');
-  incl.type = 'checkbox';
-  incl.checked = effInclude(l);
-  incl.onchange = function () { l.include = incl.checked; l._dirty = true; };
-  tr.appendChild(td(incl));
-
-  var offer = document.createElement('td');
-  offer.innerHTML = escapeHtml(l.offer_name || '') +
-    ' <span class="mono">' + escapeHtml(l.sku || '') + '</span>';
-  tr.appendChild(offer);
-
-  var billing = document.createElement('td');
-  var ci = cotermInfo(l);
-  var cotermBadge = '';
-  if (ci.coterm) {
-    var mths = Math.round((ci.days / 365) * 12 * 10) / 10;
-    cotermBadge = '<span class="badge coterm" title="Co-termed: this term is ' + ci.days +
-      ' days (' + mths + ' months), aligned to the customer&#39;s other subscriptions and billing on their shared contract. ' +
-      (l.billing_type === 'annual_upfront'
-        ? 'The upfront charge is pro-rated to ' + (ci.factor * 100).toFixed(1) + '% of the annual price, as Dicker invoices it.'
-        : 'The monthly rate is unchanged - there are simply fewer charges before it renews for a full year.') +
-      '">co-term ' + mths + 'mo</span>';
-  }
-  billing.innerHTML = '<span class="badge">' + escapeHtml(billingLabel(l)) + '</span>' + cotermBadge;
-  tr.appendChild(billing);
-
-  var sid = document.createElement('td');
-  sid.innerHTML = '<span class="mono" title="' + escapeHtml(l.subscription_id) + '">' + escapeHtml(String(l.subscription_id).slice(0, 8)) + '…</span>';
-  tr.appendChild(sid);
-
-  var win = contractWindow(l);
-  var tdStart = document.createElement('td');
-  // START USAGE is the subscription's ORIGINAL start, not this term's, so
-  // it is shown only as a tooltip alongside the derived current term.
-  var firstStarted = /^\d{4}-\d{2}-\d{2}$/.test(String(l.usage_start || '')) ? String(l.usage_start) : '';
-  var startTitle = 'Current term start' +
-    (firstStarted && firstStarted !== win.start ? ' · first started ' + firstStarted : '');
-  tdStart.innerHTML = win.start
-    ? '<span class="mono" title="' + escapeHtml(startTitle) + '">' + escapeHtml(win.start) + '</span>'
-    : '<span class="muted">—</span>';
-  tr.appendChild(tdStart);
-  var tdEnd = document.createElement('td');
-  tdEnd.innerHTML = win.end ? '<span class="mono">' + escapeHtml(win.end) + '</span>' : '<span class="muted">—</span>';
-  tr.appendChild(tdEnd);
-
-  tr.appendChild(tdText(l.qty, 'num'));
-  tr.appendChild(tdText(fmt(periodCost(l)) + periodSuffix(l), 'num'));
-  tr.appendChild(tdText(fmt(periodRrp(l)) + periodSuffix(l), 'num'));
-
-  var custom = document.createElement('input');
-  custom.type = 'checkbox';
-  custom.checked = !!l.use_custom_price;
-  custom.title = 'Tick to change the contract price';
-  tr.appendChild(td(custom));
-
-  var sell = document.createElement('input');
-  sell.type = 'number'; sell.step = '0.01'; sell.min = '0';
-  sell.value = fmt(effSell(l));
-  sell.disabled = !l.use_custom_price;
-  sell.title = 'Sell price per billing period (' + periodSuffix(l).slice(1) + ')';
-  tr.appendChild(td(sell, 'num'));
-
-  var effDate = document.createElement('input');
-  effDate.type = 'date';
-  effDate.value = /^\d{4}-\d{2}-\d{2}$/.test(l.price_effective_date || '') ? l.price_effective_date : new Date().toISOString().slice(0, 10);
-  effDate.title = 'Price/unit changes take effect in Autotask from this date';
-  effDate.onchange = function () { l.price_effective_date = effDate.value; l._dirty = true; };
-  l.price_effective_date = effDate.value;
-  effDate.disabled = !l.use_custom_price;
-
-  // Quick picks: the next Approve & Post billing start, or the contract start.
-  var dateCell = document.createElement('td');
-  dateCell.appendChild(effDate);
-  var picks = document.createElement('div');
-  picks.className = 'datepicks';
-  function mkPick(label, getDate, titleTxt) {
-    var a = document.createElement('a');
-    a.textContent = label;
-    a.title = titleTxt;
-    a.onclick = function () {
-      if (effDate.disabled) return;
-      var d = getDate();
-      if (!d) return;
-      effDate.value = d; l.price_effective_date = d; l._dirty = true;
+/* ============================================================
+   Wiring — handlers are attached after each render.
+   ============================================================ */
+function wire() {
+  each('.js-toggle', function (el) {
+    el.onclick = function () {
+      var k = el.getAttribute('data-key');
+      UI.closed[k] = !UI.closed[k];
+      if (!UI.closed[k]) delete UI.closed[k];
+      persist();
+      var sec = el.parentNode;
+      sec.className = sec.className.replace(/ ?collapsed/, '') + (UI.closed[k] ? ' collapsed' : '');
     };
-    return a;
-  }
-  picks.appendChild(mkPick('next post', function () {
-    var items = pendingItems(l);
-    for (var i = 0; i < items.length; i++) {
-      if (items[i].type === 'cycle' || items[i].type === 'next cycle') return items[i].s;
-    }
-    return items.length ? items[0].s : '';
-  }, 'Set to the next Approve & Post billing start date'));
-  picks.appendChild(document.createTextNode(' · '));
-  picks.appendChild(mkPick('contract start', function () {
-    return groupContract(l).start;
-  }, 'Set to the contract start date'));
-  dateCell.appendChild(picks);
-  function updatePicks() {
-    picks.style.opacity = effDate.disabled ? '.45' : '1';
-    picks.style.pointerEvents = effDate.disabled ? 'none' : 'auto';
-  }
-  updatePicks();
-  tr.appendChild(dateCell);
+  });
 
-  var margin = document.createElement('td');
-  margin.className = 'num';
-  tr.appendChild(margin);
+  each('.js-incl', function (el) {
+    el.onchange = function () {
+      var l = LINES[+el.getAttribute('data-i')];
+      l.include = el.checked;
+      var tr = el.parentNode.parentNode;
+      tr.className = 'line' + (el.checked ? '' : ' off');
+      renderStats(LINES.filter(matches));
+    };
+  });
 
-  function refreshMargin() {
-    var m = marginPct(l);
-    margin.innerHTML = m === null ? '<span class="muted">—</span>'
-      : '<span class="' + (m >= 0 ? 'margin-pos' : 'margin-neg') + '">' + m.toFixed(1) + '%</span>';
-  }
-  refreshMargin();
+  each('.js-bill', function (el) {
+    el.onclick = function () {
+      var d = document.querySelector('tr.detail[data-d="' + el.getAttribute('data-i') + '"]');
+      if (d) d.className = d.className.indexOf('open') >= 0 ? 'detail' : 'detail open';
+    };
+  });
 
-  custom.onchange = function () {
-    l.use_custom_price = custom.checked; l._dirty = true;
-    if (!custom.checked) {
-      // Unticking does NOT change anything in Autotask: the contract keeps
-      // its current price, which is what we show.
-      l.sell_price = null; sell.value = fmt(currentPrice(l)); sell.disabled = true;
-      effDate.value = new Date().toISOString().slice(0, 10);
-      l.price_effective_date = effDate.value;
-      effDate.disabled = true;
-    } else { sell.disabled = false; l.sell_price = Number(sell.value); effDate.disabled = false; sell.focus(); }
-    updatePicks();
-    refreshMargin();
-  };
-  sell.onchange = function () { l.sell_price = Number(sell.value); l._dirty = true; refreshMargin(); };
+  each('.js-edit', function (el) {
+    el.onclick = function () { setEditing(+el.getAttribute('data-i'), true); };
+  });
+  each('.js-cancel', function (el) {
+    el.onclick = function () { setEditing(+el.getAttribute('data-i'), false); };
+  });
+  each('.js-sell', function (el) {
+    el.onchange = function () {
+      var l = LINES[+el.getAttribute('data-i')];
+      l.sell_price = Number(el.value);
+      refreshLine(l);
+    };
+  });
+  each('.js-date', function (el) {
+    el.onchange = function () { LINES[+el.getAttribute('data-i')].price_effective_date = el.value; };
+  });
+  each('.js-pick', function (el) {
+    el.onclick = function () {
+      var l = LINES[+el.getAttribute('data-i')];
+      var d;
+      if (el.getAttribute('data-p') === 'start') {
+        d = groupContract(l).start;
+      } else {
+        var items = pendingItems(l), hit = '';
+        for (var i = 0; i < items.length; i++) {
+          if (items[i].type === 'cycle' || items[i].type === 'next cycle') { hit = items[i].s; break; }
+        }
+        d = hit || (items.length ? items[0].s : '');
+      }
+      if (!d) return;
+      l.price_effective_date = d;
+      var input = document.querySelector('.js-date[data-i="' + l._i + '"]');
+      if (input) input.value = d;
+    };
+  });
 
-  var status = document.createElement('td');
-  var badge = '<span class="badge ' + escapeHtml(l.sync_status || 'pending') + '">' + escapeHtml(l.sync_status || 'pending') + '</span>';
-  var extra = '';
-  if (l.sync_message) extra += '<div class="muted small">' + escapeHtml(String(l.sync_message).slice(0, 120)) + '</div>';
-  status.innerHTML = badge + extra;
-  tr.appendChild(status);
-
-  return tr;
+  each('.js-map', function (el) { wireMapper(el); });
 }
 
-function buildMapper(tenantName) {
-  var box = document.createElement('span');
-  box.className = 'map-box';
-  var input = document.createElement('input');
-  input.type = 'text';
-  input.placeholder = 'Search Autotask companies…';
-  var results = document.createElement('div');
-  results.className = 'map-results';
-  results.style.display = 'none';
-  box.appendChild(input); box.appendChild(results);
+function setEditing(i, on) {
+  var l = LINES[i];
+  l.use_custom_price = on;
+  if (!on) {
+    // Unticking does NOT change anything in Autotask: the contract keeps its
+    // current price, which is what we show.
+    l.sell_price = null;
+    l.price_effective_date = TODAY;
+    var d = document.querySelector('.js-date[data-i="' + i + '"]');
+    if (d) d.value = TODAY;
+  }
+  var cell = document.querySelector('td.sell[data-i="' + i + '"]');
+  if (cell) cell.className = 'num sell' + (on ? ' editing' : '');
+  var input = document.querySelector('.js-sell[data-i="' + i + '"]');
+  if (input) { input.value = fmt(effSell(l)); if (on) { input.focus(); input.select(); } }
+  refreshLine(l);
+}
 
+function refreshLine(l) {
+  var m = marginPct(l);
+  var el = document.querySelector('[data-marg="' + l._i + '"]');
+  if (el) {
+    el.className = 'marg ' + marginClass(m);
+    el.textContent = m === null ? '—' : m.toFixed(1) + '%';
+  }
+  var view = document.querySelector('td.sell[data-i="' + l._i + '"] .sellview .amt');
+  if (view) {
+    view.className = 'amt js-edit' + (l.use_custom_price ? ' custom' : '');
+    view.innerHTML = fmt(effSell(l)) + '<span class="per">' + periodSuffix(l) + '</span>';
+  }
+  renderStats(LINES.filter(matches));
+}
+
+function wireMapper(input) {
+  var results = input.nextSibling;
+  var tenantName = input.getAttribute('data-t');
   var timer;
   input.oninput = function () {
     clearTimeout(timer);
@@ -637,10 +965,12 @@ function buildMapper(tenantName) {
           if (!(list.companies || []).length) results.innerHTML = '<div class="muted">No matches</div>';
           results.style.display = 'block';
         })
-        .catch(function (e) { results.innerHTML = '<div class="muted">' + escapeHtml(e.message) + '</div>'; results.style.display = 'block'; });
+        .catch(function (e) {
+          results.innerHTML = '<div class="muted">' + escapeHtml(e.message) + '</div>';
+          results.style.display = 'block';
+        });
     }, 350);
   };
-  return box;
 }
 
 function saveMapping(tenantName, company) {
@@ -649,6 +979,37 @@ function saveMapping(tenantName, company) {
     body: JSON.stringify({ tenant_name: tenantName, autotask_company_id: company.id, autotask_company_name: company.name })
   }).then(function () { location.reload(); });
 }
+
+/* ============================================================
+   Filters, save, sync
+   ============================================================ */
+function setAll(open) {
+  if (open) { UI.closed = {}; }
+  else {
+    UI.closed = {};
+    LINES.forEach(function (l) {
+      UI.closed['c:' + l.tenant_name] = true;
+      var n = groupContract(l).name;
+      UI.closed['k:' + l.tenant_name + '|' + n] = true;
+    });
+  }
+  persist();
+  render();
+}
+
+var qTimer;
+document.getElementById('q').oninput = function () {
+  var el = this;
+  clearTimeout(qTimer);
+  qTimer = setTimeout(function () {
+    UI.q = el.value.trim().toLowerCase();
+    render();
+    el.focus();
+  }, 180);
+};
+document.getElementById('onlyDue').onchange = function () { UI.onlyDue = this.checked; render(); };
+document.getElementById('onlyOff').checked = true;
+document.getElementById('onlyOff').onchange = function () { UI.showOff = this.checked; render(); };
 
 function savePayload() {
   return LINES.map(function (l) {
@@ -671,6 +1032,7 @@ function doSave() {
 
 function saveAll(btn) {
   btn.disabled = true;
+  setMsg('Saving…');
   doSave()
     .then(function (res) { setMsg('Saved ' + (res.updated || 0) + ' lines.'); btn.disabled = false; })
     .catch(function (e) { setMsg('Save failed: ' + e.message); btn.disabled = false; });
@@ -687,13 +1049,12 @@ function syncNow(btn) {
       setMsg('Saved ' + (res.updated || 0) + ' lines. Starting sync…');
       return fetch(BASE + '/csp-autotask-sync', { method: 'POST' });
     })
-    .then(function () { setMsg('Sync running — takes ~2–3 minutes for all lines. Refresh after that to see results.'); btn.disabled = false; })
+    .then(function () { setMsg('Sync running — ~2–3 minutes. Refresh after that to see results.'); btn.disabled = false; })
     .catch(function (e) { setMsg('Sync could not start: ' + e.message); btn.disabled = false; });
 }
 
 function setMsg(t) { document.getElementById('msg').textContent = t; }
-function td(child, cls) { var c = document.createElement('td'); if (cls) c.className = cls; c.appendChild(child); return c; }
-function tdText(t, cls) { var c = document.createElement('td'); if (cls) c.className = cls; c.textContent = t; return c; }
+function each(sel, fn) { Array.prototype.forEach.call(document.querySelectorAll(sel), fn); }
 function escapeHtml(s) { var d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; }
 
 render();
