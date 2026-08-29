@@ -129,7 +129,13 @@
   .colhead { background:#fff; border-bottom:1px solid var(--line); }
   .colhead table { border-collapse:collapse; }
   .colhead th { border-bottom:none; }
-  td { padding:11px 12px; border-bottom:1px solid var(--line2); vertical-align:top; font-size:13.5px; }
+  /* One line-height for every cell, so the first line of a service name, its
+     quantity, its prices and its chips all sit on the same baseline across the
+     row. The row divider is the full line colour because the rows are tall -
+     a service name, its term and its invoice wording stack up - and a hairline
+     gets lost over that distance. */
+  td { padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:top;
+       font-size:13.5px; line-height:1.35; }
   tr.line:last-child td, tr.detail:last-child td { border-bottom:none; }
   tr.line:hover td { background:#fafcff; }
   tr.line.off td { opacity:.5; }
@@ -137,8 +143,8 @@
   td.pick { width:34px; padding-left:18px; padding-right:0; }
   td.pick input { width:15px; height:15px; accent-color:var(--brand); cursor:pointer; }
 
-  .svc { font-weight:550; letter-spacing:-.005em; line-height:1.3; }
-  .svcsub { font-size:11.5px; color:var(--muted); margin-top:3px; display:flex; flex-wrap:wrap; gap:4px 8px; align-items:center; }
+  .svc { font-weight:550; letter-spacing:-.005em; }
+  .svcsub { font-size:11.5px; color:var(--muted); margin-top:3px; display:flex; flex-wrap:wrap; gap:3px 10px; align-items:center; }
   .dot { color:#cbd5e1; }
 
   .badge {
@@ -157,7 +163,12 @@
   .badge.mapped { background:var(--okbg); color:var(--ok); }
 
   .rate { font-weight:600; }
-  .per { font-size:11px; color:var(--muted); font-weight:400; }
+  /* The unit is a fixed-width gutter to the right of every money figure, and
+     the money headings carry the same gutter, so a column heading sits over
+     the digits it names instead of over "/mo". */
+  .per { display:inline-block; width:24px; padding-left:3px; text-align:left;
+    font-size:11px; color:var(--muted); font-weight:400; }
+  th.unit { padding-right:36px; }
   /* Margin is neutral when healthy so the exceptions are the only thing
      that catches the eye. */
   .marg { color:var(--ink2); }
@@ -211,9 +222,9 @@
 
   /* ---------- billing pill + detail ---------- */
   .pill {
-    display:inline-flex; align-items:center; gap:7px; padding:4px 10px 4px 8px; border-radius:8px;
-    font-size:12.5px; font-weight:600; border:1px solid transparent; cursor:pointer; background:none;
-    font-family:inherit; color:inherit; white-space:nowrap;
+    display:inline-flex; align-items:center; gap:7px; padding:2px 9px 2px 7px; border-radius:8px;
+    font-size:12.5px; font-weight:600; line-height:1.25; border:1px solid transparent; cursor:pointer;
+    background:none; font-family:inherit; color:inherit; white-space:nowrap;
   }
   .pill .tick { font-size:9px; opacity:.85; }
   .pill.due { background:var(--warnbg); border-color:#fde68a; color:var(--warn); }
@@ -221,10 +232,10 @@
   .pill.none { background:#f8fafc; border-color:var(--line); color:var(--muted); font-weight:500; cursor:default; }
   .pill.due:hover, .pill.clear:hover { filter:brightness(.97); }
   .pill .n { font-weight:500; opacity:.85; font-size:11.5px; }
-  .billcell { display:flex; align-items:center; gap:5px; flex-wrap:wrap; }
+  .billcell, .chgcell { display:flex; align-items:center; gap:5px; flex-wrap:wrap; min-height:18px; }
   .itag {
-    display:inline-flex; align-items:center; padding:2px 7px; border-radius:6px; white-space:nowrap;
-    font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.05em;
+    display:inline-flex; align-items:center; padding:1px 7px; border-radius:6px; white-space:nowrap;
+    font-size:10px; font-weight:700; line-height:1.4; text-transform:uppercase; letter-spacing:.05em;
     border:1px solid transparent; cursor:default;
   }
   .itag.yes { background:#eff6ff; border-color:#bfdbfe; color:#1d4ed8; }
@@ -246,15 +257,15 @@
      the exceptions carry a chip - the same reason the margin column is neutral
      when it is healthy. */
   .chg {
-    display:inline-flex; align-items:center; padding:2px 7px; border-radius:6px; white-space:nowrap;
-    font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.05em;
+    display:inline-flex; align-items:center; padding:1px 7px; border-radius:6px; white-space:nowrap;
+    font-size:10px; font-weight:700; line-height:1.4; text-transform:uppercase; letter-spacing:.05em;
     border:1px solid transparent; cursor:help;
   }
   .chg.new { background:#eef2ff; border-color:#c7d2fe; color:#4338ca; }
   .chg.prorata { background:var(--violetbg); border-color:#ddd6fe; color:var(--violet); }
   .chg.qty { background:var(--warnbg); border-color:#fde68a; color:var(--warn); }
-  .chg.same, .chg.none { font-size:11.5px; font-weight:400; text-transform:none; letter-spacing:0;
-    padding:0; color:var(--muted); }
+  .chg.same, .chg.none { font-size:12.5px; font-weight:400; text-transform:none; letter-spacing:0;
+    padding:0; border:none; color:var(--muted); }
 
   tr.detail { display:none; }
   tr.detail.open { display:table-row; }
@@ -595,24 +606,24 @@ function pendingCount(l) {
   return pendingItems(l).filter(function (i) { return i.type !== 'next cycle'; }).length;
 }
 // The dates the waiting charges actually carry, which is what Autotask's
-// Approve & Post screen asks you for. It is NOT the billing month: seats that
-// moved part way through an earlier cycle arrive in this report as pro-rata
-// lines dated back to the day they changed, so a range starting at this
-// month's cycle silently leaves them behind - which is the whole reason to
-// print it.
+// Approve & Post screen asks you for. Both ends are CHARGE dates - the start
+// of each period, which is how Autotask dates a billing item - never the end
+// of the last period. Running the range on to that end date would reach past
+// the last charge in this report and sweep in the cycles after it.
 //
-// Both ends are widened: the earliest start and the latest end (the start
-// again for an open-ended line). Autotask dates a billing item within its
-// period, so a range spanning start to end always contains it, and erring
-// wide only ever shows more of the same report.
+// The first date is the point of printing this at all: it is NOT the billing
+// month. Seats that moved part way through an earlier cycle arrive in this
+// report as pro-rata lines dated back to the day they changed, so a range
+// starting at this month's cycle silently leaves them behind.
 function pendingSpan(l) {
   var span = { first: '', last: '' };
   if (!effInclude(l) || !l.billing_last) return span;
   pendingItems(l).forEach(function (x) {
     if (x.type === 'next cycle') return;
-    var a = String(x.s || ''), b = String(x.e || '') || a;
-    if (a && (!span.first || a < span.first)) span.first = a;
-    if (b && (!span.last || b > span.last)) span.last = b;
+    var a = String(x.s || '');
+    if (!a) return;
+    if (!span.first || a < span.first) span.first = a;
+    if (!span.last || a > span.last) span.last = a;
   });
   return span;
 }
@@ -621,10 +632,12 @@ function widenSpan(into, add) {
   if (add.last && (!into.last || add.last > into.last)) into.last = add.last;
   return into;
 }
-// "13 Jul → 31 Aug 2026" - the year on the first date is only worth the room
-// when the range crosses one.
+// "13 Jul → 1 Aug 2026" - the year on the first date is only worth the room
+// when the range crosses one, and a set of charges all dated the same day is
+// one date, not a range from itself to itself.
 function spanLabel(span) {
   if (!span.first || !span.last) return '';
+  if (span.first === span.last) return longDateIso(span.first);
   var sameYear = span.first.slice(0, 4) === span.last.slice(0, 4);
   return (sameYear ? shortDateIso(span.first) : longDateIso(span.first)) +
     ' → ' + longDateIso(span.last);
@@ -633,11 +646,16 @@ function spanLabel(span) {
 // it hangs off the contract's pill or the customer's chip.
 function rangeHint(scope, span) {
   if (!span.first || !span.last) return '';
-  return 'The charges waiting to be approved & posted for ' + scope + ' are dated ' +
-    longDateIso(span.first) + ' to ' + longDateIso(span.last) +
-    '. Use that as the date range in Autotask’s Approve & Post screen: a pro-rata change carried ' +
-    'over from an earlier cycle is dated back to the day the seats moved, so a range starting at ' +
-    'this month’s cycle would leave it behind.';
+  return (span.first === span.last
+      ? 'Every charge waiting to be approved & posted for ' + scope + ' is dated ' +
+        longDateIso(span.first) + '.'
+      : 'The charges waiting to be approved & posted for ' + scope + ' are dated ' +
+        longDateIso(span.first) + ' to ' + longDateIso(span.last) + '.') +
+    ' Use that as the date range in Autotask’s Approve & Post screen. These are charge dates - ' +
+    'Autotask dates a charge at the start of the period it covers - so the range stops at the last ' +
+    'charge rather than running on to the end of its period, which would sweep in cycles that are ' +
+    'not in this report. The first date reaches back to any pro-rata change carried over from an ' +
+    'earlier cycle, dated the day the seats moved.';
 }
 // The customer header has no pill to hang the range off, so there it is a
 // chip of its own - labelled, because a bare pair of dates sitting beside a
@@ -826,11 +844,11 @@ function renderStats(visible) {
 var COLS = '<colgroup>' +
   '<col style="width:42px">' +
   '<col>' +
-  '<col style="width:62px">' +
-  '<col style="width:92px">' +
-  '<col style="width:92px">' +
+  '<col style="width:52px">' +
+  '<col style="width:100px">' +
+  '<col style="width:100px">' +
   '<col style="width:150px">' +
-  '<col style="width:80px">' +
+  '<col style="width:72px">' +
   '<col style="width:104px">' +
   '<col style="width:238px">' +
   '<col style="width:76px">' +
@@ -839,13 +857,13 @@ var COLHEAD = '<div class="colhead"><table>' + COLS + '<thead><tr>' +
   '<th></th>' +
   '<th>Service</th>' +
   '<th class="num">Qty</th>' +
-  '<th class="num" title="Dicker unit cost for one billing period">Cost</th>' +
-  '<th class="num" title="Dicker unit RRP for one billing period">RRP</th>' +
-  '<th class="num" title="What Autotask charges per unit. Click a price to change it.">Sell</th>' +
+  '<th class="num unit" title="Dicker unit cost for one billing period">Cost</th>' +
+  '<th class="num unit" title="Dicker unit RRP for one billing period">RRP</th>' +
+  '<th class="num unit" title="What Autotask charges per unit. Click a price to change it.">Sell</th>' +
   '<th class="num">Margin</th>' +
   '<th title="What this month&#39;s imported report does to each line: a subscription Autotask has never billed, a mid-cycle change billed pro-rata, a different seat count, or the same charge as last cycle.">Change</th>' +
   '<th title="What each service still has waiting in Autotask&#39;s Approve &amp; Post screen, and whether its last posted charge has reached an invoice. Click an amount for the breakdown.">Billing</th>' +
-  '<th>Sync</th>' +
+  '<th class="num">Sync</th>' +
 '</tr></thead></table></div>';
 
 function customerHtml(name, lines) {
@@ -1092,7 +1110,7 @@ function lineHtml(l) {
         : '')) + '">' +
       escapeHtml(nm) + (cut ? '<span class="muted">…</span>' : '') + '</div>' +
       (bits.length
-        ? '<div class="svcsub">' + bits.join('<span class="dot">·</span>') + '</div>'
+        ? '<div class="svcsub">' + bits.join('') + '</div>'
         : '') +
       invoiceHtml(l, i) + '</td>' +
     '<td class="num">' + escapeHtml(String(l.qty || 0)) + '</td>' +
@@ -1114,9 +1132,9 @@ function lineHtml(l) {
       '</div>' +
     '</td>' +
     '<td class="num">' + marginHtml(l, i) + '</td>' +
-    '<td>' + changeHtml(l) + '</td>' +
+    '<td><div class="chgcell">' + changeHtml(l) + '</div></td>' +
     '<td><div class="billcell">' + pill + itag + '</div></td>' +
-    '<td>' + syncHtml(l) + '</td>' +
+    '<td class="num">' + syncHtml(l) + '</td>' +
   '</tr>';
 
   return main + detailHtml(l);
