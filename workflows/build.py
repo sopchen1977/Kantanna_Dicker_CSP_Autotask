@@ -9,6 +9,7 @@ Usage:  python3 workflows/build.py
 Output: workflows/generated/*.js  (paste or push these to n8n)
 """
 import json
+import re
 from pathlib import Path
 
 HERE = Path(__file__).parent
@@ -62,6 +63,20 @@ def portal_html() -> str:
     return json.dumps((HERE.parent / "portal" / "portal.html").read_text())
 
 
+def import_done_html() -> str:
+    """The upload form's completion page, injected into the Form node.
+
+    The file's HTML comment is repo documentation, not page content, and it is
+    stripped rather than shipped - it explains the {{ }} expression rule and so
+    contains an empty {{ }} that n8n would otherwise try to evaluate. What is
+    left is collapsed to one line: it becomes an n8n expression, so newlines
+    buy nothing.
+    """
+    text = (HERE.parent / "portal" / "import-complete.html").read_text()
+    text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
+    return json.dumps(" ".join(text.split()))
+
+
 def build() -> None:
     OUT.mkdir(exist_ok=True)
     for tmpl in sorted(TEMPLATES.glob("*.tmpl.js")):
@@ -71,6 +86,8 @@ def build() -> None:
                 text = text.replace(token, runtime_literal(filename))
         if "__PORTAL_HTML__" in text:
             text = text.replace("__PORTAL_HTML__", portal_html())
+        if "__IMPORT_DONE_HTML__" in text:
+            text = text.replace("__IMPORT_DONE_HTML__", import_done_html())
         for token, value in IDS.items():
             text = text.replace(token, value)
         out_path = OUT / tmpl.name.replace(".tmpl.js", ".js")

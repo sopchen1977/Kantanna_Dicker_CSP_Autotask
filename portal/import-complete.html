@@ -1,0 +1,28 @@
+<!--
+  The completion page for the monthly upload form (workflow 01), injected into
+  the "Import Complete" Form node as responseText. The Form node renders it as
+  the ENTIRE page, so there is no n8n chrome around it and no <head> to hang
+  anything off. Two consequences worth knowing before editing:
+
+    - Every style is inline. The Form node strips <style> and <script>.
+    - {{ }} is an n8n expression, evaluated server-side against the Summarize
+      Import node's output. A literal double brace anywhere else would be
+      read as an expression too, so avoid adjacent braces in any CSS you add.
+
+  The portal address is written out in full rather than as a root-relative
+  path: it is shown as copyable text as well as linked, and "/webhook/csp-pricing"
+  is not something anyone can paste into a browser or an email.
+-->
+<div style="max-width:520px;margin:14vh auto;padding:0 20px;font:15px/1.5 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#0f172a;text-align:center">
+  <div style="width:46px;height:46px;margin:0 auto 18px;border-radius:50%;background:#ecfdf5;color:#047857;font-size:22px;line-height:46px">&#10003;</div>
+  <h1 style="margin:0 0 8px;font-size:21px;font-weight:650;letter-spacing:-.01em">Import complete</h1>
+  <p style="margin:0 0 26px;color:#475569">
+    Imported <b>{{ $json.line_count }}</b> subscription lines for <b>{{ $json.customer_count }}</b> customer(s).<br>
+    Next: review the sell prices, then sync to Autotask.
+  </p>
+  <a href="https://gayleai.app.n8n.cloud/webhook/csp-pricing" style="display:inline-block;padding:12px 22px;border-radius:9px;background:#2563eb;color:#fff;text-decoration:none;font-weight:600">Open the pricing portal &rarr;</a>
+  <p style="margin:22px 0 0;font-size:12px;color:#94a3b8">
+    Or copy this address:<br>
+    <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;color:#475569;word-break:break-all">https://gayleai.app.n8n.cloud/webhook/csp-pricing</span>
+  </p>
+</div>

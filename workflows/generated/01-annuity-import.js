@@ -178,6 +178,11 @@ const summarizeImport = node({
   output: [{ line_count: 12, customer_count: 2 }]
 });
 
+// The upload is only half the job - the prices still have to be reviewed and
+// synced - so the completion page's real purpose is to hand you to the portal.
+// respondWith 'showText' renders portal/import-complete.html as the whole page,
+// which is what buys a proper link; the plain-text completion screen cannot
+// carry one.
 const importDone = node({
   type: 'n8n-nodes-base.form',
   version: 2.5,
@@ -186,9 +191,8 @@ const importDone = node({
     position: [1280, 0],
     parameters: {
       operation: 'completion',
-      respondWith: 'text',
-      completionTitle: 'Import complete',
-      completionMessage: expr('Imported {{ $json.line_count }} subscription lines for {{ $json.customer_count }} customer(s). Open the pricing portal to review sell prices and sync to Autotask.')
+      respondWith: 'showText',
+      responseText: expr("<div style=\"max-width:520px;margin:14vh auto;padding:0 20px;font:15px/1.5 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#0f172a;text-align:center\"> <div style=\"width:46px;height:46px;margin:0 auto 18px;border-radius:50%;background:#ecfdf5;color:#047857;font-size:22px;line-height:46px\">&#10003;</div> <h1 style=\"margin:0 0 8px;font-size:21px;font-weight:650;letter-spacing:-.01em\">Import complete</h1> <p style=\"margin:0 0 26px;color:#475569\"> Imported <b>{{ $json.line_count }}</b> subscription lines for <b>{{ $json.customer_count }}</b> customer(s).<br> Next: review the sell prices, then sync to Autotask. </p> <a href=\"https://gayleai.app.n8n.cloud/webhook/csp-pricing\" style=\"display:inline-block;padding:12px 22px;border-radius:9px;background:#2563eb;color:#fff;text-decoration:none;font-weight:600\">Open the pricing portal &rarr;</a> <p style=\"margin:22px 0 0;font-size:12px;color:#94a3b8\"> Or copy this address:<br> <span style=\"font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;color:#475569;word-break:break-all\">https://gayleai.app.n8n.cloud/webhook/csp-pricing</span> </p> </div>")
     }
   }
 });

@@ -178,6 +178,11 @@ const summarizeImport = node({
   output: [{ line_count: 12, customer_count: 2 }]
 });
 
+// The upload is only half the job - the prices still have to be reviewed and
+// synced - so the completion page's real purpose is to hand you to the portal.
+// respondWith 'showText' renders portal/import-complete.html as the whole page,
+// which is what buys a proper link; the plain-text completion screen cannot
+// carry one.
 const importDone = node({
   type: 'n8n-nodes-base.form',
   version: 2.5,
@@ -186,9 +191,8 @@ const importDone = node({
     position: [1280, 0],
     parameters: {
       operation: 'completion',
-      respondWith: 'text',
-      completionTitle: 'Import complete',
-      completionMessage: expr('Imported {{ $json.line_count }} subscription lines for {{ $json.customer_count }} customer(s). Open the pricing portal to review sell prices and sync to Autotask.')
+      respondWith: 'showText',
+      responseText: expr(__IMPORT_DONE_HTML__)
     }
   }
 });
