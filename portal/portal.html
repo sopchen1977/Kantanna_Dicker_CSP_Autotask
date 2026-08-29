@@ -768,9 +768,11 @@ function contractHtml(customer, cname, block) {
     }
   });
   // The same invoiced/not-invoiced split as the rows, rolled up: how many of
-  // this contract's posted services have reached a customer invoice.
+  // this contract's posted services have reached a customer invoice. Held back
+  // on the same condition - while anything on the contract is waiting to be
+  // posted, "all invoiced" is answering last month's question.
   var invTag = '';
-  if (posted > 0) {
+  if (posted > 0 && pend === 0) {
     invTag = invoiced === posted
       ? '<span class="itag yes" title="Every posted charge on this contract is on a customer invoice">all invoiced</span>'
       : '<span class="itag no" title="' + attr(String(posted - invoiced) + ' of ' + posted +
@@ -874,10 +876,19 @@ function lineHtml(l) {
   }
 
   // Beside the pill: whether the charge that was last posted has since been
-  // pulled onto an invoice. A line that has never been posted has nothing to
-  // say about invoicing, so it gets no tag at all.
+  // pulled onto an invoice.
+  //
+  // Only once the line has nothing waiting. The tag describes the LAST POSTED
+  // charge, so the moment a new cycle is imported it is talking about the
+  // previous month while the pill beside it is talking about this one -
+  // "$1,071.05 to post" next to "INVOICED" reads as a contradiction, and the
+  // reassuring half is the one that is out of date. What the last cycle did
+  // is history at that point, and history lives in the drawer.
+  //
+  // A line that has never been posted has nothing to say about invoicing
+  // either, so it gets no tag at all.
   var itag = '';
-  if (on && lastPostedIso(l)) {
+  if (on && lastPostedIso(l) && pendingCount(l) === 0) {
     var when = longDateIso(l.billing_last_date || lastPostedIso(l));
     if (isInvoiced(l)) {
       itag = '<span class="itag yes" title="' + attr('The charge posted on ' + when +
