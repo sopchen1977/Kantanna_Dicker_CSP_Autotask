@@ -221,6 +221,14 @@
   .pill.none { background:#f8fafc; border-color:var(--line); color:var(--muted); font-weight:500; cursor:default; }
   .pill.due:hover, .pill.clear:hover { filter:brightness(.97); }
   .pill .n { font-weight:500; opacity:.85; font-size:11.5px; }
+  .billcell { display:flex; align-items:center; gap:5px; flex-wrap:wrap; }
+  .itag {
+    display:inline-flex; align-items:center; padding:2px 7px; border-radius:6px; white-space:nowrap;
+    font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.05em;
+    border:1px solid transparent; cursor:default;
+  }
+  .itag.yes { background:#eff6ff; border-color:#bfdbfe; color:#1d4ed8; }
+  .itag.no { background:#f8fafc; border-color:var(--line); color:var(--muted); font-weight:600; }
 
   tr.detail { display:none; }
   tr.detail.open { display:table-row; }
@@ -569,6 +577,14 @@ function lastPostedIso(l) {
   var m = String(l.billing_last || '').match(/^\d{4}-\d{2}-\d{2}/);
   return m ? m[0] : '';
 }
+// Autotask posts a charge first and pulls it onto a customer invoice later,
+// so "posted" and "invoiced" are two different states. Only the most recent
+// posting is read back from BillingItems, so this is that charge's state: the
+// invoice number if it has landed on one, '' while it is still only posted.
+function invoiceRef(l) {
+  return String(l.billing_last_invoice_number || '') || String(l.billing_last_invoice_id || '');
+}
+function isInvoiced(l) { return !!invoiceRef(l); }
 function needsAttention(l) {
   var s = String(l.sync_status || '');
   return s === 'error' || s === 'needs_mapping' || s === 'unmapped' || s === 'partial';
@@ -677,7 +693,7 @@ var COLS = '<colgroup>' +
   '<col style="width:92px">' +
   '<col style="width:150px">' +
   '<col style="width:80px">' +
-  '<col style="width:168px">' +
+  '<col style="width:214px">' +
   '<col style="width:76px">' +
 '</colgroup>';
 var COLHEAD = '<div class="colhead"><table>' + COLS + '<thead><tr>' +
@@ -688,7 +704,7 @@ var COLHEAD = '<div class="colhead"><table>' + COLS + '<thead><tr>' +
   '<th class="num" title="Dicker unit RRP for one billing period">RRP</th>' +
   '<th class="num" title="What Autotask charges per unit. Click a price to change it.">Sell</th>' +
   '<th class="num">Margin</th>' +
-  '<th title="What each service still has waiting in Autotask&#39;s Approve &amp; Post screen. Click an amount for the breakdown.">Billing</th>' +
+  '<th title="What each service still has waiting in Autotask&#39;s Approve &amp; Post screen, and whether its last posted charge has reached an invoice. Click an amount for the breakdown.">Billing</th>' +
   '<th>Sync</th>' +
 '</tr></thead></table></div>';
 
@@ -740,14 +756,27 @@ function contractHtml(customer, cname, block) {
   var key = 'k:' + customer + '|' + cname;
   var closed = !!UI.closed[key];
 
-  var due = 0, monthly = 0, checked = false, pend = 0, posted = 0;
+  var due = 0, monthly = 0, checked = false, pend = 0, posted = 0, invoiced = 0;
   lines.forEach(function (l) {
     if (effInclude(l)) monthly += monthlyValue(l);
     if (effInclude(l) && l.billing_last) checked = true;
     due += dueNow(l);
     pend += pendingCount(l);
-    if (effInclude(l) && lastPostedIso(l)) posted++;
+    if (effInclude(l) && lastPostedIso(l)) {
+      posted++;
+      if (isInvoiced(l)) invoiced++;
+    }
   });
+  // The same invoiced/not-invoiced split as the rows, rolled up: how many of
+  // this contract's posted services have reached a customer invoice.
+  var invTag = '';
+  if (posted > 0) {
+    invTag = invoiced === posted
+      ? '<span class="itag yes" title="Every posted charge on this contract is on a customer invoice">all invoiced</span>'
+      : '<span class="itag no" title="' + attr(String(posted - invoiced) + ' of ' + posted +
+          ' posted services are not on a customer invoice yet') + '">' +
+        (posted - invoiced) + ' not invoiced</span>';
+  }
   var atId = (lines.filter(function (l) { return l.autotask_contract_id; })[0] || {}).autotask_contract_id;
 
   var title, meta;
@@ -770,6 +799,7 @@ function contractHtml(customer, cname, block) {
             ? '<span class="pill clear" style="cursor:default"><span class="tick">&#10003;</span>all posted</span>'
             : '<span class="pill none" style="cursor:default">nothing to bill</span>'))
         : '') +
+      invTag +
       (atId ? contractLink(atId) : '') +
     '</div>';
   }
@@ -843,6 +873,24 @@ function lineHtml(l) {
     }
   }
 
+  // Beside the pill: whether the charge that was last posted has since been
+  // pulled onto an invoice. A line that has never been posted has nothing to
+  // say about invoicing, so it gets no tag at all.
+  var itag = '';
+  if (on && lastPostedIso(l)) {
+    var when = longDateIso(l.billing_last_date || lastPostedIso(l));
+    if (isInvoiced(l)) {
+      itag = '<span class="itag yes" title="' + attr('The charge posted on ' + when +
+        ' is on invoice ' + invoiceRef(l) +
+        (l.billing_last_invoice_date ? ' of ' + longDateIso(l.billing_last_invoice_date) : '') +
+        '. Open the row for the link.') + '">invoiced</span>';
+    } else {
+      itag = '<span class="itag no" title="' + attr('The charge posted on ' + when +
+        ' has been approved & posted but is not on a customer invoice yet.') +
+        '">not invoiced</span>';
+    }
+  }
+
   var main = '<tr class="line' + (on ? '' : ' off') + '" data-i="' + i + '">' +
     '<td class="pick"><input type="checkbox" class="js-incl" data-i="' + i + '"' + (on ? ' checked' : '') +
       ' title="Include this line in the Autotask sync"></td>' +
@@ -873,7 +921,7 @@ function lineHtml(l) {
       '</div>' +
     '</td>' +
     '<td class="num">' + marginHtml(l, i) + '</td>' +
-    '<td>' + pill + '</td>' +
+    '<td><div class="billcell">' + pill + itag + '</div></td>' +
     '<td>' + syncHtml(l) + '</td>' +
   '</tr>';
 
