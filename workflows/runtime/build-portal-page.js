@@ -35,10 +35,8 @@ const byCsId = {};
 for (const c of live) byCsId[String(c.id)] = c;
 
 // What Autotask has already approved & posted, per contract service. A
-// BillingItem exists only once a charge has been through Approve & Post, so
-// the newest itemDate for a contract service is its last posting; several
-// rows can share that date (a cycle charge plus its pro-rata adjustments),
-// so they are summed. invoiceID is 0 until the posting reaches an invoice.
+// BillingItem exists only once a charge has been through Approve & Post.
+// invoiceID is 0 until the posting reaches an invoice.
 let billing = [];
 try {
   billing = ($('Fetch Billing Items').first().json.items) || [];
@@ -57,24 +55,43 @@ function itemAmount(b) {
   return isNaN(t) ? 0 : t;
 }
 
-const postedByCs = {};
+// Autotask bills a contract service one PERIOD at a time and dates the item
+// at the period start - but it can raise a SECOND item inside the same
+// period for a mid-cycle change, dated the day the seats moved (Kantanna's
+// Copilot Business line has one on 18 Jun beside the 1 Jun cycle charge).
+// Grouping on contractServicePeriodID keeps a period's rows together, so the
+// last posting is the last PERIOD and its totals - not whichever single row
+// happens to carry the newest date, which for a mid-cycle adjustment would
+// read as a period starting halfway through the month.
+const periods = {};
 for (const b of billing) {
   if (b.contractServiceID === undefined || b.contractServiceID === null) continue;
   const date = String(b.itemDate || '').slice(0, 10);
   if (!date) continue;
   const key = String(b.contractServiceID);
-  let e = postedByCs[key];
-  if (!e || date > e.date) {
-    e = { date: date, amount: 0, qty: 0, rows: 0, posted_on: '', invoice_id: 0 };
-    postedByCs[key] = e;
-  }
-  if (date !== e.date) continue;
+  // No period id (an ad-hoc charge) means the row stands on its own.
+  const pk = b.contractServicePeriodID !== undefined && b.contractServicePeriodID !== null
+    ? 'p' + b.contractServicePeriodID : 'd' + date;
+  const byPeriod = periods[key] || (periods[key] = {});
+  const e = byPeriod[pk] || (byPeriod[pk] =
+    { date: date, amount: 0, qty: 0, rows: 0, posted_on: '', invoice_id: 0 });
+  // A period starts at its earliest item; a later row is a change within it.
+  if (date < e.date) e.date = date;
   e.amount = Math.round((e.amount + itemAmount(b)) * 100) / 100;
   e.qty += Number(b.quantity || 0);
   e.rows += 1;
   const on = String(b.postedOnTime || b.postedDate || '').slice(0, 10);
   if (on > e.posted_on) e.posted_on = on;
   if (Number(b.invoiceID) > 0) e.invoice_id = Number(b.invoiceID);
+}
+const postedByCs = {};
+for (const key of Object.keys(periods)) {
+  let best = null;
+  for (const pk of Object.keys(periods[key])) {
+    const g = periods[key][pk];
+    if (!best || g.date > best.date) best = g;
+  }
+  if (best) postedByCs[key] = best;
 }
 
 lines = lines.map((l) => {

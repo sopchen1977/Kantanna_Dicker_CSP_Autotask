@@ -564,8 +564,11 @@ function pendingItems(l) {
   try { inv = JSON.parse(l.invoice_lines || '[]'); } catch (e) {}
   inv = inv.filter(function (x) { return x && x.s; })
     .sort(function (a, b) { return String(a.s).localeCompare(String(b.s)); });
-  var m = String(l.billing_last || '').match(/^\d{4}-\d{2}-\d{2}/);
-  var lastPosted = m ? m[0] : null;
+  // Everything Autotask has already billed for this service - see
+  // postedThroughIso. It is the END of the last posted period, not the date
+  // stamped on it.
+  var postedThrough = postedThroughIso(l);
+  var lastPosted = lastPostedIso(l) || null;
 
   var cycleEnd = '';
   inv.forEach(function (x) { if (String(x.e || '') > cycleEnd) cycleEnd = String(x.e || ''); });
@@ -576,7 +579,7 @@ function pendingItems(l) {
 
   var items = [];
   inv.forEach(function (x) {
-    if (lastPosted && String(x.s) <= lastPosted) return; // covered by what's posted
+    if (postedThrough && String(x.s) <= postedThrough) return; // billed by that posting
     var isCycle = String(x.s) === cycleStart && String(x.e) === cycleEnd;
     var factor = perUnitCost > 0 ? Math.min(Number(x.u || 0) / perUnitCost, 1) : (isCycle ? 1 : 0);
     items.push({ s: String(x.s), e: String(x.e || ''), q: Number(x.q || 0),
@@ -675,6 +678,23 @@ function lastPostedIso(l) {
   if (l.billing_last_date) return String(l.billing_last_date);
   var m = String(l.billing_last || '').match(/^\d{4}-\d{2}-\d{2}/);
   return m ? m[0] : '';
+}
+// The last day Autotask has already billed for. It bills a contract service
+// one PERIOD at a time, dates the resulting item at the period START, and
+// charges the quantity in force when you approve it - so a single Approve &
+// Post covers that period's cycle charge AND every mid-cycle change inside
+// it. (Kantanna's WIN 365 line posted on 22 Jul at qty 2, the second seat
+// having been added on the 27th; Autotask billed both in the one item.)
+//
+// What is already billed is therefore a period, not a date. Comparing a
+// report line against the posted DATE alone left every pro-rata row dated
+// after the period start looking unposted for ever, however many times it
+// had actually been posted - the portal kept asking for money already
+// billed.
+function postedThroughIso(l) {
+  var start = lastPostedIso(l);
+  if (!start) return '';
+  return addDaysIso(addMonthsIso(start, l.billing_months === 12 ? 12 : 1), -1);
 }
 // Autotask posts a charge first and pulls it onto a customer invoice later,
 // so "posted" and "invoiced" are two different states. Only the most recent
@@ -1209,14 +1229,17 @@ function lastPostedHtml(l) {
   var qty = Number(l.billing_last_qty) || 0;
   var inv = String(l.billing_last_invoice_number || '');
   var invId = String(l.billing_last_invoice_id || '');
+  var through = postedThroughIso(l);
   var line = '<div class="dline posted"><span class="when">' +
-    escapeHtml(longDateIso(l.billing_last_date)) + '</span>' +
+    escapeHtml(longDateIso(l.billing_last_date) +
+      (through ? ' → ' + longDateIso(through) : '')) + '</span>' +
     '<span class="dtag">' + (inv || invId ? 'invoiced' : 'posted') + '</span>' +
     '<span class="muted">qty ' + escapeHtml(String(qty)) +
       (rows > 1 ? ' · ' + rows + ' items' : '') + '</span>' +
     '<span class="amt">' + money(l.billing_last_amount) + '</span></div>';
   var bits = [];
   if (l.billing_last_posted_on) bits.push('posted ' + longDateIso(l.billing_last_posted_on));
+  if (through) bits.push('covers everything dated to ' + longDateIso(through));
   if (inv || invId) {
     bits.push('invoice ' + invoiceLink(invId, inv) +
       (l.billing_last_invoice_date ? ' of ' + escapeHtml(longDateIso(l.billing_last_invoice_date)) : ''));

@@ -48,16 +48,29 @@ function amount(b) {
   return isNaN(t) ? 0 : t;
 }
 
-// Latest posted period = max item date; several items can share that date
-// (pro-rata rows), so sum them and note whether any is already invoiced.
-let lastDate = '';
-let lastTotal = 0;
-let lastInvoiced = false;
+// Autotask bills one PERIOD at a time and dates the item at the period
+// start, but can raise a second item inside the same period for a mid-cycle
+// change, dated the day it changed. Group on contractServicePeriodID so the
+// last posting is the last period and its total - taking the newest single
+// row instead would report a period that appears to start mid-month, and
+// the portal reads this date to decide what is already billed.
+const periods = {};
 for (const b of items) {
   const d = iso(b.itemDate || b.postedOnDate || b.postedDate);
   if (!d) continue;
-  if (d > lastDate) { lastDate = d; lastTotal = 0; lastInvoiced = false; }
-  if (d === lastDate) { lastTotal += amount(b); if (b.invoiceID) lastInvoiced = true; }
+  const pk = b.contractServicePeriodID !== undefined && b.contractServicePeriodID !== null
+    ? 'p' + b.contractServicePeriodID : 'd' + d;
+  const e = periods[pk] || (periods[pk] = { date: d, total: 0, invoiced: false });
+  if (d < e.date) e.date = d;
+  e.total += amount(b);
+  if (b.invoiceID) e.invoiced = true;
+}
+let lastDate = '';
+let lastTotal = 0;
+let lastInvoiced = false;
+for (const pk of Object.keys(periods)) {
+  const e = periods[pk];
+  if (e.date > lastDate) { lastDate = e.date; lastTotal = e.total; lastInvoiced = e.invoiced; }
 }
 
 const qty = Number(line.qty || 0);
