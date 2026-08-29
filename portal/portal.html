@@ -289,6 +289,16 @@
 <script id="__data" type="application/json">__DATA_PLACEHOLDER__</script>
 <script>
 var BASE = location.pathname.replace(/\/csp-pricing.*$/, '');
+// Where the invoice numbers in the "Last approved & posted" drawer point.
+// Autotask's ExecuteCommand API has documented codes for opening a contract,
+// a ticket, a quote and half a dozen other things, but none for an invoice -
+// so this address is NOT from the API docs. It is what Autotask itself puts in
+// the address bar with an invoice open, which makes it undocumented and liable
+// to change under us. {id} is the invoice's INTERNAL id (7807), not the number
+// the customer sees on the invoice (4339); {number} is available too. Blank
+// this and the numbers render as plain text again, which is the whole
+// fallback: nothing guessed, nothing to break.
+var INVOICE_URL = 'https://ww31.autotask.net/Mvc/Contracts/InvoiceViewer.mvc?invoiceId={id}';
 var DATA = JSON.parse(atob(document.getElementById('__data').textContent));
 var LINES = DATA.lines || [];
 var MAPPINGS = {};
@@ -904,8 +914,8 @@ function syncHtml(l) {
 
 // The last charge Autotask has actually approved & posted for this service,
 // read live from BillingItems, with the invoice it landed on if it has been
-// invoiced since. Whether the invoice number is a link depends on INVOICE_URL
-// below.
+// invoiced since. The invoice number links straight into Autotask's invoice
+// viewer - see INVOICE_URL at the top of this script.
 function lastPostedHtml(l) {
   if (!l.billing_last_date) {
     return '<div class="dnone">Nothing has been approved &amp; posted for this service yet.</div>';
@@ -971,26 +981,22 @@ function contractLink(contractId) {
     encodeURIComponent(contractId) + '">Open #' + escapeHtml(String(contractId)) + ' &#8599;</a>';
 }
 
-// Autotask's ExecuteCommand API has a documented code for opening a contract,
-// a ticket, a quote, a project and half a dozen other things, but none for an
-// invoice - so there is no address that can be derived for one. Paste the URL
-// Autotask shows in the address bar with an invoice open, with {id} where the
-// invoice id appears and {number} where the invoice number appears, and every
-// invoice on this screen becomes a link. Left empty, the number renders as
-// text to search on, which is the honest alternative to a guessed address.
-var INVOICE_URL = '';
-
+// Labelled with the invoice NUMBER, because that is what appears on the
+// customer's invoice and in Autotask's own lists; the internal id only ever
+// goes in the URL. Without an internal id there is nothing to link to, so the
+// number stays text however INVOICE_URL is set.
 function invoiceLink(invoiceId, invoiceNumber) {
   var label = escapeHtml(String(invoiceNumber || invoiceId));
-  if (!INVOICE_URL) {
-    return '<span class="inv-no" title="Autotask publishes no direct link to a single invoice — ' +
-      'open Billing &gt; Invoices and search this number">' + label + '</span>';
+  if (!INVOICE_URL || !invoiceId) {
+    return '<span class="inv-no" title="Open Billing &gt; Invoices in Autotask and ' +
+      'search this number">' + label + '</span>';
   }
   var href = INVOICE_URL
-    .replace('{id}', encodeURIComponent(String(invoiceId || '')))
+    .replace('{id}', encodeURIComponent(String(invoiceId)))
     .replace('{number}', encodeURIComponent(String(invoiceNumber || '')));
   return '<a class="atlink" target="_blank" rel="noopener" onclick="event.stopPropagation()" ' +
-    'href="' + attr(href) + '">' + label + ' &#8599;</a>';
+    'href="' + attr(href) + '" title="Open invoice ' + attr(label) + ' in Autotask">' +
+    label + ' &#8599;</a>';
 }
 
 function mapperHtml(tenantName) {
