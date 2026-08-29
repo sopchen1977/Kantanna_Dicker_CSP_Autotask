@@ -29,6 +29,14 @@ Everything lives in the n8n project **Kantanna Dicker CSP and Autotask**
 | `csp_customer_mappings` | `U7ymd9nAyD0GCLYb` | Dicker tenant name → Autotask company |
 | `csp_sku_services` | `ai3p8JIYv082bfjn` | SKU+term → Autotask Service id (audit/cache) |
 
+**Starting a test round from empty tables.** The utility workflow
+**ZZ · Reset CSP Data Tables** (`X1stW6srLjbj8wAm`) dumps all three tables to
+its execution log and then deletes every row — run it by hand from the n8n
+canvas. It touches nothing in Autotask: clear the External Contract Number off
+any test contract there yourself, or the next sync will adopt that contract
+again instead of creating a fresh one. To read the old rows back, open the
+execution the reset produced; the dump nodes run before the deletes.
+
 ## One-time setup (before the first sync)
 
 1. **Share the Autotask credential with the project.** In n8n:
@@ -168,6 +176,7 @@ next month.
 ```
 workflows/
   templates/   n8n Workflow-SDK source with __TOKEN__ placeholders
+               (01-03 plus zz-reset-data-tables, the manual table reset)
   runtime/     the JavaScript that runs inside each Code node
   tests/       node test harness for the parse + sync decision logic
   build.py     assembles templates + runtime (+ portal HTML) → generated/
