@@ -15,7 +15,13 @@ const uploadForm = trigger({
           { fieldLabel: 'CSP Invoice Report (xlsx)', fieldType: 'file', acceptFileTypes: '.xlsx', multipleFiles: false, requiredField: true }
         ]
       },
-      options: { appendAttribution: false }
+      // Without a path the form is served at /form/<webhookId>, a UUID nobody
+      // can read out or type. This is the last segment of the URL.
+      //
+      // NOT plain "csp-upload": the older reconciliation project's "CSP Report
+      // Upload Portal" is still active and holds that path, and n8n refuses to
+      // publish a second workflow claiming it.
+      options: { appendAttribution: false, path: 'csp-monthly-upload' }
     }
   },
   output: [{ submittedAt: '2026-08-26T00:00:00.000Z', formMode: 'production' }]
