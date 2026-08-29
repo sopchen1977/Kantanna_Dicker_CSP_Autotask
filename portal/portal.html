@@ -904,8 +904,8 @@ function syncHtml(l) {
 
 // The last charge Autotask has actually approved & posted for this service,
 // read live from BillingItems, with the invoice it landed on if it has been
-// invoiced since. Autotask publishes no per-invoice URL, so the number is
-// shown for you to search on rather than linked to a guessed address.
+// invoiced since. Whether the invoice number is a link depends on INVOICE_URL
+// below.
 function lastPostedHtml(l) {
   if (!l.billing_last_date) {
     return '<div class="dnone">Nothing has been approved &amp; posted for this service yet.</div>';
@@ -922,12 +922,9 @@ function lastPostedHtml(l) {
     '<span class="amt">' + money(l.billing_last_amount) + '</span></div>';
   var bits = [];
   if (l.billing_last_posted_on) bits.push('posted ' + longDateIso(l.billing_last_posted_on));
-  if (inv) {
-    bits.push('invoice <span class="inv-no" title="Autotask has no direct link to a single invoice — ' +
-      'open Billing &gt; Invoices and search this number">' + escapeHtml(inv) + '</span>' +
+  if (inv || invId) {
+    bits.push('invoice ' + invoiceLink(invId, inv) +
       (l.billing_last_invoice_date ? ' of ' + escapeHtml(longDateIso(l.billing_last_invoice_date)) : ''));
-  } else if (invId) {
-    bits.push('invoiced (invoice #' + escapeHtml(invId) + ')');
   } else {
     bits.push('not invoiced yet');
   }
@@ -972,6 +969,28 @@ function contractLink(contractId) {
   return '<a class="atlink" target="_blank" rel="noopener" onclick="event.stopPropagation()" ' +
     'href="https://ww31.autotask.net/Autotask/AutotaskExtend/ExecuteCommand.aspx?Code=OpenContract&amp;ContractID=' +
     encodeURIComponent(contractId) + '">Open #' + escapeHtml(String(contractId)) + ' &#8599;</a>';
+}
+
+// Autotask's ExecuteCommand API has a documented code for opening a contract,
+// a ticket, a quote, a project and half a dozen other things, but none for an
+// invoice - so there is no address that can be derived for one. Paste the URL
+// Autotask shows in the address bar with an invoice open, with {id} where the
+// invoice id appears and {number} where the invoice number appears, and every
+// invoice on this screen becomes a link. Left empty, the number renders as
+// text to search on, which is the honest alternative to a guessed address.
+var INVOICE_URL = '';
+
+function invoiceLink(invoiceId, invoiceNumber) {
+  var label = escapeHtml(String(invoiceNumber || invoiceId));
+  if (!INVOICE_URL) {
+    return '<span class="inv-no" title="Autotask publishes no direct link to a single invoice — ' +
+      'open Billing &gt; Invoices and search this number">' + label + '</span>';
+  }
+  var href = INVOICE_URL
+    .replace('{id}', encodeURIComponent(String(invoiceId || '')))
+    .replace('{number}', encodeURIComponent(String(invoiceNumber || '')));
+  return '<a class="atlink" target="_blank" rel="noopener" onclick="event.stopPropagation()" ' +
+    'href="' + attr(href) + '">' + label + ' &#8599;</a>';
 }
 
 function mapperHtml(tenantName) {
