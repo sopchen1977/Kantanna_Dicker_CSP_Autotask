@@ -163,12 +163,13 @@
   .badge.mapped { background:var(--okbg); color:var(--ok); }
 
   .rate { font-weight:600; }
-  /* The unit is a fixed-width gutter to the right of every money figure, and
-     the money headings carry the same gutter, so a column heading sits over
-     the digits it names instead of over "/mo". */
-  .per { display:inline-block; width:24px; padding-left:3px; text-align:left;
+  /* Every right-aligned column ends on ONE edge shared by its heading and its
+     content - that is what makes a table of numbers read as lined up. The unit
+     is part of the value and ends on that edge with everything else; it is a
+     fixed width so the digits in front of it still form their own straight
+     column, whether the row reads /mo or /yr. */
+  .per { display:inline-block; width:24px; text-align:right;
     font-size:11px; color:var(--muted); font-weight:400; }
-  th.unit { padding-right:36px; }
   /* Margin is neutral when healthy so the exceptions are the only thing
      that catches the eye. */
   .marg { color:var(--ink2); }
@@ -857,9 +858,9 @@ var COLHEAD = '<div class="colhead"><table>' + COLS + '<thead><tr>' +
   '<th></th>' +
   '<th>Service</th>' +
   '<th class="num">Qty</th>' +
-  '<th class="num unit" title="Dicker unit cost for one billing period">Cost</th>' +
-  '<th class="num unit" title="Dicker unit RRP for one billing period">RRP</th>' +
-  '<th class="num unit" title="What Autotask charges per unit. Click a price to change it.">Sell</th>' +
+  '<th class="num" title="Dicker unit cost for one billing period">Cost</th>' +
+  '<th class="num" title="Dicker unit RRP for one billing period">RRP</th>' +
+  '<th class="num" title="What Autotask charges per unit. Click a price to change it.">Sell</th>' +
   '<th class="num">Margin</th>' +
   '<th title="What this month&#39;s imported report does to each line: a subscription Autotask has never billed, a mid-cycle change billed pro-rata, a different seat count, or the same charge as last cycle.">Change</th>' +
   '<th title="What each service still has waiting in Autotask&#39;s Approve &amp; Post screen, and whether its last posted charge has reached an invoice. Click an amount for the breakdown.">Billing</th>' +
