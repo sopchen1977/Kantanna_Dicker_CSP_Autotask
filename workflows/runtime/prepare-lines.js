@@ -76,7 +76,7 @@ function longDate(isoDate) {
 
 // Autotask caps a Service name and a contract service's invoice description
 // at 100 characters, and both END in the part that carries the meaning - the
-// billing type and SKU, or the Subscription ID. So when the product name is
+// billing type, or the Subscription ID. So when the product name is
 // too long it is the NAME that gets trimmed, never the suffix.
 function fit(name, suffix, max) {
   const room = max - suffix.length;
@@ -117,10 +117,19 @@ for (const l of rows) {
   // fallback for a row that has none.
   const productName = String(l.stock_description || l.offer_name || 'CSP Service').trim();
 
-  // The service name is "{product} - {billing type} [{SKU}]". The suffix is
-  // what makes two billing types of one product different services, so it is
-  // never what gets dropped when the name is too long.
-  const serviceSuffix = ' - ' + billing.label + ' [' + (l.sku || 'CSP') + ']';
+  // The service name is "{product} - {billing type}". The suffix is what makes
+  // two billing types of one product different services, so it is never what
+  // gets dropped when the name is too long.
+  //
+  // It carries no SKU. Autotask already holds the service key in its own `sku`
+  // field, which is what the sync matches on, so repeating it in the name only
+  // took up room the product name could use.
+  const serviceSuffix = ' - ' + billing.label;
+  // Names generated before the SKU was dropped end in "... [CFQ7TTC0LCHC]".
+  // The sync uses both suffixes to tell a name it wrote itself from one
+  // somebody typed in Autotask; without this it would read every existing
+  // service name as hand-written and never correct one again.
+  const legacySuffix = serviceSuffix + ' [' + (l.sku || 'CSP') + ']';
 
   // ---- Contract window -------------------------------------------------
   // The annuity report's START USAGE / END USAGE are when the subscription
@@ -311,6 +320,7 @@ for (const l of rows) {
     // uses it to tell a name it wrote itself from one somebody typed in
     // Autotask, and only corrects its own.
     service_name_suffix: serviceSuffix,
+    service_name_suffix_legacy: legacySuffix,
     service_period_type: billing.period_type,
     period_rrp: periodRrpTerm,
     period_cost: periodCostTerm,

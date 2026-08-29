@@ -24,6 +24,7 @@ const queryError = (resp.error || resp.errors) ? autotaskError(resp).slice(0, 30
 const wantedKey = String(line.service_key || '').trim();
 const wantedName = String(line.service_name || '').trim();
 const suffix = String(line.service_name_suffix || '');
+const legacySuffix = String(line.service_name_suffix_legacy || '');
 const sku = (s) => String(s.sku || '').trim();
 const name = (s) => String(s.name || '').trim();
 
@@ -40,9 +41,11 @@ if (!found && wantedName) {
 
 const currentName = found ? name(found) : '';
 // Only a name this automation wrote is ours to rewrite. Every generated name
-// ends in " - {billing type} [{SKU}]"; a name typed by hand in Autotask does
-// not, and is left exactly as its author left it.
-const generatedName = !!suffix && currentName.endsWith(suffix);
+// ends in " - {billing type}", or " - {billing type} [{SKU}]" for the ones
+// written before the SKU was dropped from the name; a name typed by hand in
+// Autotask ends in neither, and is left exactly as its author left it.
+const endsWith = (sfx) => !!sfx && currentName.endsWith(sfx);
+const generatedName = endsWith(suffix) || endsWith(legacySuffix);
 
 const patch = { id: found ? found.id : null };
 const patchNotes = [];

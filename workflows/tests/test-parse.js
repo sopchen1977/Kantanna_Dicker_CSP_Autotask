@@ -237,11 +237,20 @@ assert.ok(!/DO NOT USE/.test(pDefender.service_invoice_description),
 assert.ok(pDefender.service_name.startsWith('MS NCE MICROSOFT DEFENDER SUITE'));
 assert.ok(pDefender.service_invoice_description.startsWith('MS NCE MICROSOFT DEFENDER SUITE'));
 // This one is long enough that the name has to be trimmed - and what gets
-// trimmed is the product, never the billing type and SKU that make two
-// services of one product distinguishable.
+// trimmed is the product, never the billing type that makes two services of
+// one product distinguishable.
 assert.ok(pDefender.product_name.length + pDefender.service_name_suffix.length > 100,
   'this fixture exists to exercise the 100-character trim');
-assert.strictEqual(pDefender.service_name_suffix, ' - Annual Commit (Billed Monthly) [CFQ7TTC0LCHC]');
+// The SKU is not in the name: Autotask holds the service key in its own `sku`
+// field, which is what the sync matches on. The legacy suffix is kept only so
+// names written before it was dropped are still recognised as ours to correct.
+assert.strictEqual(pDefender.service_name_suffix, ' - Annual Commit (Billed Monthly)');
+assert.strictEqual(pDefender.service_name_suffix_legacy,
+  ' - Annual Commit (Billed Monthly) [CFQ7TTC0LCHC]');
+for (const i of prepared) {
+  assert.ok(!/\[[A-Z0-9]{6,}\]/.test(i.json.service_name),
+    'no service name may carry a SKU: ' + i.json.service_name);
+}
 assert.ok(pDefender.service_invoice_description.endsWith(' - sub SUB-15'),
   'the Subscription ID survives the trim: ' + pDefender.service_invoice_description);
 // Same SKU, different variant: two products that must not collapse into one
@@ -254,7 +263,7 @@ for (const i of prepared) {
   assert.ok(j.service_name.length <= 100,
     'Autotask service names are 100 characters: ' + j.service_name);
   assert.ok(j.service_name.endsWith(j.service_name_suffix),
-    'every generated name ends in the billing type and SKU: ' + j.service_name);
+    'every generated name ends in the billing type: ' + j.service_name);
   assert.ok(j.service_invoice_description.length <= 100,
     'Autotask invoice descriptions are 100 characters: ' + j.service_invoice_description);
   assert.strictEqual(j.product_name, j.stock_description,

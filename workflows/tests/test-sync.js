@@ -20,8 +20,9 @@ function runNode(file, inputItems, nodes) {
 const line = {
   tenant_name: 'Galilee Solicitors', subscription_id: 'SUB-A', stock_code: 'P1Y:SKU1:0002:1:',
   line_key: 'SUB-A|P1Y:SKU1:0002:1:', service_key: 'ANN-MO:SKU1:0002',
-  service_name: 'MS NCE THING 1YR COMMIT - Annual Commit (Billed Monthly) [SKU1]',
-  service_name_suffix: ' - Annual Commit (Billed Monthly) [SKU1]',
+  service_name: 'MS NCE THING 1YR COMMIT - Annual Commit (Billed Monthly)',
+  service_name_suffix: ' - Annual Commit (Billed Monthly)',
+  service_name_suffix_legacy: ' - Annual Commit (Billed Monthly) [SKU1]',
   contract_name: 'CSP - Thing - SUB-A',
   contract_number: 'CSP-ANN-MO-20251229-20261228', effective_sell: 34.55, qty: 51,
   monthly_cost: 29.37, monthly_rrp: 34.55, contract_start: '2025-12-29', contract_end: '2026-12-28',
@@ -130,6 +131,15 @@ const handNamed = runNode('service-decision.js',
 assert.strictEqual(handNamed.service_id, 9001);
 assert.strictEqual(handNamed.need_service_patch, false,
   'a hand-written service name is nobody else\'s business');
+
+// A name written before the SKU was dropped still ends in the LEGACY suffix,
+// so it is recognised as ours and renamed to drop it.
+const withSku = runNode('service-decision.js', [{ json: { items: [
+  { id: 9001, sku: line.service_key, name: 'MS NCE THING 1YR COMMIT - Annual Commit (Billed Monthly) [SKU1]' },
+] } }], nodes)[0].json;
+assert.strictEqual(withSku.service_id, 9001);
+assert.deepStrictEqual(withSku.service_patch, { id: 9001, name: line.service_name },
+  'dropping the SKU from the name must not freeze the existing names');
 
 // A service created before the key was written to `sku` carries only its
 // name. It is adopted once, and the patch stamps the key on.
