@@ -231,6 +231,17 @@
   .itag.no { background:#f8fafc; border-color:var(--line); color:var(--muted); font-weight:600; }
   .itag.wait { background:var(--warnbg); border-color:#fde68a; color:var(--warn); }
 
+  /* The Approve & Post date range. Warm like the pill it sits beside, because
+     it is part of the same "you have something to post" story - and labelled,
+     so it is never mistaken for the contract term printed alongside it. */
+  .range {
+    display:inline-flex; align-items:center; gap:6px; padding:2px 8px; border-radius:6px;
+    font-size:11.5px; font-weight:600; white-space:nowrap; cursor:help;
+    background:var(--warnbg); border:1px solid #fde68a; color:var(--warn);
+    font-variant-numeric:tabular-nums;
+  }
+  .range .rlbl { font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; opacity:.72; }
+
   /* Most lines repeat last cycle, so "unchanged" is plain muted text and only
      the exceptions carry a chip - the same reason the margin column is neutral
      when it is healthy. */
@@ -583,6 +594,60 @@ function pendingCount(l) {
   if (!effInclude(l) || !l.billing_last) return 0;
   return pendingItems(l).filter(function (i) { return i.type !== 'next cycle'; }).length;
 }
+// The dates the waiting charges actually carry, which is what Autotask's
+// Approve & Post screen asks you for. It is NOT the billing month: seats that
+// moved part way through an earlier cycle arrive in this report as pro-rata
+// lines dated back to the day they changed, so a range starting at this
+// month's cycle silently leaves them behind - which is the whole reason to
+// print it.
+//
+// Both ends are widened: the earliest start and the latest end (the start
+// again for an open-ended line). Autotask dates a billing item within its
+// period, so a range spanning start to end always contains it, and erring
+// wide only ever shows more of the same report.
+function pendingSpan(l) {
+  var span = { first: '', last: '' };
+  if (!effInclude(l) || !l.billing_last) return span;
+  pendingItems(l).forEach(function (x) {
+    if (x.type === 'next cycle') return;
+    var a = String(x.s || ''), b = String(x.e || '') || a;
+    if (a && (!span.first || a < span.first)) span.first = a;
+    if (b && (!span.last || b > span.last)) span.last = b;
+  });
+  return span;
+}
+function widenSpan(into, add) {
+  if (add.first && (!into.first || add.first < into.first)) into.first = add.first;
+  if (add.last && (!into.last || add.last > into.last)) into.last = add.last;
+  return into;
+}
+// "13 Jul → 31 Aug 2026" - the year on the first date is only worth the room
+// when the range crosses one.
+function spanLabel(span) {
+  if (!span.first || !span.last) return '';
+  var sameYear = span.first.slice(0, 4) === span.last.slice(0, 4);
+  return (sameYear ? shortDateIso(span.first) : longDateIso(span.first)) +
+    ' → ' + longDateIso(span.last);
+}
+// `scope` names what the range covers so the sentence reads the same whether
+// it hangs off the contract's pill or the customer's chip.
+function rangeHint(scope, span) {
+  if (!span.first || !span.last) return '';
+  return 'The charges waiting to be approved & posted for ' + scope + ' are dated ' +
+    longDateIso(span.first) + ' to ' + longDateIso(span.last) +
+    '. Use that as the date range in Autotask’s Approve & Post screen: a pro-rata change carried ' +
+    'over from an earlier cycle is dated back to the day the seats moved, so a range starting at ' +
+    'this month’s cycle would leave it behind.';
+}
+// The customer header has no pill to hang the range off, so there it is a
+// chip of its own - labelled, because a bare pair of dates sitting beside a
+// contract term would read as another term.
+function rangeHtml(span, scope) {
+  var label = spanLabel(span);
+  if (!label) return '';
+  return '<span class="range" title="' + attr(rangeHint(scope, span)) + '">' +
+    '<span class="rlbl">post</span>' + escapeHtml(label) + '</span>';
+}
 // The date Autotask last approved & posted this service, or '' if it never
 // has. A line with no pending charges is only "posted" if something was
 // actually posted; a subscription with no rows in the CSP report has nothing
@@ -605,10 +670,13 @@ function isInvoiced(l) { return !!invoiceRef(l); }
 // repeat last cycle untouched, and the few that do not are the ones worth
 // reading before you approve and post.
 //
-//   new      - no contract service in Autotask, so nothing has ever billed for
-//              this subscription. autotask_contract_service_id is written by
-//              the sync and is NOT one of the columns an import overwrites, so
-//              it survives a re-upload and means what it says.
+//   new      - nothing has ever been approved & posted for this subscription:
+//              either Autotask has no contract service for it yet, or the sync
+//              has just created one that has never billed. Its first charge is
+//              not "unchanged" - there is no previous cycle to be unchanged
+//              from. (autotask_contract_service_id is written by the sync and
+//              is NOT one of the columns an import overwrites, so it survives
+//              a re-upload and means what it says.)
 //   pro-rata - the report carries a mid-cycle change (seats moved part way
 //              through), which Dicker bills as its own short line
 //   qty      - the same shape as last cycle at a different seat count, which
@@ -620,6 +688,11 @@ function cycleChange(l) {
   if (!l.autotask_contract_service_id) {
     return { kind: 'new', label: 'new',
       hint: 'This subscription has no contract service in Autotask yet - the next sync creates it.' };
+  }
+  if (!lastPostedIso(l)) {
+    return { kind: 'new', label: 'new',
+      hint: 'Autotask has a contract service for this subscription but has never approved & posted a ' +
+        'charge against it, so whatever is waiting now is its first.' };
   }
   var items = pendingItems(l).filter(function (x) { return x.type !== 'next cycle'; });
   if (!items.length) {
@@ -717,13 +790,14 @@ function render() {
 
 function renderStats(visible) {
   var due = 0, monthly = 0, attn = 0, incl = 0;
-  var contracts = {}, custs = {};
+  var contracts = {}, custs = {}, span = { first: '', last: '' };
   visible.forEach(function (l) {
     custs[l.tenant_name] = 1;
     var g = groupContract(l);
     if (g.name) contracts[l.tenant_name + '|' + g.name] = 1;
     if (effInclude(l)) { incl++; monthly += monthlyValue(l); }
     due += dueNow(l);
+    widenSpan(span, pendingSpan(l));
     if (needsAttention(l)) attn++;
   });
   Object.keys(custs).forEach(function (n) { if (!MAPPINGS[n.toLowerCase()]) attn++; });
@@ -732,7 +806,10 @@ function renderStats(visible) {
     { k: 'Customers', v: Object.keys(custs).length, s: Object.keys(contracts).length + ' Autotask contracts' },
     { k: 'Services billing', v: incl, s: visible.length - incl + ' excluded' },
     { k: 'Monthly recurring', v: money0(monthly), s: 'at current sell prices' },
-    { k: 'Awaiting Approve & Post', v: money(due), s: due > 0 ? 'sitting in Autotask now' : 'nothing outstanding',
+    // The date range replaces "sitting in Autotask now": knowing it is there
+    // is one glance, and the next thing you need is the range to type in.
+    { k: 'Awaiting Approve & Post', v: money(due),
+      s: spanLabel(span) || (due > 0 ? 'sitting in Autotask now' : 'nothing outstanding'),
       cls: due > 0 ? 'due' : 'clear' },
     { k: 'Needs attention', v: attn, s: attn ? 'unmapped or failed' : 'all clear',
       cls: attn ? 'attn' : 'clear' }
@@ -777,7 +854,12 @@ function customerHtml(name, lines) {
   var closed = !!UI.closed[key];
 
   var due = 0, monthly = 0;
-  lines.forEach(function (l) { due += dueNow(l); if (effInclude(l)) monthly += monthlyValue(l); });
+  var span = { first: '', last: '' };
+  lines.forEach(function (l) {
+    due += dueNow(l);
+    widenSpan(span, pendingSpan(l));
+    if (effInclude(l)) monthly += monthlyValue(l);
+  });
 
   // One block per Autotask contract, with its services listed underneath —
   // the same shape you Approve & Post in.
@@ -803,6 +885,7 @@ function customerHtml(name, lines) {
       '<span>' + order.length + (order.length === 1 ? ' contract' : ' contracts') + '</span>' +
       '<span><b>' + money0(monthly) + '</b> /mo</span>' +
       (due > 0 ? '<span style="color:var(--warn)"><b style="color:var(--warn)">' + money(due) + '</b> awaiting</span>' : '') +
+      rangeHtml(span, 'this customer') +
     '</div>' +
   '</div>';
 
@@ -820,11 +903,13 @@ function contractHtml(customer, cname, block) {
   var closed = !!UI.closed[key];
 
   var due = 0, monthly = 0, checked = false, pend = 0, posted = 0, invoiced = 0, notApproved = 0;
-  var chg = { new: 0, prorata: 0, qty: 0, same: 0, none: 0 };
+  var chg = { new: 0, prorata: 0, qty: 0, same: 0, none: 0 }, classified = 0;
+  var span = { first: '', last: '' };
   lines.forEach(function (l) {
     if (effInclude(l)) monthly += monthlyValue(l);
     if (effInclude(l) && l.billing_last) checked = true;
     due += dueNow(l);
+    widenSpan(span, pendingSpan(l));
     pend += pendingCount(l);
     if (effInclude(l) && pendingCount(l) > 0) notApproved++;
     if (effInclude(l) && pendingCount(l) === 0 && lastPostedIso(l)) {
@@ -832,13 +917,15 @@ function contractHtml(customer, cname, block) {
       if (isInvoiced(l)) invoiced++;
     }
     var c = cycleChange(l);
-    if (c) chg[c.kind]++;
+    if (c) { chg[c.kind]++; classified++; }
   });
   // What this import did to the contract as a whole. Only the exceptions are
   // named; a contract that simply repeats last cycle says so in one word,
   // because that is the answer that needs no follow-up.
   var chgParts = [];
-  if (chg.new) chgParts.push(chg.new + ' new');
+  // Nothing on this contract has ever billed, so the contract itself is new -
+  // the sync created it on this run rather than adding to something standing.
+  if (chg.new) chgParts.push(chg.new === classified ? 'new contract' : chg.new + ' new');
   if (chg.prorata) chgParts.push(chg.prorata + ' pro-rata');
   if (chg.qty) chgParts.push(chg.qty + ' qty change' + (chg.qty > 1 ? 's' : ''));
   var chgTag = '';
@@ -882,7 +969,9 @@ function contractHtml(customer, cname, block) {
       '<span><span class="cval">' + money0(monthly) + '</span> /mo</span>' +
       (checked
         ? (pend > 0
-          ? '<span class="pill due" style="cursor:default"><span class="tick">&#9679;</span>' + money(due) + ' to post</span>'
+          ? '<span class="pill due" style="cursor:default" title="' + attr(rangeHint('this contract', span)) +
+            '"><span class="tick">&#9679;</span>' + money(due) + ' to post' +
+            (spanLabel(span) ? ' <span class="n">' + escapeHtml(spanLabel(span)) + '</span>' : '') + '</span>'
           : (posted
             ? '<span class="pill clear" style="cursor:default"><span class="tick">&#10003;</span>all posted</span>'
             : '<span class="pill none" style="cursor:default">nothing to bill</span>'))
