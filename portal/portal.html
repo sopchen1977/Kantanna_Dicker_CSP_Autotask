@@ -118,7 +118,7 @@
   /* Every table shares one fixed column grid so the numbers line up all
      the way down the page, across contracts and customers. */
   .cbody { overflow-x:auto; }
-  .cinner { min-width:940px; }
+  .cinner { min-width:1068px; }
   table { width:100%; border-collapse:collapse; table-layout:fixed; }
   th {
     font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
@@ -229,6 +229,21 @@
   }
   .itag.yes { background:#eff6ff; border-color:#bfdbfe; color:#1d4ed8; }
   .itag.no { background:#f8fafc; border-color:var(--line); color:var(--muted); font-weight:600; }
+  .itag.wait { background:var(--warnbg); border-color:#fde68a; color:var(--warn); }
+
+  /* Most lines repeat last cycle, so "unchanged" is plain muted text and only
+     the exceptions carry a chip - the same reason the margin column is neutral
+     when it is healthy. */
+  .chg {
+    display:inline-flex; align-items:center; padding:2px 7px; border-radius:6px; white-space:nowrap;
+    font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.05em;
+    border:1px solid transparent; cursor:help;
+  }
+  .chg.new { background:#eef2ff; border-color:#c7d2fe; color:#4338ca; }
+  .chg.prorata { background:var(--violetbg); border-color:#ddd6fe; color:var(--violet); }
+  .chg.qty { background:var(--warnbg); border-color:#fde68a; color:var(--warn); }
+  .chg.same, .chg.none { font-size:11.5px; font-weight:400; text-transform:none; letter-spacing:0;
+    padding:0; color:var(--muted); }
 
   tr.detail { display:none; }
   tr.detail.open { display:table-row; }
@@ -585,6 +600,52 @@ function invoiceRef(l) {
   return String(l.billing_last_invoice_number || '') || String(l.billing_last_invoice_id || '');
 }
 function isInvoiced(l) { return !!invoiceRef(l); }
+// What THIS month's report does to a line, against what Autotask has already
+// billed. The point of the column is to make a re-import scannable: most lines
+// repeat last cycle untouched, and the few that do not are the ones worth
+// reading before you approve and post.
+//
+//   new      - no contract service in Autotask, so nothing has ever billed for
+//              this subscription. autotask_contract_service_id is written by
+//              the sync and is NOT one of the columns an import overwrites, so
+//              it survives a re-upload and means what it says.
+//   pro-rata - the report carries a mid-cycle change (seats moved part way
+//              through), which Dicker bills as its own short line
+//   qty      - the same shape as last cycle at a different seat count, which
+//              is what a change landing on the cycle boundary looks like
+//   same     - the cycle charge matches the quantity last posted
+//   none     - the report has nothing new for this subscription
+function cycleChange(l) {
+  if (!effInclude(l)) return null;
+  if (!l.autotask_contract_service_id) {
+    return { kind: 'new', label: 'new',
+      hint: 'This subscription has no contract service in Autotask yet - the next sync creates it.' };
+  }
+  var items = pendingItems(l).filter(function (x) { return x.type !== 'next cycle'; });
+  if (!items.length) {
+    return { kind: 'none', label: '—',
+      hint: 'Nothing new for this subscription in the imported report.' };
+  }
+  var prorata = items.filter(function (x) { return x.type === 'pro-rata'; });
+  if (prorata.length) {
+    return { kind: 'prorata',
+      label: 'pro-rata' + (prorata.length > 1 ? ' ×' + prorata.length : ''),
+      hint: prorata.length + ' mid-cycle change' + (prorata.length > 1 ? 's' : '') +
+        ' in this report, billed pro-rata: ' +
+        prorata.map(function (x) { return 'qty ' + x.q + ' from ' + longDateIso(x.s); }).join(', ') };
+  }
+  var cyc = items.filter(function (x) { return x.type === 'cycle'; })[0];
+  var lastQty = Number(l.billing_last_qty) || 0;
+  var nowQty = cyc ? Number(cyc.q) : Number(l.qty) || 0;
+  if (lastQty && nowQty !== lastQty) {
+    var d = nowQty - lastQty;
+    return { kind: 'qty', label: (d > 0 ? '+' : '−') + Math.abs(d) + ' qty',
+      hint: 'The cycle charge is qty ' + nowQty + ', against ' + lastQty +
+        ' on the charge last posted. No pro-rata rows, so the change lands on the cycle boundary.' };
+  }
+  return { kind: 'same', label: 'unchanged',
+    hint: 'Same cycle charge as last time' + (lastQty ? ' - qty ' + lastQty : '') + '.' };
+}
 function needsAttention(l) {
   var s = String(l.sync_status || '');
   return s === 'error' || s === 'needs_mapping' || s === 'unmapped' || s === 'partial';
@@ -693,7 +754,8 @@ var COLS = '<colgroup>' +
   '<col style="width:92px">' +
   '<col style="width:150px">' +
   '<col style="width:80px">' +
-  '<col style="width:214px">' +
+  '<col style="width:104px">' +
+  '<col style="width:238px">' +
   '<col style="width:76px">' +
 '</colgroup>';
 var COLHEAD = '<div class="colhead"><table>' + COLS + '<thead><tr>' +
@@ -704,6 +766,7 @@ var COLHEAD = '<div class="colhead"><table>' + COLS + '<thead><tr>' +
   '<th class="num" title="Dicker unit RRP for one billing period">RRP</th>' +
   '<th class="num" title="What Autotask charges per unit. Click a price to change it.">Sell</th>' +
   '<th class="num">Margin</th>' +
+  '<th title="What this month&#39;s imported report does to each line: a subscription Autotask has never billed, a mid-cycle change billed pro-rata, a different seat count, or the same charge as last cycle.">Change</th>' +
   '<th title="What each service still has waiting in Autotask&#39;s Approve &amp; Post screen, and whether its last posted charge has reached an invoice. Click an amount for the breakdown.">Billing</th>' +
   '<th>Sync</th>' +
 '</tr></thead></table></div>';
@@ -756,23 +819,46 @@ function contractHtml(customer, cname, block) {
   var key = 'k:' + customer + '|' + cname;
   var closed = !!UI.closed[key];
 
-  var due = 0, monthly = 0, checked = false, pend = 0, posted = 0, invoiced = 0;
+  var due = 0, monthly = 0, checked = false, pend = 0, posted = 0, invoiced = 0, notApproved = 0;
+  var chg = { new: 0, prorata: 0, qty: 0, same: 0, none: 0 };
   lines.forEach(function (l) {
     if (effInclude(l)) monthly += monthlyValue(l);
     if (effInclude(l) && l.billing_last) checked = true;
     due += dueNow(l);
     pend += pendingCount(l);
-    if (effInclude(l) && lastPostedIso(l)) {
+    if (effInclude(l) && pendingCount(l) > 0) notApproved++;
+    if (effInclude(l) && pendingCount(l) === 0 && lastPostedIso(l)) {
       posted++;
       if (isInvoiced(l)) invoiced++;
     }
+    var c = cycleChange(l);
+    if (c) chg[c.kind]++;
   });
-  // The same invoiced/not-invoiced split as the rows, rolled up: how many of
-  // this contract's posted services have reached a customer invoice. Held back
-  // on the same condition - while anything on the contract is waiting to be
-  // posted, "all invoiced" is answering last month's question.
+  // What this import did to the contract as a whole. Only the exceptions are
+  // named; a contract that simply repeats last cycle says so in one word,
+  // because that is the answer that needs no follow-up.
+  var chgParts = [];
+  if (chg.new) chgParts.push(chg.new + ' new');
+  if (chg.prorata) chgParts.push(chg.prorata + ' pro-rata');
+  if (chg.qty) chgParts.push(chg.qty + ' qty change' + (chg.qty > 1 ? 's' : ''));
+  var chgTag = '';
+  if (chgParts.length) {
+    chgTag = '<span class="chg ' + (chg.new ? 'new' : (chg.prorata ? 'prorata' : 'qty')) +
+      '" title="What this month&#39;s report changes on this contract">' +
+      escapeHtml(chgParts.join(' · ')) + '</span>';
+  } else if (chg.same) {
+    chgTag = '<span class="chg same" title="Every service on this contract bills the same as last cycle">' +
+      'unchanged</span>';
+  }
+  // The same lifecycle, rolled up. Anything waiting to be approved is the
+  // headline - it is the only one of the three that asks something of you -
+  // and the invoiced split is what is left to say once nothing is waiting.
   var invTag = '';
-  if (posted > 0 && pend === 0) {
+  if (notApproved > 0) {
+    invTag = '<span class="itag wait" title="' + attr(notApproved + ' of ' + lines.length +
+      ' services have charges sitting in Approve & Post') + '">' +
+      notApproved + ' not approved</span>';
+  } else if (posted > 0) {
     invTag = invoiced === posted
       ? '<span class="itag yes" title="Every posted charge on this contract is on a customer invoice">all invoiced</span>'
       : '<span class="itag no" title="' + attr(String(posted - invoiced) + ' of ' + posted +
@@ -801,6 +887,7 @@ function contractHtml(customer, cname, block) {
             ? '<span class="pill clear" style="cursor:default"><span class="tick">&#10003;</span>all posted</span>'
             : '<span class="pill none" style="cursor:default">nothing to bill</span>'))
         : '') +
+      chgTag +
       invTag +
       (atId ? contractLink(atId) : '') +
     '</div>';
@@ -875,20 +962,26 @@ function lineHtml(l) {
     }
   }
 
-  // Beside the pill: whether the charge that was last posted has since been
-  // pulled onto an invoice.
+  // Beside the pill: where this service is in Autotask's billing lifecycle.
+  // A charge is raised, then approved & posted, then pulled onto a customer
+  // invoice, and those are three different places to be:
   //
-  // Only once the line has nothing waiting. The tag describes the LAST POSTED
-  // charge, so the moment a new cycle is imported it is talking about the
-  // previous month while the pill beside it is talking about this one -
-  // "$1,071.05 to post" next to "INVOICED" reads as a contradiction, and the
-  // reassuring half is the one that is out of date. What the last cycle did
-  // is history at that point, and history lives in the drawer.
+  //   NOT APPROVED      something is sitting in Approve & Post right now. This
+  //                     is about the CURRENT import, so it agrees with the
+  //                     amount in the pill instead of contradicting it.
+  //   APPROVED & POSTED posted, but not yet on a customer invoice.
+  //   INVOICED          on an invoice - the drawer names it and links to it.
   //
-  // A line that has never been posted has nothing to say about invoicing
-  // either, so it gets no tag at all.
+  // The last two describe the LAST POSTED charge, so they are only shown once
+  // nothing is waiting; while a cycle is pending, what the previous one did is
+  // history and lives in the drawer. A line that has never been posted and has
+  // nothing waiting has no lifecycle to report, so it gets no tag.
   var itag = '';
-  if (on && lastPostedIso(l) && pendingCount(l) === 0) {
+  if (on && pendingCount(l) > 0) {
+    itag = '<span class="itag wait" title="' + attr(money(due) +
+      ' is waiting in Autotask’s Approve & Post screen for this service.') +
+      '">not approved</span>';
+  } else if (on && lastPostedIso(l)) {
     var when = longDateIso(l.billing_last_date || lastPostedIso(l));
     if (isInvoiced(l)) {
       itag = '<span class="itag yes" title="' + attr('The charge posted on ' + when +
@@ -898,7 +991,7 @@ function lineHtml(l) {
     } else {
       itag = '<span class="itag no" title="' + attr('The charge posted on ' + when +
         ' has been approved & posted but is not on a customer invoice yet.') +
-        '">not invoiced</span>';
+        '">approved &amp; posted</span>';
     }
   }
 
@@ -932,6 +1025,7 @@ function lineHtml(l) {
       '</div>' +
     '</td>' +
     '<td class="num">' + marginHtml(l, i) + '</td>' +
+    '<td>' + changeHtml(l) + '</td>' +
     '<td><div class="billcell">' + pill + itag + '</div></td>' +
     '<td>' + syncHtml(l) + '</td>' +
   '</tr>';
@@ -961,6 +1055,15 @@ function invoiceHtml(l, i) {
       '<button class="btn link js-invreset" data-i="' + i + '" ' +
         'title="Drop your wording and go back to the generated description">reset</button>' +
     '</div>';
+}
+
+// The Change cell. An excluded line is not being billed at all, so it has
+// nothing to say about this cycle and gets an empty cell rather than a chip.
+function changeHtml(l) {
+  var c = cycleChange(l);
+  if (!c) return '';
+  return '<span class="chg ' + c.kind + '" title="' + attr(c.hint) + '">' +
+    escapeHtml(c.label) + '</span>';
 }
 
 function marginClass(m) {
@@ -1038,7 +1141,7 @@ function detailHtml(l) {
     foot = 'This subscription has no charges in the CSP report yet — the line above is what the first ' +
       'cycle is expected to bill.';
   }
-  return '<tr class="detail" data-d="' + l._i + '"><td colspan="9"><div class="dpanel">' +
+  return '<tr class="detail" data-d="' + l._i + '"><td colspan="10"><div class="dpanel">' +
     '<div class="dsec">' + (nothingPending ? 'Next cycle (estimate)' : 'Waiting to be approved &amp; posted') + '</div>' +
     rows +
     '<div class="dfoot">' + foot + '</div>' +
