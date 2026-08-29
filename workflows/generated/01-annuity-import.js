@@ -203,6 +203,75 @@ const importDone = node({
   }
 });
 
+// The two uploaded tabs, kept verbatim so the portal can show the source
+// behind any number. Cleared first: a snapshot is this month's upload, not an
+// accumulation, and the rows carry no key to upsert on.
+const clearReportRows = node({
+  type: 'n8n-nodes-base.dataTable',
+  version: 1.1,
+  config: {
+    name: 'Clear Report Rows',
+    position: [560, 200],
+    executeOnce: true,
+    alwaysOutputData: true,
+    parameters: {
+      resource: 'row',
+      operation: 'deleteRows',
+      dataTableId: { __rl: true, mode: 'id', value: 'bMh0poIYCCOyVsAj', cachedResultName: 'csp_report_rows' },
+      matchType: 'allConditions',
+      filters: { conditions: [{ keyName: 'id', condition: 'gte', keyValue: '0' }] },
+      options: {}
+    }
+  },
+  output: [{ id: 1 }]
+});
+
+const snapshotReportRows = node({
+  type: 'n8n-nodes-base.code',
+  version: 2,
+  config: {
+    name: 'Snapshot Report Rows',
+    position: [700, 200],
+    executeOnce: true,
+    parameters: { mode: 'runOnceForAllItems', jsCode: "// Keep the two uploaded tabs exactly as they arrived, so the portal can show\n// the source behind every number without anybody reopening the workbooks.\n//\n// The extract nodes read the sheets with headerRow: true over a fixed range,\n// so each item is already one sheet row keyed by its column heading, with the\n// cell text UNPARSED - \"$144.64\", \"275.00\", \"02-MAR-2025\", an invoice number\n// still carrying its leading spaces. That is the point: this is the file, not\n// our reading of it. Parse Subscription Lines does the interpreting, and only\n// for the pilot customers; this snapshot keeps every row of both tabs.\n//\n// One row per sheet row, the whole row as JSON in `data` so the tab can gain\n// or lose a column without a schema change. row_no preserves sheet order.\nconst names = $('Normalize Uploads').first().json || {};\nconst importedAt = new Date().toISOString();\n\nfunction rowsOf(nodeName) {\n  try { return $(nodeName).all().map((i) => i.json); } catch (e) { return []; }\n}\n\nconst sheets = [\n  { sheet: 'annuity', node: 'Extract Annuity Details', file: names.annuity_name || '' },\n  { sheet: 'invoice', node: 'Extract Invoice Details', file: names.invoice_name || '' }\n];\n\nconst out = [];\nfor (const s of sheets) {\n  const rows = rowsOf(s.node);\n  rows.forEach((r, i) => {\n    out.push({ json: {\n      sheet: s.sheet,\n      row_no: i + 1,\n      data: JSON.stringify(r),\n      source_file: s.file,\n      imported_at: importedAt\n    } });\n  });\n}\n// No rows means nothing downstream runs, which is what we want: the previous\n// snapshot has already been cleared, so the viewer honestly shows an empty tab.\nreturn out;\n" }
+  },
+  output: [{ sheet: 'annuity', row_no: 1, data: '{"TENANT ID":"211C4C89-…"}', source_file: 'Annuity_Information.xlsx', imported_at: '2026-08-29T08:14:15.039Z' }]
+});
+
+const insertReportRow = node({
+  type: 'n8n-nodes-base.dataTable',
+  version: 1.1,
+  config: {
+    name: 'Insert Report Row',
+    position: [840, 200],
+    parameters: {
+      resource: 'row',
+      operation: 'insert',
+      dataTableId: { __rl: true, mode: 'id', value: 'bMh0poIYCCOyVsAj', cachedResultName: 'csp_report_rows' },
+      columns: {
+        mappingMode: 'defineBelow',
+        matchingColumns: [],
+        value: {
+          sheet: expr('{{ $json.sheet }}'),
+          row_no: expr('{{ $json.row_no }}'),
+          data: expr('{{ $json.data }}'),
+          source_file: expr('{{ $json.source_file }}'),
+          imported_at: expr('{{ $json.imported_at }}')
+        },
+        schema: [
+          { id: 'sheet', displayName: 'sheet', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: true },
+          { id: 'row_no', displayName: 'row_no', required: false, defaultMatch: false, display: true, type: 'number', canBeUsedToMatch: false },
+          { id: 'data', displayName: 'data', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false },
+          { id: 'source_file', displayName: 'source_file', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false },
+          { id: 'imported_at', displayName: 'imported_at', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false }
+        ]
+      },
+      options: {}
+    }
+  },
+  output: [{ id: 1, sheet: 'annuity', row_no: 1 }]
+});
+
 const noteImport = sticky(
   '## 01 · Annuity Import\nUpload both monthly Dicker Data files. Lines are matched on Subscription ID + Stock Code and upserted, so custom sell prices and include/exclude choices saved in the portal survive re-imports.\n\n**Pilot filter:** edit PILOT_CUSTOMERS at the top of the "Parse Subscription Lines" node. Currently B E Smart Admin Services + Kantanna Pty Ltd (Kantanna is the in-house test customer). Names are matched as a substring; an empty list = all customers.',
   [uploadForm, normalizeUploads],
@@ -215,6 +284,10 @@ export default workflow('kantanna-csp-01-import', '01 · Annuity Import (Upload)
   .to(extractAnnuity.to(importBarrier.input(0)))
   .add(normalizeUploads)
   .to(extractInvoice.to(importBarrier.input(1)))
+  .add(importBarrier)
+  .to(clearReportRows)
+  .to(snapshotReportRows)
+  .to(insertReportRow)
   .add(importBarrier)
   .to(parseLines)
   .to(upsertLine)

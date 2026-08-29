@@ -22,6 +22,7 @@ IDS = {
     "__LINES_TABLE_ID__": "FDGqV46wAYu9bnGe",       # csp_subscription_lines
     "__MAPPINGS_TABLE_ID__": "U7ymd9nAyD0GCLYb",    # csp_customer_mappings
     "__SERVICES_TABLE_ID__": "ai3p8JIYv082bfjn",    # csp_sku_services
+    "__REPORT_TABLE_ID__": "bMh0poIYCCOyVsAj",      # csp_report_rows
     "__AUTOTASK_CREDENTIAL_ID__": "YXJai935T9ICrDqi",  # KantannaAutotask (httpCustomAuth)
 }
 
@@ -30,7 +31,9 @@ CODE_TOKENS = {
     "__NORMALIZE_UPLOADS__": "normalize-uploads.js",
     "__PARSE_LINES__": "parse-lines.js",
     "__SUMMARIZE_IMPORT__": "summarize-import.js",
+    "__SNAPSHOT_REPORT_ROWS__": "snapshot-report-rows.js",
     "__BUILD_PORTAL_PAGE__": "build-portal-page.js",
+    "__BUILD_REPORT_PAGE__": "build-report-page.js",
     "__SPLIT_SAVE_LINES__": "split-save-lines.js",
     "__SAVE_SUMMARY__": "save-summary.js",
     "__COMPANIES_RESPONSE__": "companies-response.js",
@@ -64,6 +67,11 @@ def portal_html() -> str:
     return json.dumps((HERE.parent / "portal" / "portal.html").read_text())
 
 
+def report_html() -> str:
+    """The uploaded-tab viewer, injected into the Report Template Set node."""
+    return json.dumps((HERE.parent / "portal" / "report.html").read_text())
+
+
 def import_done_html() -> str:
     """The upload form's completion page, injected into the Form node.
 
@@ -87,6 +95,8 @@ def build() -> None:
                 text = text.replace(token, runtime_literal(filename))
         if "__PORTAL_HTML__" in text:
             text = text.replace("__PORTAL_HTML__", portal_html())
+        if "__REPORT_HTML__" in text:
+            text = text.replace("__REPORT_HTML__", report_html())
         if "__IMPORT_DONE_HTML__" in text:
             text = text.replace("__IMPORT_DONE_HTML__", import_done_html())
         for token, value in IDS.items():

@@ -416,6 +416,91 @@ const redirectToForm = node({
   }
 });
 
+// The uploaded tabs, served verbatim. ?sheet=annuity | invoice.
+//
+// NOT plain "csp-report": something else on this instance already holds that
+// path and n8n refuses to publish a second workflow claiming it. Namespacing
+// under csp-pricing- keeps it with the portal's other routes, which is where
+// it belongs anyway.
+const reportView = node({
+  type: 'n8n-nodes-base.webhook',
+  version: 2,
+  config: {
+    name: 'Report View',
+    position: [-360, 960],
+    webhookId: 'csp-report-view',
+    parameters: { httpMethod: 'GET', path: 'csp-pricing-source', responseMode: 'responseNode', options: { ignoreBots: true } }
+  },
+  output: [{ query: { sheet: 'annuity' } }]
+});
+
+const fetchReportRows = node({
+  type: 'n8n-nodes-base.dataTable',
+  version: 1.1,
+  config: {
+    name: 'Fetch Report Rows',
+    position: [-140, 960],
+    alwaysOutputData: true,
+    parameters: {
+      resource: 'row',
+      operation: 'get',
+      dataTableId: { __rl: true, mode: 'id', value: '__REPORT_TABLE_ID__', cachedResultName: 'csp_report_rows' },
+      matchType: 'allConditions',
+      filters: { conditions: [] },
+      returnAll: true
+    }
+  },
+  output: [{ id: 1, sheet: 'annuity', row_no: 1, data: '{"TENANT ID":"211C4C89-…"}', source_file: 'Annuity_Information.xlsx', imported_at: '2026-08-29T08:14:15.039Z' }]
+});
+
+const reportTemplate = node({
+  type: 'n8n-nodes-base.set',
+  version: 3.4,
+  config: {
+    name: 'Report Template',
+    position: [80, 960],
+    executeOnce: true,
+    parameters: {
+      mode: 'manual',
+      includeOtherFields: false,
+      assignments: {
+        assignments: [{ id: 'report-html', name: 'html', type: 'string', value: __REPORT_HTML__ }]
+      }
+    }
+  },
+  output: [{ html: '<!DOCTYPE html>…' }]
+});
+
+const buildReport = node({
+  type: 'n8n-nodes-base.code',
+  version: 2,
+  config: {
+    name: 'Build Report Page',
+    position: [300, 960],
+    parameters: { mode: 'runOnceForAllItems', jsCode: __BUILD_REPORT_PAGE__ }
+  },
+  output: [{ html: '<!DOCTYPE html>…' }]
+});
+
+const respondReport = node({
+  type: 'n8n-nodes-base.respondToWebhook',
+  version: 1.5,
+  config: {
+    name: 'Respond Report Page',
+    position: [520, 960],
+    parameters: {
+      respondWith: 'text',
+      responseBody: expr('{{ $json.html }}'),
+      options: {
+        responseHeaders: { entries: [
+          { name: 'Content-Type', value: 'text/html; charset=utf-8' },
+          { name: 'Cache-Control', value: 'no-store, must-revalidate' }
+        ] }
+      }
+    }
+  }
+});
+
 const notePortal = sticky(
   '## 02 · Pricing Portal\nOpen GET /webhook/csp-pricing in a browser.\n- Sell price defaults to the monthly RRP from the annuity file; tick Custom to override per line.\n- Map each Dicker tenant to an Autotask company before syncing.\n- The Sync button POSTs to workflow 03 (path csp-autotask-sync).\n\nSet your Autotask zone URL in "Portal Autotask Config".',
   [portalPage, fetchLines],
@@ -445,6 +530,11 @@ export default workflow('kantanna-csp-02-portal', '02 · CSP Pricing Portal')
   .to(queryCompanies)
   .to(companiesResponse)
   .to(respondCompanies)
+  .add(reportView)
+  .to(fetchReportRows)
+  .to(reportTemplate)
+  .to(buildReport)
+  .to(respondReport)
   .add(importRedirect)
   .to(redirectToForm)
   .add(notePortal);

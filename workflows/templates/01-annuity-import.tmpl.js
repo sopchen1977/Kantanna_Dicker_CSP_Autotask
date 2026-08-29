@@ -203,6 +203,75 @@ const importDone = node({
   }
 });
 
+// The two uploaded tabs, kept verbatim so the portal can show the source
+// behind any number. Cleared first: a snapshot is this month's upload, not an
+// accumulation, and the rows carry no key to upsert on.
+const clearReportRows = node({
+  type: 'n8n-nodes-base.dataTable',
+  version: 1.1,
+  config: {
+    name: 'Clear Report Rows',
+    position: [560, 200],
+    executeOnce: true,
+    alwaysOutputData: true,
+    parameters: {
+      resource: 'row',
+      operation: 'deleteRows',
+      dataTableId: { __rl: true, mode: 'id', value: '__REPORT_TABLE_ID__', cachedResultName: 'csp_report_rows' },
+      matchType: 'allConditions',
+      filters: { conditions: [{ keyName: 'id', condition: 'gte', keyValue: '0' }] },
+      options: {}
+    }
+  },
+  output: [{ id: 1 }]
+});
+
+const snapshotReportRows = node({
+  type: 'n8n-nodes-base.code',
+  version: 2,
+  config: {
+    name: 'Snapshot Report Rows',
+    position: [700, 200],
+    executeOnce: true,
+    parameters: { mode: 'runOnceForAllItems', jsCode: __SNAPSHOT_REPORT_ROWS__ }
+  },
+  output: [{ sheet: 'annuity', row_no: 1, data: '{"TENANT ID":"211C4C89-…"}', source_file: 'Annuity_Information.xlsx', imported_at: '2026-08-29T08:14:15.039Z' }]
+});
+
+const insertReportRow = node({
+  type: 'n8n-nodes-base.dataTable',
+  version: 1.1,
+  config: {
+    name: 'Insert Report Row',
+    position: [840, 200],
+    parameters: {
+      resource: 'row',
+      operation: 'insert',
+      dataTableId: { __rl: true, mode: 'id', value: '__REPORT_TABLE_ID__', cachedResultName: 'csp_report_rows' },
+      columns: {
+        mappingMode: 'defineBelow',
+        matchingColumns: [],
+        value: {
+          sheet: expr('{{ $json.sheet }}'),
+          row_no: expr('{{ $json.row_no }}'),
+          data: expr('{{ $json.data }}'),
+          source_file: expr('{{ $json.source_file }}'),
+          imported_at: expr('{{ $json.imported_at }}')
+        },
+        schema: [
+          { id: 'sheet', displayName: 'sheet', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: true },
+          { id: 'row_no', displayName: 'row_no', required: false, defaultMatch: false, display: true, type: 'number', canBeUsedToMatch: false },
+          { id: 'data', displayName: 'data', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false },
+          { id: 'source_file', displayName: 'source_file', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false },
+          { id: 'imported_at', displayName: 'imported_at', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false }
+        ]
+      },
+      options: {}
+    }
+  },
+  output: [{ id: 1, sheet: 'annuity', row_no: 1 }]
+});
+
 const noteImport = sticky(
   '## 01 · Annuity Import\nUpload both monthly Dicker Data files. Lines are matched on Subscription ID + Stock Code and upserted, so custom sell prices and include/exclude choices saved in the portal survive re-imports.\n\n**Pilot filter:** edit PILOT_CUSTOMERS at the top of the "Parse Subscription Lines" node. Currently B E Smart Admin Services + Kantanna Pty Ltd (Kantanna is the in-house test customer). Names are matched as a substring; an empty list = all customers.',
   [uploadForm, normalizeUploads],
@@ -215,6 +284,10 @@ export default workflow('kantanna-csp-01-import', '01 · Annuity Import (Upload)
   .to(extractAnnuity.to(importBarrier.input(0)))
   .add(normalizeUploads)
   .to(extractInvoice.to(importBarrier.input(1)))
+  .add(importBarrier)
+  .to(clearReportRows)
+  .to(snapshotReportRows)
+  .to(insertReportRow)
   .add(importBarrier)
   .to(parseLines)
   .to(upsertLine)

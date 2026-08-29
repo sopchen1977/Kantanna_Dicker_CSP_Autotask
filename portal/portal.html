@@ -36,6 +36,8 @@
   }
   .topbar h1 { margin:0; font-size:15px; font-weight:600; letter-spacing:-.01em; }
   .topbar p { margin:1px 0 0; font-size:12px; color:#9fb3d1; }
+  .topbar p a { color:#cfe0f7; text-decoration:none; border-bottom:1px solid rgba(207,224,247,.35); }
+  .topbar p a:hover { color:#fff; border-bottom-color:#fff; }
   .actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
   .actions .msg { font-size:12.5px; color:#a9c4ea; max-width:340px; }
 
@@ -804,9 +806,17 @@ function render() {
 
   renderStats(visible);
 
-  document.getElementById('meta').textContent =
-    LINES.length + ' subscription lines' +
-    (LINES[0] && LINES[0].imported_at ? ' · imported ' + String(LINES[0].imported_at).slice(0, 10) : '');
+  // The provenance line, and off it the two tabs this page was built from,
+  // shown exactly as they were uploaded. Checking a number against the source
+  // is otherwise a matter of finding the workbook and reopening it.
+  document.getElementById('meta').innerHTML =
+    escapeHtml(LINES.length + ' subscription lines') +
+    (LINES[0] && LINES[0].imported_at
+      ? ' · imported ' + escapeHtml(String(LINES[0].imported_at).slice(0, 10)) : '') +
+    ' · <a href="' + attr(BASE + '/csp-pricing-source?sheet=annuity') +
+      '" title="The Annuity Information DETAILS tab, exactly as uploaded">Annuity DETAILS</a>' +
+    ' · <a href="' + attr(BASE + '/csp-pricing-source?sheet=invoice') +
+      '" title="The CSP Invoice Report Invoice Details tab, exactly as uploaded">CSP Invoice Details</a>';
 
   if (!LINES.length) {
     app.innerHTML = '<div class="empty">No subscription lines yet.<br>Run the ' +
