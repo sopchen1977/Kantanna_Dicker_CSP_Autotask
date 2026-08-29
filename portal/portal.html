@@ -139,7 +139,6 @@
 
   .svc { font-weight:550; letter-spacing:-.005em; line-height:1.3; }
   .svcsub { font-size:11.5px; color:var(--muted); margin-top:3px; display:flex; flex-wrap:wrap; gap:4px 8px; align-items:center; }
-  .svcsub .sku { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; }
   .dot { color:#cbd5e1; }
 
   .badge {
@@ -599,6 +598,9 @@ function matches(l) {
   if (UI.onlyDue && pendingCount(l) <= 0) return false;
   if (!UI.showOff && !effInclude(l)) return false;
   if (!UI.q) return true;
+  // The SKU is no longer shown on the row, but it is still searchable: it is
+  // how the Dicker reports identify a product, so it is what you have to hand
+  // when you are looking for one.
   var hay = [l.tenant_name, l.offer_name, l.stock_description, l.sku, l.subscription_id,
     groupContract(l).name, invoiceDesc(l).text].join(' ').toLowerCase();
   return hay.indexOf(UI.q) >= 0;
@@ -789,10 +791,10 @@ function lineHtml(l) {
   var suffix = periodSuffix(l);
   var m = marginPct(l);
 
-  // Sub-line: SKU, subscription, billing type, and the term only when this
-  // line's own window differs from the contract it sits on (co-terms).
+  // Sub-line: billing type, and the term only when this line's own window
+  // differs from the contract it sits on (co-terms). Most rows have neither,
+  // and the sub-line is dropped entirely rather than left as an empty gap.
   var bits = [];
-  if (l.sku) bits.push('<span class="sku">' + escapeHtml(l.sku) + '</span>');
   // The billing type is already the contract's name, so it is only worth
   // repeating on the lines that sit outside a contract (usage-billed).
   if (!groupContract(l).name) {
@@ -844,10 +846,13 @@ function lineHtml(l) {
   var main = '<tr class="line' + (on ? '' : ' off') + '" data-i="' + i + '">' +
     '<td class="pick"><input type="checkbox" class="js-incl" data-i="' + i + '"' + (on ? ' checked' : '') +
       ' title="Include this line in the Autotask sync"></td>' +
-    '<td><div class="svc"' + (cut ? ' title="' + attr(nm) +
-        ' (Dicker truncates REFERENCE at 30 characters, and this row has no stock description)"' : '') + '>' +
+    '<td><div class="svc" title="' + attr(subTitle + (cut
+        ? ' — ' + nm + ' (Dicker truncates REFERENCE at 30 characters, and this row has no stock description)'
+        : '')) + '">' +
       escapeHtml(nm) + (cut ? '<span class="muted">…</span>' : '') + '</div>' +
-      '<div class="svcsub" title="' + attr(subTitle) + '">' + bits.join('<span class="dot">·</span>') + '</div>' +
+      (bits.length
+        ? '<div class="svcsub">' + bits.join('<span class="dot">·</span>') + '</div>'
+        : '') +
       invoiceHtml(l, i) + '</td>' +
     '<td class="num">' + escapeHtml(String(l.qty || 0)) + '</td>' +
     '<td class="num muted">' + fmt(periodCost(l)) + '<span class="per">' + suffix + '</span></td>' +
