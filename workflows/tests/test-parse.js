@@ -93,6 +93,16 @@ const annuity = [
     'STOCK CODE': 'P1Y:CFQ7TTC0LH04:0001:1:', 'STOCK DESCRIPTION': 'MS NCE EXCHANGE ONLINE PLAN 1', 'REFERENCE': 'Exchange Online (Plan 1)',
     'QTY': '5.00', 'CHARGE TYPE': 'NCE', 'STATUS': 'Active', 'START USAGE': '29-JUL-2023', 'END USAGE': '28-AUG-2023',
     'REVALUATION PERIOD': '28-DEC-2026', 'UNIT PRICE': '$100.00', 'UNIT RRP': '$120.00' },
+  // Dicker has retired this product and relabelled it in their catalogue, so
+  // REFERENCE - a 30-character field - arrives as "DO NOT USE - Microsoft
+  // Defende". The STOCK DESCRIPTION is still the product. Same SKU root as
+  // SUB-1, different variant: a different product sharing a stock code.
+  { 'TENANT ID': 'T2', 'TENANT NAME': 'Galilee Solicitors', 'SUBSCRIPTION ID': 'SUB-15',
+    'STOCK CODE': 'P1Y:CFQ7TTC0LCHC:001J:1:',
+    'STOCK DESCRIPTION': 'MS NCE MICROSOFT DEFENDER SUITE FOR M365 BUSINESS PREMIUM 1YR COMMIT',
+    'REFERENCE': 'DO NOT USE - Microsoft Defende',
+    'QTY': '12.00', 'CHARGE TYPE': 'NCE', 'STATUS': 'Active', 'START USAGE': '29-JUL-2023', 'END USAGE': '28-AUG-2023',
+    'REVALUATION PERIOD': '28-DEC-2026', 'UNIT PRICE': '$60.00', 'UNIT RRP': '$72.00' },
   { 'TENANT ID': 'T9', 'TENANT NAME': 'Some Other Customer', 'SUBSCRIPTION ID': 'SUB-9',
     'STOCK CODE': 'P1Y:XXXX:0001:1:', 'STOCK DESCRIPTION': 'Other', 'REFERENCE': 'Other',
     'QTY': '1.00', 'CHARGE TYPE': 'NCE', 'STATUS': 'Active', 'START USAGE': '', 'END USAGE': '',
@@ -127,7 +137,7 @@ const nodes = {
 const parsed = runNode('parse-lines.js', [{ json: {} }], nodes, withPilot);
 
 // Pilot filter keeps only pilot customers
-assert.strictEqual(parsed.length, 13, 'pilot filter should keep 13 lines');
+assert.strictEqual(parsed.length, 14, 'pilot filter should keep 14 lines');
 assert.ok(!parsed.some((i) => i.json.tenant_name === 'Some Other Customer'));
 
 // The filter matches on substring, so a customer can be named by a short
@@ -182,7 +192,7 @@ const tableRows = parsed.map((i) => ({ json: Object.assign({}, i.json, { include
 const prepared = runNode('prepare-lines.js', tableRows, {});
 // SUB-7 and SUB-13 are the same product on the same contract, so they come
 // out as ONE line carrying the combined quantity.
-assert.strictEqual(prepared.length, 11, 'Azure/MODN excluded; $0 NCE kept; duplicate product merged');
+assert.strictEqual(prepared.length, 12, 'Azure/MODN excluded; $0 NCE kept; duplicate product merged');
 // $0 NCE line (Teams Phone Resource) is included and sells at $0
 const pZero = prepared.find((i) => i.json.subscription_id === 'SUB-5').json;
 assert.strictEqual(pZero.effective_sell, 0);
@@ -213,6 +223,49 @@ assert.ok(pAnnMo.service_name.includes('Annual Commit (Billed Monthly)'));
 const pMtm = prepared.find((i) => i.json.subscription_id === 'SUB-2').json;
 assert.strictEqual(pMtm.service_period_type, 2);
 assert.ok(pMtm.service_name.includes('Month to Month'));
+// ---- The product name Autotask sees -----------------------------------
+// It is the annuity report's STOCK DESCRIPTION, not its REFERENCE. REFERENCE
+// is 30 characters of whatever Dicker's catalogue currently says, which for a
+// retired product is "DO NOT USE - Microsoft Defende".
+const pDefender = prepared.find((i) => i.json.subscription_id === 'SUB-15').json;
+assert.strictEqual(pDefender.product_name,
+  'MS NCE MICROSOFT DEFENDER SUITE FOR M365 BUSINESS PREMIUM 1YR COMMIT');
+assert.ok(!/DO NOT USE/.test(pDefender.service_name),
+  'the catalogue label must never reach an Autotask service name: ' + pDefender.service_name);
+assert.ok(!/DO NOT USE/.test(pDefender.service_invoice_description),
+  'nor an invoice line the customer reads: ' + pDefender.service_invoice_description);
+assert.ok(pDefender.service_name.startsWith('MS NCE MICROSOFT DEFENDER SUITE'));
+assert.ok(pDefender.service_invoice_description.startsWith('MS NCE MICROSOFT DEFENDER SUITE'));
+// This one is long enough that the name has to be trimmed - and what gets
+// trimmed is the product, never the billing type and SKU that make two
+// services of one product distinguishable.
+assert.ok(pDefender.product_name.length + pDefender.service_name_suffix.length > 100,
+  'this fixture exists to exercise the 100-character trim');
+assert.strictEqual(pDefender.service_name_suffix, ' - Annual Commit (Billed Monthly) [CFQ7TTC0LCHC]');
+assert.ok(pDefender.service_invoice_description.endsWith(' - sub SUB-15'),
+  'the Subscription ID survives the trim: ' + pDefender.service_invoice_description);
+// Same SKU, different variant: two products that must not collapse into one
+// service just because their stock code root matches.
+assert.strictEqual(pDefender.service_key, 'ANN-MO:CFQ7TTC0LCHC:001J');
+assert.strictEqual(pAnnMo.service_key, 'ANN-MO:CFQ7TTC0LCHC:0002');
+assert.notStrictEqual(pDefender.service_name, pAnnMo.service_name);
+for (const i of prepared) {
+  const j = i.json;
+  assert.ok(j.service_name.length <= 100,
+    'Autotask service names are 100 characters: ' + j.service_name);
+  assert.ok(j.service_name.endsWith(j.service_name_suffix),
+    'every generated name ends in the billing type and SKU: ' + j.service_name);
+  assert.ok(j.service_invoice_description.length <= 100,
+    'Autotask invoice descriptions are 100 characters: ' + j.service_invoice_description);
+  assert.strictEqual(j.product_name, j.stock_description,
+    'the stock description is the product name: ' + j.subscription_id);
+}
+// A row with no stock description at all still gets a name, from REFERENCE.
+const noDesc = runNode('prepare-lines.js', [{ json: Object.assign({}, pAnnMo, {
+  stock_description: '', offer_name: 'Microsoft 365 Business Premium', include: true,
+}) }], {})[0].json;
+assert.ok(noDesc.service_name.startsWith('Microsoft 365 Business Premium - Annual Commit'));
+
 // ---- Co-term group contracts ------------------------------------------
 // Autotask steps its billing periods from the CONTRACT START DATE, while
 // Dicker bills a co-termed subscription on its GROUP's anchor day. So the

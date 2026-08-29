@@ -74,6 +74,16 @@ function longDate(isoDate) {
   return d.getUTCDate() + ' ' + MONTH_ABBR[d.getUTCMonth()] + ' ' + d.getUTCFullYear();
 }
 
+// Autotask caps a Service name and a contract service's invoice description
+// at 100 characters, and both END in the part that carries the meaning - the
+// billing type and SKU, or the Subscription ID. So when the product name is
+// too long it is the NAME that gets trimmed, never the suffix.
+function fit(name, suffix, max) {
+  const room = max - suffix.length;
+  if (room <= 0) return suffix.slice(0, max);
+  return String(name || '').slice(0, room).trim() + suffix;
+}
+
 const out = [];
 for (const l of rows) {
   const billingType = l.billing_type ||
@@ -93,6 +103,24 @@ for (const l of rows) {
   // Read straight off the stock code so no re-import is needed.
   const variant = String(l.stock_code || '').split(':')[2] || '';
   const serviceKey = billing.key + ':' + (l.sku || 'CSP') + (variant ? ':' + variant : '');
+
+  // ---- The product name Autotask sees -----------------------------------
+  // Both candidates come from the annuity report's DETAILS sheet, keyed by
+  // Subscription ID + Stock Code:
+  //   STOCK DESCRIPTION - the full Dicker stock description, e.g.
+  //     "MS NCE MICROSOFT DEFENDER SUITE FOR M365 BUSINESS PREMIUM 1YR COMMIT"
+  //   REFERENCE         - a 30-character field holding whatever Dicker's
+  //     catalogue currently calls the product, truncated at 30. For a product
+  //     Dicker has retired and relabelled that reads "DO NOT USE - Microsoft
+  //     Defende", which is neither the product's name nor a full sentence.
+  // The stock description is therefore the name, and REFERENCE only a
+  // fallback for a row that has none.
+  const productName = String(l.stock_description || l.offer_name || 'CSP Service').trim();
+
+  // The service name is "{product} - {billing type} [{SKU}]". The suffix is
+  // what makes two billing types of one product different services, so it is
+  // never what gets dropped when the name is too long.
+  const serviceSuffix = ' - ' + billing.label + ' [' + (l.sku || 'CSP') + ']';
 
   // ---- Contract window -------------------------------------------------
   // The annuity report's START USAGE / END USAGE are when the subscription
@@ -239,8 +267,7 @@ for (const l of rows) {
   if (effectiveDate < contractStart) effectiveDate = contractStart;
   if (effectiveDate > contractEnd) effectiveDate = contractEnd;
 
-  const defaultInvoiceDesc =
-    (String(l.offer_name || '') + ' - sub ' + l.subscription_id).slice(0, 100);
+  const defaultInvoiceDesc = fit(productName, ' - sub ' + l.subscription_id, 100);
   const customInvoiceDesc = String(l.invoice_description || '').trim().slice(0, 100);
 
   // Every contract name starts with "CSP Microsoft". The Subscription ID
@@ -278,7 +305,12 @@ for (const l of rows) {
     billing_type: billingType,
     billing_label: billing.label,
     service_key: serviceKey,
-    service_name: (String(l.offer_name || 'CSP Service') + ' - ' + billing.label + ' [' + (l.sku || 'CSP') + ']').slice(0, 100),
+    product_name: productName,
+    service_name: fit(productName, serviceSuffix, 100),
+    // What every service name this automation generates ends with. The sync
+    // uses it to tell a name it wrote itself from one somebody typed in
+    // Autotask, and only corrects its own.
+    service_name_suffix: serviceSuffix,
     service_period_type: billing.period_type,
     period_rrp: periodRrpTerm,
     period_cost: periodCostTerm,
@@ -359,7 +391,7 @@ for (const k of Object.keys(byService)) {
     invAll.sort((a, b) => String(a && a.s).localeCompare(String(b && b.s)));
     primary.invoice_lines = JSON.stringify(invAll).slice(0, 4000);
     primary.service_invoice_description_default =
-      (String(primary.offer_name || '') + ' - subs ' + parts.map((p) => p.id).join(', ')).slice(0, 100);
+      fit(primary.product_name, ' - subs ' + parts.map((p) => p.id).join(', '), 100);
     primary.service_internal_description = primary.service_invoice_description_default;
     if (!primary.invoice_description_custom) {
       primary.service_invoice_description = primary.service_invoice_description_default;

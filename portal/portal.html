@@ -476,8 +476,14 @@ function groupContract(l) {
 // The invoice description Autotask shows for this service. A description
 // typed in the portal is what will be pushed on the next sync; otherwise the
 // live value read back from Autotask, falling back to the generated default.
+// Kept in step with prepare-lines.js: the annuity STOCK DESCRIPTION is the
+// product name, REFERENCE only a fallback.
+function productName(l) {
+  return String(l.stock_description || l.offer_name || 'CSP Service').trim();
+}
 function defaultInvoiceDesc(l) {
-  return (String(l.offer_name || '') + ' - sub ' + l.subscription_id).slice(0, 100);
+  var suffix = ' - sub ' + l.subscription_id;
+  return productName(l).slice(0, 100 - suffix.length).trim() + suffix;
 }
 function customInvoiceDesc(l) {
   return String(l.invoice_description || '').trim();
@@ -727,7 +733,7 @@ function customerHtml(name, lines) {
 
 function contractHtml(customer, cname, block) {
   var lines = block.lines.slice().sort(function (a, b) {
-    return String(a.offer_name || '').localeCompare(String(b.offer_name || ''));
+    return productName(a).localeCompare(productName(b));
   });
   var key = 'k:' + customer + '|' + cname;
   var closed = !!UI.closed[key];
@@ -809,8 +815,12 @@ function lineHtml(l) {
     (firstStarted ? ' · first started ' + firstStarted : '') +
     (win.start ? ' · current term ' + win.start + ' to ' + win.end : '');
 
-  var nm = String(l.offer_name || l.stock_description || '');
-  var cut = nm.length >= 30 && !!l.stock_description;
+  // The full Dicker STOCK DESCRIPTION, which is what the Autotask service is
+  // named after. REFERENCE (offer_name) is only a fallback: Dicker truncates
+  // it at 30 characters, so a renamed product arrives as "DO NOT USE -
+  // Microsoft Defende".
+  var nm = productName(l);
+  var cut = !l.stock_description && nm.length >= 30;
 
   var due = dueNow(l);
   var pill;
@@ -834,8 +844,8 @@ function lineHtml(l) {
   var main = '<tr class="line' + (on ? '' : ' off') + '" data-i="' + i + '">' +
     '<td class="pick"><input type="checkbox" class="js-incl" data-i="' + i + '"' + (on ? ' checked' : '') +
       ' title="Include this line in the Autotask sync"></td>' +
-    '<td><div class="svc"' + (cut ? ' title="' + attr(String(l.stock_description || '')) +
-        ' (Dicker truncates the product name at 30 characters)"' : '') + '>' +
+    '<td><div class="svc"' + (cut ? ' title="' + attr(nm) +
+        ' (Dicker truncates REFERENCE at 30 characters, and this row has no stock description)"' : '') + '>' +
       escapeHtml(nm) + (cut ? '<span class="muted">…</span>' : '') + '</div>' +
       '<div class="svcsub" title="' + attr(subTitle) + '">' + bits.join('<span class="dot">·</span>') + '</div>' +
       invoiceHtml(l, i) + '</td>' +

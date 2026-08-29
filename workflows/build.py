@@ -37,6 +37,7 @@ CODE_TOKENS = {
     "__PREPARE_LINES__": "prepare-lines.js",
     "__SERVICE_DECISION__": "service-decision.js",
     "__SERVICE_FROM_CREATE__": "service-from-create.js",
+    "__SERVICE_PATCHED__": "service-patched.js",
     "__CONTRACT_DECISION__": "contract-decision.js",
     "__CONTRACT_FROM_CREATE__": "contract-from-create.js",
     "__CONTRACT_PATCHED__": "contract-patched.js",

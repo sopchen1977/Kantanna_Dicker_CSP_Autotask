@@ -17,9 +17,9 @@ Everything lives in the n8n project **Kantanna Dicker CSP and Autotask**
 
 | # | Workflow | Trigger | What it does |
 |---|----------|---------|--------------|
-| 01 | **Annuity Import (Upload)** (`YvQ9T1rEFfIUnQUj`) | n8n Form | Upload the monthly **Annuity Information** + **CSP Invoice Report** (.xlsx). Reads only the `DETAILS` / `Invoice Details` tabs, normalises each subscription line (SKU + term parsed from the stock code, per-term prices converted to per-unit **monthly** cost/RRP, term dates taken from the invoice report), and upserts into the `csp_subscription_lines` data table keyed by *Subscription ID + Stock Code*. Custom sell prices and include/exclude choices survive re-imports. |
+| 01 | **Annuity Import (Upload)** (`YvQ9T1rEFfIUnQUj`) | n8n Form | Upload the monthly **Annuity Information** + **CSP Invoice Report** (.xlsx). Reads only the `DETAILS` / `Invoice Details` tabs, normalises each subscription line (SKU + term parsed from the stock code, product name from the annuity STOCK DESCRIPTION, per-term prices converted to per-unit **monthly** cost/RRP, term dates taken from the invoice report), and upserts into the `csp_subscription_lines` data table keyed by *Subscription ID + Stock Code*. Custom sell prices and include/exclude choices survive re-imports. |
 | 02 | **CSP Pricing Portal** (`X9YtsHTLZJd1B21n`) | Webhook `GET /webhook/csp-pricing` | Web page grouped by customer: qty, monthly cost, monthly RRP, margin. Sell price **defaults to RRP**; tick *Custom* to set your own price. Map each Dicker tenant to an Autotask company (live company search). *Save prices* persists, *Sync to Autotask* kicks off workflow 03. |
-| 03 | **Autotask Sync** (`s9t606cOMcSVkufg`) | Webhook `POST /webhook/csp-autotask-sync` | Per included line: resolve the company mapping → ensure an Autotask **Service** exists for the SKU+term (created with monthly RRP/cost) → ensure a **Contract** exists for the co-term group, matched on its Autotask **External Contract Number** → add/re-price the contract service at the chosen sell price → adjust units to the imported quantity. Results (synced / needs_mapping / error + message and Autotask IDs) are written back per line and shown in the portal. |
+| 03 | **Autotask Sync** (`s9t606cOMcSVkufg`) | Webhook `POST /webhook/csp-autotask-sync` | Per included line: resolve the company mapping → ensure an Autotask **Service** exists for the SKU+term, matched on its **SKU field** and renamed in place if its name has drifted (created with monthly RRP/cost) → ensure a **Contract** exists for the co-term group, matched on its Autotask **External Contract Number** → add/re-price the contract service at the chosen sell price → adjust units to the imported quantity. Results (synced / needs_mapping / error + message and Autotask IDs) are written back per line and shown in the portal. |
 
 ### Data tables (n8n project storage)
 
@@ -79,8 +79,26 @@ matching billing period, so it bills correctly on a recurring contract:
 | `P1M:{sku}:…:1:` | **Month to Month** | `MTM:{sku}` | 2 (Monthly) | monthly amount |
 | `DZH…` (Azure) | Usage-based | excluded by default | — | — |
 
-Service names carry the billing type, e.g.
-`Microsoft 365 Business Premium - Annual Commit (Monthly) [CFQ7TTC0LCHC]`.
+Service names are the annuity report's **STOCK DESCRIPTION** plus the billing
+type and SKU, e.g. `MS NCE M365 BUSINESS PREMIUM 1 YR COMMIT - Annual Commit
+(Billed Monthly) [CFQ7TTC0LCHC]`. The annuity sheet's other name column,
+REFERENCE, is only a fallback: it holds 30 characters of whatever Dicker's
+catalogue currently calls the product, truncated, so a product Dicker has
+retired and relabelled arrives as `DO NOT USE - Microsoft Defende`. Autotask
+caps a service name at 100 characters, and when a stock description is long
+enough to overflow it is the description that is trimmed — the billing type
+and SKU always survive, because they are what make two billing types of one
+product different services.
+
+**A service is identified by its SKU field, never by its name** — the same
+rule the contract follows. Every service the sync creates carries its service
+key (`ANN-MO:CFQ7TTC0LCHC:001J`) in Autotask's `sku` field and is matched on
+it from then on, so a product name can be corrected without the next sync
+building a duplicate service beside the one already on the contracts. When the
+name has drifted, the sync renames the service in place — but only a name it
+generated itself (one ending in ` - {billing type} [{SKU}]`); a name typed by
+hand in Autotask is left alone. A service created before the key was written
+to `sku` is adopted once by its name, and that same PATCH stamps the key on.
 
 **One contract per co-term group.** Autotask steps a contract's billing
 periods from its START DATE, and Dicker bills every co-termed subscription on

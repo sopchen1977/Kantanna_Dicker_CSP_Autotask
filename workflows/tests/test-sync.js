@@ -19,11 +19,14 @@ function runNode(file, inputItems, nodes) {
 
 const line = {
   tenant_name: 'Galilee Solicitors', subscription_id: 'SUB-A', stock_code: 'P1Y:SKU1:0002:1:',
-  line_key: 'SUB-A|P1Y:SKU1:0002:1:', service_key: 'P1Y:SKU1', service_name: 'Thing [P1Y:SKU1]',
+  line_key: 'SUB-A|P1Y:SKU1:0002:1:', service_key: 'ANN-MO:SKU1:0002',
+  service_name: 'MS NCE THING 1YR COMMIT - Annual Commit (Billed Monthly) [SKU1]',
+  service_name_suffix: ' - Annual Commit (Billed Monthly) [SKU1]',
   contract_name: 'CSP - Thing - SUB-A',
   contract_number: 'CSP-ANN-MO-20251229-20261228', effective_sell: 34.55, qty: 51,
   monthly_cost: 29.37, monthly_rrp: 34.55, contract_start: '2025-12-29', contract_end: '2026-12-28',
-  today: '2026-08-26', stock_description: 'DESC', offer_name: 'Thing',
+  today: '2026-08-26', product_name: 'MS NCE THING 1YR COMMIT',
+  stock_description: 'MS NCE THING 1YR COMMIT', offer_name: 'DO NOT USE - Thing',
   price_effective_date: '2026-08-26',
   invoice_lines: JSON.stringify([
     { s: '2026-07-13', e: '2026-07-30', q: 4, u: 16.37 },
@@ -42,7 +45,7 @@ nodes['Service From Create'] = runNode('service-from-create.js', [{ json: { item
 assert.strictEqual(nodes['Service From Create'][0].json.service_id, 9001);
 
 // Record Service upsert row (as the data table would echo it)
-nodes['Record Service'] = [{ json: { sku: 'P1Y:SKU1', service_name: line.service_name, autotask_service_id: 9001 } }];
+nodes['Record Service'] = [{ json: { sku: line.service_key, service_name: line.service_name, autotask_service_id: 9001 } }];
 
 nodes['Contract Decision'] = runNode('contract-decision.js', [{ json: { items: [] } }], nodes);
 assert.strictEqual(nodes['Contract Decision'][0].json.need_contract, true);
@@ -101,13 +104,79 @@ assert.strictEqual(result.autotask_contract_id, 7001);
 assert.strictEqual(result.autotask_service_id, 9001);
 assert.strictEqual(result.autotask_contract_service_id, 8001);
 
+// -- The Autotask service is found by its KEY, not by its name ------------
+// A service this automation created before the product name was taken from
+// the annuity STOCK DESCRIPTION still carries "DO NOT USE - Thing" as its
+// name. Matching on the name would miss it and stand a duplicate service up
+// beside it; matching on the sku field finds it and renames it in place.
+const staleName = 'DO NOT USE - Thing - Annual Commit (Billed Monthly) [SKU1]';
+const byKey = runNode('service-decision.js',
+  [{ json: { items: [{ id: 9001, sku: line.service_key, name: staleName }] } }], nodes)[0].json;
+assert.strictEqual(byKey.need_service, false, 'a renamed service must not be recreated');
+assert.strictEqual(byKey.service_id, 9001);
+assert.strictEqual(byKey.service_matched_by, 'sku');
+assert.strictEqual(byKey.need_service_patch, true);
+assert.deepStrictEqual(byKey.service_patch, { id: 9001, name: line.service_name });
+
+// Already correct -> nothing to patch.
+const settled = runNode('service-decision.js',
+  [{ json: { items: [{ id: 9001, sku: line.service_key, name: line.service_name }] } }], nodes)[0].json;
+assert.strictEqual(settled.need_service_patch, false);
+
+// A name somebody typed in Autotask does not end in " - {billing type}
+// [{SKU}]", so it was not written by this automation and is left alone.
+const handNamed = runNode('service-decision.js',
+  [{ json: { items: [{ id: 9001, sku: line.service_key, name: 'Thing, as we sell it' }] } }], nodes)[0].json;
+assert.strictEqual(handNamed.service_id, 9001);
+assert.strictEqual(handNamed.need_service_patch, false,
+  'a hand-written service name is nobody else\'s business');
+
+// A service created before the key was written to `sku` carries only its
+// name. It is adopted once, and the patch stamps the key on.
+const legacy = runNode('service-decision.js',
+  [{ json: { items: [{ id: 9001, name: line.service_name }] } }], nodes)[0].json;
+assert.strictEqual(legacy.service_matched_by, 'name');
+assert.deepStrictEqual(legacy.service_patch, { id: 9001, sku: line.service_key });
+// ...but never one already claimed by a different key.
+const claimed = runNode('service-decision.js',
+  [{ json: { items: [{ id: 9002, sku: 'ANN-YR:SKU1:0002', name: line.service_name }] } }], nodes)[0].json;
+assert.strictEqual(claimed.service_id, null);
+assert.strictEqual(claimed.need_service, true);
+
+// A failed lookup must never read as "no service exists" - that would build a
+// second service beside the real one.
+const svcQueryErr = runNode('service-decision.js', [{ json: {
+  error: { message: '500 - Autotask is unavailable' },
+  details: { body: { errors: ['Zone unavailable'] } },
+} }], nodes)[0].json;
+assert.strictEqual(svcQueryErr.need_service, false, 'a lookup failure must not create a duplicate');
+assert.ok(svcQueryErr.query_error.includes('Zone unavailable'));
+const rSvcErr = runNode('sync-result.js', [{ json: {} }],
+  Object.assign({}, nodes, { 'Service Decision': [{ json: svcQueryErr }] , 'Service From Create': [{ json: { line_key: 'OTHER|X' } }] }))[0].json;
+assert.strictEqual(rSvcErr.sync_status, 'error');
+assert.ok(rSvcErr.sync_message.includes('service lookup failed'));
+
+// The rename itself, reported back to the portal.
+const patched = runNode('service-patched.js', [{ json: {} }],
+  Object.assign({}, nodes, { 'Service Decision': [{ json: byKey }] }))[0].json;
+assert.strictEqual(patched.service_id, 9001);
+assert.strictEqual(patched.patch_error, '');
+const rPatched = runNode('sync-result.js', [{ json: {} }],
+  Object.assign({}, nodes, { 'Service Decision': [{ json: byKey }], 'Service Patched': [{ json: patched }] }))[0].json;
+assert.ok(rPatched.sync_message.includes('service updated (renamed to'), rPatched.sync_message);
+const patchFailed = runNode('service-patched.js',
+  [{ json: { error: { message: 'name already in use' } } }],
+  Object.assign({}, nodes, { 'Service Decision': [{ json: byKey }] }))[0].json;
+assert.ok(patchFailed.patch_error.includes('name already in use'));
+
 // -- Scenario 2: everything exists, user is EDITING the price -> patch;
 //    units match. (Re-pricing only happens with 'Edit price' ticked.)
 const lineEdit = Object.assign({}, line, { use_custom_price: true, sell_price: 34.55 });
 const n2 = { 'Current Line': [{ json: lineEdit }] };
-n2['Service Decision'] = runNode('service-decision.js', [{ json: { items: [{ id: 9001, name: line.service_name }] } }], n2);
+n2['Service Decision'] = runNode('service-decision.js',
+  [{ json: { items: [{ id: 9001, sku: line.service_key, name: line.service_name }] } }], n2);
 assert.strictEqual(n2['Service Decision'][0].json.need_service, false);
-n2['Record Service'] = [{ json: { sku: 'P1Y:SKU1', autotask_service_id: 9001 } }];
+n2['Record Service'] = [{ json: { sku: line.service_key, autotask_service_id: 9001 } }];
 n2['Contract Decision'] = runNode('contract-decision.js', [{ json: { items: [{ id: 7001, contractName: 'CSP - Thing - SUB-A' }] } }], n2);
 assert.strictEqual(n2['Contract Decision'][0].json.need_contract, false);
 // stale Contract From Create from another line must be ignored
@@ -160,7 +229,7 @@ assert.strictEqual(r2.contract_price, 34.55, 'patched price becomes the stored c
 const n3 = { 'Current Line': [{ json: line }] };
 n3['Service Decision'] = runNode('service-decision.js', [{ json: { items: [] } }], n3);
 n3['Service From Create'] = runNode('service-from-create.js', [{ json: { error: { message: 'materialCodeID invalid' } } }], n3);
-n3['Record Service'] = [{ json: { sku: 'P1Y:SKU1', autotask_service_id: null } }];
+n3['Record Service'] = [{ json: { sku: line.service_key, autotask_service_id: null } }];
 n3['Contract Decision'] = runNode('contract-decision.js', [{ json: { items: [] } }], n3);
 n3['Contract From Create'] = runNode('contract-from-create.js', [{ json: { error: { message: 'bad company' } } }], n3);
 n3['CS Decision'] = runNode('cs-decision.js', [{ json: { items: [] } }], n3);
@@ -390,7 +459,7 @@ const nDescOff = { 'Current Line': [{ json: Object.assign({}, line, {
   service_invoice_description: 'Something else entirely',
   invoice_description_custom: false,
 }) }] };
-nDescOff['Record Service'] = [{ json: { sku: 'P1Y:SKU1', autotask_service_id: 9001 } }];
+nDescOff['Record Service'] = [{ json: { sku: line.service_key, autotask_service_id: 9001 } }];
 nDescOff['Contract Decision'] = [{ json: { line_key: line.line_key, contract_id: 7001 } }];
 const descOff = runNode('cs-decision.js', [{ json: { items: [csRow] } }], nDescOff)[0].json;
 assert.strictEqual(descOff.desc_change, false,
@@ -402,7 +471,7 @@ const nDesc = { 'Current Line': [{ json: Object.assign({}, line, {
   service_invoice_description: 'M365 Business Premium licences',
   invoice_description_custom: true,
 }) }] };
-nDesc['Record Service'] = [{ json: { sku: 'P1Y:SKU1', autotask_service_id: 9001 } }];
+nDesc['Record Service'] = [{ json: { sku: line.service_key, autotask_service_id: 9001 } }];
 nDesc['Contract Decision'] = [{ json: { line_key: line.line_key, contract_id: 7001 } }];
 const descOn = runNode('cs-decision.js', [{ json: { items: [csRow] } }], nDesc)[0].json;
 assert.strictEqual(descOn.desc_change, true, 'a typed description is pushed');
@@ -529,7 +598,7 @@ assert.strictEqual(portalLines(pendingEdit)[0].invoice_description, 'Typed but n
 // that has been edited in Autotask since we last wrote it.
 function descDecision(extra, liveDesc) {
   const n = { 'Current Line': [{ json: Object.assign({}, line, extra) }] };
-  n['Record Service'] = [{ json: { sku: 'P1Y:SKU1', autotask_service_id: 9001 } }];
+  n['Record Service'] = [{ json: { sku: line.service_key, autotask_service_id: 9001 } }];
   n['Contract Decision'] = [{ json: { line_key: line.line_key, contract_id: 7001 } }];
   const row = { id: 8001, serviceID: 9001, adjustedPrice: 34.55, invoiceDescription: liveDesc };
   return runNode('cs-decision.js', [{ json: { items: [row] } }], n)[0].json;

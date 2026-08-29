@@ -182,6 +182,9 @@ const markNeedsMapping = node({
   output: [{ id: 1, sync_status: 'needs_mapping' }]
 });
 
+// The service is matched on its SKU field, which carries this automation's
+// service key (see Service Decision) - the name is only a fallback for a
+// service created before the key was written there.
 const findService = node({
   type: 'n8n-nodes-base.httpRequest',
   version: 4.5,
@@ -196,7 +199,7 @@ const findService = node({
       genericAuthType: 'httpCustomAuth',
       sendBody: true,
       specifyBody: 'json',
-      jsonBody: expr('{{ JSON.stringify({ MaxRecords: 5, Filter: [{ op: "eq", field: "name", value: $("Current Line").first().json.service_name }] }) }}'),
+      jsonBody: expr('{{ JSON.stringify({ MaxRecords: 25, Filter: [{ op: "or", items: [{ op: "eq", field: "sku", value: $("Current Line").first().json.service_key }, { op: "eq", field: "name", value: $("Current Line").first().json.service_name }] }] }) }}'),
       options: {}
     },
     credentials: { httpCustomAuth: newCredential('KantannaAutotask') }
@@ -212,7 +215,7 @@ const serviceDecision = node({
     position: [1400, 20],
     parameters: { mode: 'runOnceForAllItems', jsCode: __SERVICE_DECISION__ }
   },
-  output: [{ line_key: '2F295B21|P1Y:CFQ7TTC0LCHC:0002:1:', service_id: null, need_service: true, query_error: '' }]
+  output: [{ line_key: '2F295B21|P1Y:CFQ7TTC0LCHC:0002:1:', service_id: null, need_service: true, need_service_patch: false, service_patch: {}, service_patch_summary: '', service_matched_by: '', service_name_found: '', query_error: '' }]
 });
 
 const needService = ifElse({
@@ -263,6 +266,56 @@ const serviceFromCreate = node({
     parameters: { mode: 'runOnceForAllItems', jsCode: __SERVICE_FROM_CREATE__ }
   },
   output: [{ line_key: '2F295B21|P1Y:CFQ7TTC0LCHC:0002:1:', service_id: 9001, create_error: '' }]
+});
+
+const needServicePatch = ifElse({
+  version: 2.2,
+  config: {
+    name: 'Patch Service?',
+    position: [1840, 180],
+    parameters: {
+      conditions: {
+        options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+        conditions: [
+          { leftValue: expr('{{ $json.need_service_patch }}'), operator: { type: 'boolean', operation: 'true', singleValue: true } }
+        ],
+        combinator: 'and'
+      }
+    }
+  }
+});
+
+const patchService = node({
+  type: 'n8n-nodes-base.httpRequest',
+  version: 4.5,
+  config: {
+    name: 'Patch Service',
+    position: [2040, 180],
+    onError: 'continueRegularOutput',
+    parameters: {
+      method: 'PATCH',
+      url: expr("{{ $('Autotask Config').first().json.base_url }}/Services"),
+      authentication: 'genericCredentialType',
+      genericAuthType: 'httpCustomAuth',
+      sendBody: true,
+      specifyBody: 'json',
+      jsonBody: expr('{{ JSON.stringify($json.service_patch) }}'),
+      options: {}
+    },
+    credentials: { httpCustomAuth: newCredential('KantannaAutotask') }
+  },
+  output: [{ itemId: 9001 }]
+});
+
+const servicePatched = node({
+  type: 'n8n-nodes-base.code',
+  version: 2,
+  config: {
+    name: 'Service Patched',
+    position: [2240, 180],
+    parameters: { mode: 'runOnceForAllItems', jsCode: __SERVICE_PATCHED__ }
+  },
+  output: [{ line_key: '2F295B21|P1Y:CFQ7TTC0LCHC:0002:1:', service_id: 9001, patch_summary: 'renamed to "MS NCE M365 BUSINESS PREMIUM 1 YR COMMIT - Annual Commit (Billed Monthly) [CFQ7TTC0LCHC]"', patch_error: '' }]
 });
 
 const recordService = node({
@@ -819,7 +872,7 @@ const markSynced = node({
 });
 
 const noteSync = sticky(
-  '## 03 · Autotask Sync\nPOST /webhook/csp-autotask-sync (the portal Sync button calls this).\nPer included line: resolve company mapping -> ensure Service -> ensure Contract (Subscription ID in the name) -> set sell price on the contract service -> adjust units.\n\n**Config ("Autotask Config"):**\n- base_url: Autotask zone REST URL (ww31)\n- billing_code_id: the Autotask Billing (Material) Code for created Services (594 = Cloud and SaaS)',
+  '## 03 · Autotask Sync\nPOST /webhook/csp-autotask-sync (the portal Sync button calls this).\nPer included line: resolve company mapping -> ensure Service (matched on its SKU field, which holds the service key) -> ensure Contract (matched on its External Contract Number) -> set sell price on the contract service -> adjust units.\n\n**Config ("Autotask Config"):**\n- base_url: Autotask zone REST URL (ww31)\n- billing_code_id: the Autotask Billing (Material) Code for created Services (594 = Cloud and SaaS)',
   [startSync, autotaskConfig],
   { color: 3 }
 );
@@ -840,7 +893,9 @@ export default workflow('kantanna-csp-03-sync', '03 · Autotask Sync')
   .to(serviceDecision)
   .to(needService
     .onTrue(createService.to(serviceFromCreate.to(recordService)))
-    .onFalse(recordService))
+    .onFalse(needServicePatch
+      .onTrue(patchService.to(servicePatched.to(recordService)))
+      .onFalse(recordService)))
   .add(recordService)
   .to(findContract)
   .to(contractDecision)

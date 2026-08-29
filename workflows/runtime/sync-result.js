@@ -12,6 +12,7 @@ function grab(name) {
 
 const svcDec = grab('Service Decision');
 const svcCreated = grab('Service From Create');
+const svcPatched = grab('Service Patched');
 const conDec = grab('Contract Decision');
 const conCreated = grab('Contract From Create');
 const conPatched = grab('Contract Patched');
@@ -31,6 +32,13 @@ const errors = [];
 if (svcCreated) {
   if (svcCreated.service_id) notes.push('service created #' + svcCreated.service_id);
   else errors.push('service create failed: ' + (svcCreated.create_error || 'unknown'));
+}
+if (svcDec && svcDec.query_error) {
+  errors.push('service lookup failed: ' + svcDec.query_error);
+}
+if (svcPatched) {
+  if (svcPatched.patch_error) errors.push('service update failed: ' + svcPatched.patch_error);
+  else notes.push('service updated (' + svcPatched.patch_summary + ')');
 }
 if (conCreated) {
   if (conCreated.contract_id) notes.push('contract created #' + conCreated.contract_id);
