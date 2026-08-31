@@ -396,8 +396,12 @@ const noContractServices = node({
     name: 'No Contract Services',
     position: [2000, 140],
     parameters: {
-      mode: 'raw',
-      jsonOutput: '={{ JSON.stringify({ items: [] }) }}'
+      mode: 'manual',
+      assignments: {
+        assignments: [
+          { id: 'ncs-items', name: 'items', type: 'array', value: [] }
+        ]
+      }
     }
   },
   output: [{ items: [] }]
@@ -463,8 +467,12 @@ const noUnits = node({
     name: 'No CS Units',
     position: [2480, 140],
     parameters: {
-      mode: 'raw',
-      jsonOutput: '={{ JSON.stringify({ items: [] }) }}'
+      mode: 'manual',
+      assignments: {
+        assignments: [
+          { id: 'nu-items', name: 'items', type: 'array', value: [] }
+        ]
+      }
     }
   },
   output: [{ items: [] }]
@@ -584,16 +592,12 @@ export default workflow('kantanna-csp-04-plan', '04 · Autotask Plan')
   .to(findContract)
   .to(contractDecision)
   .to(contractExists
-    .onTrue(fetchContractServices)
-    .onFalse(noContractServices))
-  .add(fetchContractServices).to(csDecision)
-  .add(noContractServices).to(csDecision)
+    .onTrue(fetchContractServices.to(csDecision))
+    .onFalse(noContractServices.to(csDecision)))
   .add(csDecision)
   .to(csExists
-    .onTrue(fetchUnits)
-    .onFalse(noUnits))
-  .add(fetchUnits).to(unitsDecision)
-  .add(noUnits).to(unitsDecision)
+    .onTrue(fetchUnits.to(unitsDecision))
+    .onFalse(noUnits.to(unitsDecision)))
   .add(unitsDecision)
   .to(planResult)
   .to(savePlan)

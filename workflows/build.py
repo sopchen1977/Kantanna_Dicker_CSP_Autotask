@@ -26,6 +26,7 @@ IDS = {
     "__AUTH_CODES_TABLE_ID__": "Am9KrzhbyWdKOEeY",  # csp_auth_codes
     "__SESSIONS_TABLE_ID__": "dejMhLWVWTKdyYpo",    # csp_sessions
     "__AUTOTASK_CREDENTIAL_ID__": "YXJai935T9ICrDqi",  # KantannaAutotask (httpCustomAuth)
+    "__PLAN_WORKFLOW_ID__": "iTE2TSNj225YXBqq",     # 04 · Autotask Plan
 }
 
 # ---- runtime scripts embedded as Code-node jsCode
