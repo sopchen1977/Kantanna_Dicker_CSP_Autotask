@@ -12,10 +12,37 @@ Everything lives in the n8n project **Kantanna Dicker CSP and Autotask**
 > empty list, so every customer in the uploaded files is imported. Put names
 > back in that list (matched as a substring) to narrow the import again.
 
-## The three workflows
+## Signing in
+
+Every page and endpoint is behind a sign-in. Open any of them and you land on
+a code request: enter a Kantanna address, a six-digit code arrives by email
+from the Kantanna mailbox, hand it back and you are taken on to the page you
+asked for. A session lasts 14 days on that browser; *Sign out* in the portal's
+header ends it.
+
+Only `kantanna.com`, `kantanna.com.au` and `kantanna.ph` addresses are
+accepted, compared as whole domains rather than as suffixes, so a lookalike
+like `evil-kantanna.com` is refused. Codes last 10 minutes, are single use,
+allow five attempts, and are rate limited to 5 per hour per address and 15 per
+hour per IP. Codes and sessions are stored only as SHA-256 hashes, so neither
+table holds anything that can be signed in with. The reply to a code request
+never varies — the same text whether the address is a Kantanna one, rate
+limited, or nonsense — so the endpoint cannot be used to find out who works
+at Kantanna.
+
+The sign-in is a sequence of ordinary form POSTs rather than a background
+`fetch()`, because n8n Cloud serves every webhook response under
+`Content-Security-Policy: sandbox`. That puts the page in an opaque origin,
+where a cookie set on a `fetch()` response is discarded; a form submit
+navigates the top-level window, which is first-party, so the cookie sticks.
+For the same reason the portal's own background calls cannot send a cookie,
+and carry an explicit session token instead.
+
+## The workflows
 
 | # | Workflow | Trigger | What it does |
 |---|----------|---------|--------------|
+| 00 | **CSP Access** (`pcJUTSSeW2cRow8s`) | Webhooks `csp-auth-request` / `csp-auth-verify` / `csp-auth-signout` | The sign-in service, and the *Access Check* sub-workflow every other endpoint calls before it does anything else. Issues and verifies email codes, mints and ends sessions. |
 | 01 | **Annuity Import (Upload)** (`YvQ9T1rEFfIUnQUj`) | n8n Form | Upload the monthly **Annuity Information** + **CSP Invoice Report** (.xlsx). Reads only the `DETAILS` / `Invoice Details` tabs, normalises each subscription line (SKU + term parsed from the stock code, product name from the annuity STOCK DESCRIPTION, per-term prices converted to per-unit **monthly** cost/RRP, term dates taken from the invoice report), and upserts into the `csp_subscription_lines` data table keyed by *Subscription ID + Stock Code*. Custom sell prices and include/exclude choices survive re-imports. |
 | 02 | **CSP Pricing Portal** (`X9YtsHTLZJd1B21n`) | Webhook `GET /webhook/csp-pricing` | Web page grouped by customer: qty, monthly cost, monthly RRP, margin. Sell price **defaults to RRP**; tick *Custom* to set your own price. Map each Dicker tenant to an Autotask company (live company search). *Save prices* persists, *Sync to Autotask* kicks off workflow 03. |
 | 03 | **Autotask Sync** (`s9t606cOMcSVkufg`) | Webhook `POST /webhook/csp-autotask-sync` | Per included line: resolve the company mapping → ensure an Autotask **Service** exists for the SKU+term, matched on its **SKU field** and renamed in place if its name has drifted (created with monthly RRP/cost) → ensure a **Contract** exists for the co-term group, matched on its Autotask **External Contract Number** → add/re-price the contract service at the chosen sell price → adjust units to the imported quantity. Results (synced / needs_mapping / error + message and Autotask IDs) are written back per line and shown in the portal. |
@@ -27,14 +54,21 @@ Everything lives in the n8n project **Kantanna Dicker CSP and Autotask**
 | `csp_subscription_lines` | `FDGqV46wAYu9bnGe` | Current state of every imported subscription line + pricing decisions + sync results |
 | `csp_customer_mappings` | `U7ymd9nAyD0GCLYb` | Dicker tenant name → Autotask company |
 | `csp_sku_services` | `ai3p8JIYv082bfjn` | SKU+term → Autotask Service id (audit/cache) |
+| `csp_report_rows` | `bMh0poIYCCOyVsAj` | The uploaded Annuity DETAILS and CSP Invoice Details tabs, verbatim, behind the portal's two source links |
+| `csp_auth_codes` | `Am9KrzhbyWdKOEeY` | Live sign-in codes, hashed |
+| `csp_sessions` | `dejMhLWVWTKdyYpo` | Live sessions, hashed |
 
 **Starting a test round from empty tables.** The utility workflow
-**ZZ · Reset CSP Data Tables** (`X1stW6srLjbj8wAm`) dumps all three tables to
-its execution log and then deletes every row — run it by hand from the n8n
-canvas. It touches nothing in Autotask: clear the External Contract Number off
-any test contract there yourself, or the next sync will adopt that contract
-again instead of creating a fresh one. To read the old rows back, open the
-execution the reset produced; the dump nodes run before the deletes.
+**ZZ · Reset CSP Data Tables** (`X1stW6srLjbj8wAm`) empties the four CSP data
+tables — the first three above plus `csp_report_rows` — run it by hand from
+the n8n canvas. The first three are dumped to its execution log before they
+are deleted; `csp_report_rows` is not, because the .xlsx you uploaded is its
+backup. The two sign-in tables are left alone: clearing them would only sign
+everyone out. Nothing in Autotask is touched either — clear the External
+Contract Number off any test contract there yourself, or the next sync will
+adopt that contract again instead of creating a fresh one. To read the old
+rows back, open the execution the reset produced; the dump nodes run before
+the deletes.
 
 ## One-time setup (before the first sync)
 
@@ -57,21 +91,34 @@ execution the reset produced; the dump nodes run before the deletes.
    *ZZ · Autotask Field Inspector* utility workflow).
 4. Check the contract defaults in *Autotask Config*: contract type `7`
    (Recurring Service), status `1` (Active), monthly period.
+5. **Sign-in mail.** Workflow 00's *Send Code Email* node sends through the
+   Microsoft Outlook credential **Sop Kantanna Email**, which must be shared
+   with the project — a code that cannot be sent is a sign-in nobody can
+   complete. The failure is deliberately silent to the visitor (the reply
+   never varies), so check the workflow's executions rather than the page.
 
 ## Monthly run
 
 1. Open the upload form at
-   `https://gayleai.app.n8n.cloud/webhook/csp-import` (redirects to the n8n
-   form) and upload both files. File detection is by name: one must contain
-   “Annuity”, the other “Invoice”/“CSP”.
+   `https://gayleai.app.n8n.cloud/webhook/csp-import` and sign in when asked
+   (see [Signing in](#signing-in)), then upload both files. File detection is
+   by name: one must contain “Annuity”, the other “Invoice”/“CSP”.
 2. Open the portal: `https://gayleai.app.n8n.cloud/webhook/csp-pricing`.
    - Map any customers flagged **not mapped**.
    - Review sell prices (default = monthly RRP); tick *Custom* to override.
    - Untick *Incl.* for lines you don’t want in Autotask. Azure usage plans
-     (charge type ≠ NCE or RRP = 0) are excluded by default.
+     (charge type ≠ NCE or RRP = 0) are excluded by default. The tick on each
+     customer's header does the whole customer at once — it includes every
+     line shown when some or none are in, and clears them all when they are
+     all in. It acts on the lines on screen, so it follows the filter.
    - **Save prices**, then **Sync to Autotask**.
 3. Refresh the portal to see per-line results (contract id, actions taken, or
    the exact Autotask error).
+
+The two links under the page title, **Annuity DETAILS** and **CSP Invoice
+Details**, show the tabs of the workbooks this page was built from exactly as
+they were uploaded, for checking a number against its source without
+reopening the .xlsx.
 
 ### Billing types & pricing model
 
@@ -175,19 +222,24 @@ next month.
 ```
 workflows/
   templates/   n8n Workflow-SDK source with __TOKEN__ placeholders
-               (01-03 plus zz-reset-data-tables, the manual table reset)
+               (00-03 plus zz-reset-data-tables, the manual table reset)
   runtime/     the JavaScript that runs inside each Code node
-  tests/       node test harness for the parse + sync decision logic
-  build.py     assembles templates + runtime (+ portal HTML) → generated/
+  tests/       node test harness for the parse, sync and sign-in logic
+  build.py     assembles templates + runtime (+ the HTML pages) → generated/
   generated/   final SDK code actually deployed to n8n (built artifact)
 portal/
-  portal.html  the pricing portal single-page app served by workflow 02
+  portal.html          the pricing portal single-page app served by workflow 02
+  report.html          the verbatim view of an uploaded workbook tab
+  signin.html          the address form
+  signin-code.html     the code form
+  import-complete.html the upload form's hand-off back to the portal
 ```
 
 To change a workflow: edit the template/runtime/portal source, run
-`python3 workflows/build.py`, test with `node workflows/tests/test-parse.js`
-and `node workflows/tests/test-sync.js`, then update the workflow in n8n from
-the matching `workflows/generated/*.js` file.
+`python3 workflows/build.py`, test with `node workflows/tests/test-parse.js`,
+`node workflows/tests/test-sync.js` and `node workflows/tests/test-auth.js`,
+then update the workflow in n8n from the matching `workflows/generated/*.js`
+file.
 
 ## Known caveats
 
