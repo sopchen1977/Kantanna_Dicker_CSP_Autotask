@@ -153,17 +153,50 @@ const sendCodeEmail = node({
   output: [{ success: true }]
 });
 
-const respondRequested = node({
+
+// Sign-in is a sequence of real form POSTs, so each step is a page the server
+// renders. Generated from portal/signin-code.html at build time.
+const signinCodeTemplate = node({
+  type: 'n8n-nodes-base.set',
+  version: 3.4,
+  config: {
+    name: 'Sign-in Code Template',
+    position: [900, -220],
+    executeOnce: true,
+    parameters: {
+      mode: 'manual',
+      includeOtherFields: false,
+      assignments: {
+        assignments: [{ id: 'signin-code-html', name: 'html', type: 'string', value: __SIGNIN_CODE_HTML__ }]
+      }
+    }
+  },
+  output: [{ html: '<!DOCTYPE html>…' }]
+});
+
+const buildCodePage = node({
+  type: 'n8n-nodes-base.code',
+  version: 2,
+  config: {
+    name: 'Build Code Page',
+    position: [1020, -300],
+    parameters: { mode: 'runOnceForAllItems', jsCode: __AUTH_BUILD_CODE_PAGE__ }
+  },
+  output: [{ html: '<!DOCTYPE html>…' }]
+});
+
+const respondCodePage = node({
   type: 'n8n-nodes-base.respondToWebhook',
   version: 1.5,
   config: {
-    name: 'Respond Requested',
-    position: [1140, -300],
+    name: 'Respond Code Page',
+    position: [1260, -300],
     parameters: {
-      respondWith: 'json',
-      responseBody: expr('{{ JSON.stringify({ message: $(\'Prepare Code\').first().json.message }) }}'),
+      respondWith: 'text',
+      responseBody: expr('{{ $json.html }}'),
       options: { responseHeaders: { entries: [
-        { name: 'Cache-Control', value: 'no-store' }
+        { name: 'Content-Type', value: 'text/html; charset=utf-8' },
+        { name: 'Cache-Control', value: 'no-store, must-revalidate' }
       ] } }
     }
   }
@@ -303,8 +336,8 @@ const respondSignedIn = node({
     name: 'Respond Signed In',
     position: [900, -80],
     parameters: {
-      respondWith: 'json',
-      responseBody: expr('{{ JSON.stringify({ ok: true, email: $(\'Check Code\').first().json.email }) }}'),
+      respondWith: 'redirect',
+      redirectURL: expr('{{ $(\'Check Code\').first().json.next_safe }}'),
       options: { responseHeaders: { entries: [
         { name: 'Set-Cookie', value: expr('{{ "csp_session=" + $(\'Check Code\').first().json.token + "; Path=/webhook/; HttpOnly; Secure; SameSite=Lax; Max-Age=" + $(\'Check Code\').first().json.session_max_age }}') },
         { name: 'Cache-Control', value: 'no-store' }
@@ -345,23 +378,6 @@ const bumpAttempts = node({
     }
   },
   output: [{ id: 1 }]
-});
-
-const respondDenied = node({
-  type: 'n8n-nodes-base.respondToWebhook',
-  version: 1.5,
-  config: {
-    name: 'Respond Denied',
-    position: [680, 100],
-    parameters: {
-      respondWith: 'json',
-      responseBody: expr('{{ JSON.stringify({ ok: false, message: $(\'Check Code\').first().json.message }) }}'),
-      options: {
-        responseCode: 401,
-        responseHeaders: { entries: [{ name: 'Cache-Control', value: 'no-store' }] }
-      }
-    }
-  }
 });
 
 /* ============================================================
@@ -462,7 +478,12 @@ const accessCheck = trigger({
     position: [-420, 600],
     parameters: {
       inputSource: 'workflowInputs',
-      workflowInputs: { values: [{ name: 'cookie', type: 'string' }] }
+      workflowInputs: { values: [
+        { name: 'cookie', type: 'string' },
+        // Page navigations send the cookie; the portal's own background calls
+        // cannot, and pass the token instead. See auth-read-cookie.js.
+        { name: 'token', type: 'string' }
+      ] }
     }
   },
   output: [{ cookie: 'csp_session=abc' }]
@@ -526,7 +547,7 @@ const noteAccess = sticky(
   'it cannot drift between endpoints.\n\n' +
   'The reply to a code request never varies, so this cannot be used to find out ' +
   'who works at Kantanna.',
-  [authRequest, fetchCodes, prepareCode, shouldSend, pruneCodes, storeCode, sendCodeEmail, respondRequested],
+  [authRequest, fetchCodes, prepareCode, shouldSend, pruneCodes, storeCode, sendCodeEmail, signinCodeTemplate, buildCodePage, respondCodePage],
   { color: 4 }
 );
 
@@ -535,14 +556,17 @@ export default workflow('kantanna-csp-00-access', '00 · CSP Access')
   .to(fetchCodes)
   .to(prepareCode)
   .to(shouldSend
-    .onTrue(pruneCodes.to(storeCode.to(sendCodeEmail.to(respondRequested))))
-    .onFalse(respondRequested))
+    .onTrue(pruneCodes.to(storeCode.to(sendCodeEmail.to(signinCodeTemplate))))
+    .onFalse(signinCodeTemplate))
+  .add(signinCodeTemplate)
+  .to(buildCodePage)
+  .to(respondCodePage)
   .add(authVerify)
   .to(fetchCodesForCheck)
   .to(checkCode)
   .to(signedIn
     .onTrue(deleteUsedCode.to(createSession.to(respondSignedIn)))
-    .onFalse(bumpAttempts.to(respondDenied)))
+    .onFalse(bumpAttempts.to(signinCodeTemplate)))
   .add(authSignout)
   .to(signoutCookie)
   .to(readSignoutToken)

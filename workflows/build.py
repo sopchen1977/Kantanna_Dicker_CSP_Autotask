@@ -31,6 +31,7 @@ IDS = {
 # ---- runtime scripts embedded as Code-node jsCode
 CODE_TOKENS = {
     "__AUTH_PREPARE_CODE__": "auth-prepare-code.js",
+    "__AUTH_BUILD_CODE_PAGE__": "auth-build-code-page.js",
     "__AUTH_CHECK_CODE__": "auth-check-code.js",
     "__AUTH_READ_COOKIE__": "auth-read-cookie.js",
     "__AUTH_CHECK_SESSION__": "auth-check-session.js",
@@ -39,6 +40,7 @@ CODE_TOKENS = {
     "__SUMMARIZE_IMPORT__": "summarize-import.js",
     "__SNAPSHOT_REPORT_ROWS__": "snapshot-report-rows.js",
     "__BUILD_PORTAL_PAGE__": "build-portal-page.js",
+    "__ATTACH_SESSION_TOKEN__": "attach-session-token.js",
     "__BUILD_REPORT_PAGE__": "build-report-page.js",
     "__SPLIT_SAVE_LINES__": "split-save-lines.js",
     "__SAVE_SUMMARY__": "save-summary.js",
@@ -79,6 +81,11 @@ def signin_html() -> str:
     return json.dumps((HERE.parent / "portal" / "signin.html").read_text())
 
 
+def signin_code_html() -> str:
+    """The second sign-in step (enter your code), rendered server-side."""
+    return json.dumps((HERE.parent / "portal" / "signin-code.html").read_text())
+
+
 def report_html() -> str:
     """The uploaded-tab viewer, injected into the Report Template Set node."""
     return json.dumps((HERE.parent / "portal" / "report.html").read_text())
@@ -109,6 +116,8 @@ def build() -> None:
             text = text.replace("__PORTAL_HTML__", portal_html())
         if "__SIGNIN_HTML__" in text:
             text = text.replace("__SIGNIN_HTML__", signin_html())
+        if "__SIGNIN_CODE_HTML__" in text:
+            text = text.replace("__SIGNIN_CODE_HTML__", signin_code_html())
         if "__REPORT_HTML__" in text:
             text = text.replace("__REPORT_HTML__", report_html())
         if "__IMPORT_DONE_HTML__" in text:

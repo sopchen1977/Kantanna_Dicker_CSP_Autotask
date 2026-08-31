@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sign in &middot; CSP Pricing</title>
+<title>Enter your code &middot; CSP Pricing</title>
 <style>
   :root {
     --bg:#f1f4f8; --card:#fff; --ink:#0f172a; --ink2:#334155; --muted:#64748b;
@@ -63,47 +63,40 @@
 </head>
 <body>
 <!--
-  Step one of sign-in. Deliberately a REAL form POST, not fetch().
-
-  n8n Cloud serves every webhook response under Content-Security-Policy:
-  sandbox with no allow-same-origin, which puts this page in an opaque
-  origin: no cookies, no localStorage, and any fetch() it makes counts as
-  third-party, so the Set-Cookie coming back is thrown away by the browser.
-
-  A form submit navigates the top-level window instead. That is a first-party
-  request to the host, so the session cookie the response sets is kept - and
-  the sandbox explicitly permits it (allow-forms,
-  allow-top-navigation-by-user-activation).
+  Step two. Like step one this is a real form POST so the top-level window
+  navigates: the response to csp-auth-verify carries the session cookie, and
+  only a first-party navigation gets to keep it under n8n Cloud's sandbox.
 -->
 <div class="card">
   <div class="logo">CSP</div>
-  <h1>Sign in</h1>
-  <p class="sub">Enter your Kantanna email address and we&rsquo;ll send you a six-digit code.</p>
+  <h1>Enter your code</h1>
+  <p class="sub">We sent a six-digit code to <b>__EMAIL__</b>. It expires in 10 minutes.</p>
 
-  <form method="POST" action="csp-auth-request">
-    <label for="email">Work email</label>
-    <input id="email" name="email" type="email" inputmode="email" autocomplete="email"
-           placeholder="you@kantanna.com.au" required autofocus>
-    <input type="hidden" id="next" name="next" value="csp-pricing">
-    <button type="submit">Send me a code</button>
+  <form method="POST" action="csp-auth-verify">
+    <label for="code">Sign-in code</label>
+    <input id="code" class="code" name="code" type="text" inputmode="numeric"
+           autocomplete="one-time-code" pattern="[0-9]*" maxlength="6"
+           placeholder="000000" required autofocus>
+    <input type="hidden" name="email" value="__EMAIL__">
+    <input type="hidden" name="next" value="__NEXT__">
+    <button type="submit">Sign in</button>
   </form>
+
+  <div class="msg __KIND__">__MESSAGE__</div>
+
+  <div class="linkrow">
+    <form method="POST" action="csp-auth-request" style="display:inline">
+      <input type="hidden" name="email" value="__EMAIL__">
+      <input type="hidden" name="next" value="__NEXT__">
+      <button type="submit" class="link">Send another code</button>
+    </form>
+    &middot; <a href="__NEXT__">Use a different address</a>
+  </div>
 
   <p class="foot">
     Access is limited to kantanna.com, kantanna.com.au and kantanna.ph addresses.
     Signing in keeps you signed in on this browser for 14 days.
   </p>
 </div>
-
-<script>
-// Remember which page was actually asked for, so signing in lands there
-// rather than always dumping you on the portal. The server only honours
-// values that look like one of our own routes.
-(function () {
-  var here = location.pathname.split('/').pop() + location.search;
-  if (/^csp-[a-z-]+(\?[^#]*)?$/.test(here)) {
-    document.getElementById('next').value = here;
-  }
-})();
-</script>
 </body>
 </html>

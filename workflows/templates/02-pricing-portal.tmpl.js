@@ -169,6 +169,18 @@ const buildPage = node({
   output: [{ html: '<!DOCTYPE html>...' }]
 });
 
+
+const attachToken = node({
+  type: 'n8n-nodes-base.code',
+  version: 2,
+  config: {
+    name: 'Attach Session Token',
+    position: [460, -160],
+    parameters: { mode: 'runOnceForAllItems', jsCode: __ATTACH_SESSION_TOKEN__ }
+  },
+  output: [{ html: '<!DOCTYPE html>...' }]
+});
+
 const respondPage = node({
   type: 'n8n-nodes-base.respondToWebhook',
   version: 1.5,
@@ -529,10 +541,14 @@ const checkAccessPortal = node({
       workflowId: { __rl: true, mode: 'id', value: 'pcJUTSSeW2cRow8s', cachedResultName: '00 CSP Access' },
       workflowInputs: {
         mappingMode: 'defineBelow',
-        value: { cookie: expr('{{ $json.headers.cookie || \'\' }}') },
+        value: {
+          cookie: expr('{{ $json.headers.cookie || \'\' }}'),
+          token: expr('{{ ($json.query && $json.query.t) || ($json.body && $json.body.t) || \'\' }}')
+        },
         matchingColumns: [],
         schema: [
-          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' }
+          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' },
+          { id: 'token', displayName: 'token', required: false, defaultMatch: false, display: true, canBeUsedToMatch: false, type: 'string' }
         ],
         attemptToConvertTypes: false,
         convertFieldsToString: true
@@ -572,10 +588,14 @@ const checkAccessSave = node({
       workflowId: { __rl: true, mode: 'id', value: 'pcJUTSSeW2cRow8s', cachedResultName: '00 CSP Access' },
       workflowInputs: {
         mappingMode: 'defineBelow',
-        value: { cookie: expr('{{ $json.headers.cookie || \'\' }}') },
+        value: {
+          cookie: expr('{{ $json.headers.cookie || \'\' }}'),
+          token: expr('{{ ($json.query && $json.query.t) || ($json.body && $json.body.t) || \'\' }}')
+        },
         matchingColumns: [],
         schema: [
-          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' }
+          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' },
+          { id: 'token', displayName: 'token', required: false, defaultMatch: false, display: true, canBeUsedToMatch: false, type: 'string' }
         ],
         attemptToConvertTypes: false,
         convertFieldsToString: true
@@ -615,10 +635,14 @@ const checkAccessMapping = node({
       workflowId: { __rl: true, mode: 'id', value: 'pcJUTSSeW2cRow8s', cachedResultName: '00 CSP Access' },
       workflowInputs: {
         mappingMode: 'defineBelow',
-        value: { cookie: expr('{{ $json.headers.cookie || \'\' }}') },
+        value: {
+          cookie: expr('{{ $json.headers.cookie || \'\' }}'),
+          token: expr('{{ ($json.query && $json.query.t) || ($json.body && $json.body.t) || \'\' }}')
+        },
         matchingColumns: [],
         schema: [
-          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' }
+          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' },
+          { id: 'token', displayName: 'token', required: false, defaultMatch: false, display: true, canBeUsedToMatch: false, type: 'string' }
         ],
         attemptToConvertTypes: false,
         convertFieldsToString: true
@@ -658,10 +682,14 @@ const checkAccessCompanies = node({
       workflowId: { __rl: true, mode: 'id', value: 'pcJUTSSeW2cRow8s', cachedResultName: '00 CSP Access' },
       workflowInputs: {
         mappingMode: 'defineBelow',
-        value: { cookie: expr('{{ $json.headers.cookie || \'\' }}') },
+        value: {
+          cookie: expr('{{ $json.headers.cookie || \'\' }}'),
+          token: expr('{{ ($json.query && $json.query.t) || ($json.body && $json.body.t) || \'\' }}')
+        },
         matchingColumns: [],
         schema: [
-          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' }
+          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' },
+          { id: 'token', displayName: 'token', required: false, defaultMatch: false, display: true, canBeUsedToMatch: false, type: 'string' }
         ],
         attemptToConvertTypes: false,
         convertFieldsToString: true
@@ -701,10 +729,14 @@ const checkAccessReport = node({
       workflowId: { __rl: true, mode: 'id', value: 'pcJUTSSeW2cRow8s', cachedResultName: '00 CSP Access' },
       workflowInputs: {
         mappingMode: 'defineBelow',
-        value: { cookie: expr('{{ $json.headers.cookie || \'\' }}') },
+        value: {
+          cookie: expr('{{ $json.headers.cookie || \'\' }}'),
+          token: expr('{{ ($json.query && $json.query.t) || ($json.body && $json.body.t) || \'\' }}')
+        },
         matchingColumns: [],
         schema: [
-          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' }
+          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' },
+          { id: 'token', displayName: 'token', required: false, defaultMatch: false, display: true, canBeUsedToMatch: false, type: 'string' }
         ],
         attemptToConvertTypes: false,
         convertFieldsToString: true
@@ -744,10 +776,14 @@ const checkAccessImport = node({
       workflowId: { __rl: true, mode: 'id', value: 'pcJUTSSeW2cRow8s', cachedResultName: '00 CSP Access' },
       workflowInputs: {
         mappingMode: 'defineBelow',
-        value: { cookie: expr('{{ $json.headers.cookie || \'\' }}') },
+        value: {
+          cookie: expr('{{ $json.headers.cookie || \'\' }}'),
+          token: expr('{{ ($json.query && $json.query.t) || ($json.body && $json.body.t) || \'\' }}')
+        },
         matchingColumns: [],
         schema: [
-          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' }
+          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' },
+          { id: 'token', displayName: 'token', required: false, defaultMatch: false, display: true, canBeUsedToMatch: false, type: 'string' }
         ],
         attemptToConvertTypes: false,
         convertFieldsToString: true
@@ -847,6 +883,7 @@ export default workflow('kantanna-csp-02-portal', '02 · CSP Pricing Portal')
   .to(fetchInvoices)
   .to(portalTemplate)
   .to(buildPage)
+  .to(attachToken)
   .to(respondPage)
   .add(signinTemplate)
   .to(respondSignin)

@@ -169,6 +169,18 @@ const buildPage = node({
   output: [{ html: '<!DOCTYPE html>...' }]
 });
 
+
+const attachToken = node({
+  type: 'n8n-nodes-base.code',
+  version: 2,
+  config: {
+    name: 'Attach Session Token',
+    position: [460, -160],
+    parameters: { mode: 'runOnceForAllItems', jsCode: "// Hand the rendered portal its session token.\n//\n// The page got here through a top-level navigation, so the browser sent the\n// session cookie and the gate let it through. Its own background calls are a\n// different matter: n8n Cloud serves every webhook response under\n// Content-Security-Policy: sandbox with no allow-same-origin, which puts the\n// page in an opaque origin. From there a fetch() back to our own host counts\n// as third-party and carries no cookies at all.\n//\n// So the token is injected into the page and fetch is wrapped to attach it,\n// which the gate accepts as an alternative to the cookie. Done here rather\n// than inside portal.html so the page stays a plain document that knows\n// nothing about sessions, and the whole scheme sits in one file.\nconst html = $input.first().json.html;\n\nlet token = '';\ntry { token = String($('Check Access Portal').first().json.token || ''); } catch (e) { /* none */ }\nif (!token) return [{ json: { html: html } }];\n\nconst shim =\n  '<script>(function () {\\n' +\n  '  var T = ' + JSON.stringify(token) + ';\\n' +\n  '  var real = window.fetch;\\n' +\n  '  window.fetch = function (url, opts) {\\n' +\n  '    if (typeof url === \"string\" && url.indexOf(\"/csp-\") >= 0) {\\n' +\n  '      url += (url.indexOf(\"?\") < 0 ? \"?\" : \"&\") + \"t=\" + encodeURIComponent(T);\\n' +\n  '    }\\n' +\n  '    return real(url, opts);\\n' +\n  '  };\\n' +\n  '})();<\\/script>';\n\nreturn [{ json: { html: html.replace('</head>', shim + '</head>') } }];\n" }
+  },
+  output: [{ html: '<!DOCTYPE html>...' }]
+});
+
 const respondPage = node({
   type: 'n8n-nodes-base.respondToWebhook',
   version: 1.5,
@@ -529,10 +541,14 @@ const checkAccessPortal = node({
       workflowId: { __rl: true, mode: 'id', value: 'pcJUTSSeW2cRow8s', cachedResultName: '00 CSP Access' },
       workflowInputs: {
         mappingMode: 'defineBelow',
-        value: { cookie: expr('{{ $json.headers.cookie || \'\' }}') },
+        value: {
+          cookie: expr('{{ $json.headers.cookie || \'\' }}'),
+          token: expr('{{ ($json.query && $json.query.t) || ($json.body && $json.body.t) || \'\' }}')
+        },
         matchingColumns: [],
         schema: [
-          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' }
+          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' },
+          { id: 'token', displayName: 'token', required: false, defaultMatch: false, display: true, canBeUsedToMatch: false, type: 'string' }
         ],
         attemptToConvertTypes: false,
         convertFieldsToString: true
@@ -572,10 +588,14 @@ const checkAccessSave = node({
       workflowId: { __rl: true, mode: 'id', value: 'pcJUTSSeW2cRow8s', cachedResultName: '00 CSP Access' },
       workflowInputs: {
         mappingMode: 'defineBelow',
-        value: { cookie: expr('{{ $json.headers.cookie || \'\' }}') },
+        value: {
+          cookie: expr('{{ $json.headers.cookie || \'\' }}'),
+          token: expr('{{ ($json.query && $json.query.t) || ($json.body && $json.body.t) || \'\' }}')
+        },
         matchingColumns: [],
         schema: [
-          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' }
+          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' },
+          { id: 'token', displayName: 'token', required: false, defaultMatch: false, display: true, canBeUsedToMatch: false, type: 'string' }
         ],
         attemptToConvertTypes: false,
         convertFieldsToString: true
@@ -615,10 +635,14 @@ const checkAccessMapping = node({
       workflowId: { __rl: true, mode: 'id', value: 'pcJUTSSeW2cRow8s', cachedResultName: '00 CSP Access' },
       workflowInputs: {
         mappingMode: 'defineBelow',
-        value: { cookie: expr('{{ $json.headers.cookie || \'\' }}') },
+        value: {
+          cookie: expr('{{ $json.headers.cookie || \'\' }}'),
+          token: expr('{{ ($json.query && $json.query.t) || ($json.body && $json.body.t) || \'\' }}')
+        },
         matchingColumns: [],
         schema: [
-          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' }
+          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' },
+          { id: 'token', displayName: 'token', required: false, defaultMatch: false, display: true, canBeUsedToMatch: false, type: 'string' }
         ],
         attemptToConvertTypes: false,
         convertFieldsToString: true
@@ -658,10 +682,14 @@ const checkAccessCompanies = node({
       workflowId: { __rl: true, mode: 'id', value: 'pcJUTSSeW2cRow8s', cachedResultName: '00 CSP Access' },
       workflowInputs: {
         mappingMode: 'defineBelow',
-        value: { cookie: expr('{{ $json.headers.cookie || \'\' }}') },
+        value: {
+          cookie: expr('{{ $json.headers.cookie || \'\' }}'),
+          token: expr('{{ ($json.query && $json.query.t) || ($json.body && $json.body.t) || \'\' }}')
+        },
         matchingColumns: [],
         schema: [
-          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' }
+          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' },
+          { id: 'token', displayName: 'token', required: false, defaultMatch: false, display: true, canBeUsedToMatch: false, type: 'string' }
         ],
         attemptToConvertTypes: false,
         convertFieldsToString: true
@@ -701,10 +729,14 @@ const checkAccessReport = node({
       workflowId: { __rl: true, mode: 'id', value: 'pcJUTSSeW2cRow8s', cachedResultName: '00 CSP Access' },
       workflowInputs: {
         mappingMode: 'defineBelow',
-        value: { cookie: expr('{{ $json.headers.cookie || \'\' }}') },
+        value: {
+          cookie: expr('{{ $json.headers.cookie || \'\' }}'),
+          token: expr('{{ ($json.query && $json.query.t) || ($json.body && $json.body.t) || \'\' }}')
+        },
         matchingColumns: [],
         schema: [
-          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' }
+          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' },
+          { id: 'token', displayName: 'token', required: false, defaultMatch: false, display: true, canBeUsedToMatch: false, type: 'string' }
         ],
         attemptToConvertTypes: false,
         convertFieldsToString: true
@@ -744,10 +776,14 @@ const checkAccessImport = node({
       workflowId: { __rl: true, mode: 'id', value: 'pcJUTSSeW2cRow8s', cachedResultName: '00 CSP Access' },
       workflowInputs: {
         mappingMode: 'defineBelow',
-        value: { cookie: expr('{{ $json.headers.cookie || \'\' }}') },
+        value: {
+          cookie: expr('{{ $json.headers.cookie || \'\' }}'),
+          token: expr('{{ ($json.query && $json.query.t) || ($json.body && $json.body.t) || \'\' }}')
+        },
         matchingColumns: [],
         schema: [
-          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' }
+          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' },
+          { id: 'token', displayName: 'token', required: false, defaultMatch: false, display: true, canBeUsedToMatch: false, type: 'string' }
         ],
         attemptToConvertTypes: false,
         convertFieldsToString: true
@@ -787,7 +823,7 @@ const signinTemplate = node({
       mode: 'manual',
       includeOtherFields: false,
       assignments: {
-        assignments: [{ id: 'signin-html', name: 'html', type: 'string', value: "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"UTF-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n<title>Sign in &middot; CSP Pricing</title>\n<style>\n  :root {\n    --bg:#f1f4f8; --card:#fff; --ink:#0f172a; --ink2:#334155; --muted:#64748b;\n    --line:#e2e8f0; --brand:#2563eb; --bad:#b91c1c; --badbg:#fef2f2;\n    --ok:#166534; --okbg:#f0fdf4;\n  }\n  * { box-sizing:border-box; }\n  body {\n    margin:0; min-height:100vh; background:var(--bg); color:var(--ink);\n    font:15px/1.45 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif;\n    display:grid; place-items:center; padding:24px;\n  }\n  .card {\n    width:100%; max-width:400px; background:var(--card); border:1px solid var(--line);\n    border-radius:14px; padding:30px 30px 26px;\n    box-shadow:0 1px 2px rgba(15,23,42,.05), 0 8px 28px rgba(15,23,42,.08);\n  }\n  .logo {\n    width:40px; height:40px; border-radius:10px; background:#0d1b30; color:#fff;\n    display:grid; place-items:center; font-size:13px; font-weight:700;\n    letter-spacing:.06em; margin-bottom:18px;\n  }\n  h1 { margin:0 0 6px; font-size:19px; font-weight:600; letter-spacing:-.015em; }\n  .sub { margin:0 0 22px; font-size:13.5px; color:var(--muted); }\n  .sub b { color:var(--ink2); font-weight:600; }\n  label { display:block; font-size:12px; font-weight:600; color:var(--ink2);\n    text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px; }\n  input {\n    width:100%; padding:10px 12px; font:inherit; font-size:14.5px;\n    border:1px solid var(--line); border-radius:9px; background:#fff; color:var(--ink);\n  }\n  input:focus { outline:2px solid #bfdbfe; outline-offset:-1px; border-color:var(--brand); }\n  /* The code is six digits and gets pasted out of an email - give it room\n     and tabular figures so a transposed digit is easy to spot. */\n  input.code {\n    font-size:23px; letter-spacing:.34em; text-align:center; font-variant-numeric:tabular-nums;\n    padding:12px; font-weight:600;\n  }\n  button {\n    width:100%; margin-top:14px; padding:11px 16px; font:inherit; font-size:14.5px;\n    font-weight:600; color:#fff; background:var(--brand); border:0; border-radius:9px;\n    cursor:pointer;\n  }\n  button:hover:not(:disabled) { background:#1d4ed8; }\n  button:disabled { opacity:.55; cursor:default; }\n  .linkrow { margin-top:16px; font-size:13px; color:var(--muted); text-align:center; }\n  .linkrow a { color:var(--brand); text-decoration:none; cursor:pointer; }\n  .linkrow a:hover { text-decoration:underline; }\n  .msg { margin-top:14px; padding:9px 12px; border-radius:8px; font-size:13px; display:none; }\n  .msg.show { display:block; }\n  .msg.bad { background:var(--badbg); color:var(--bad); border:1px solid #fecaca; }\n  .msg.ok { background:var(--okbg); color:var(--ok); border:1px solid #bbf7d0; }\n  .foot { margin-top:22px; padding-top:16px; border-top:1px solid var(--line);\n    font-size:12px; color:var(--muted); line-height:1.5; }\n  .hidden { display:none; }\n</style>\n</head>\n<body>\n<div class=\"card\">\n  <div class=\"logo\">CSP</div>\n\n  <div id=\"step-email\">\n    <h1>Sign in</h1>\n    <p class=\"sub\">Enter your Kantanna email address and we&rsquo;ll send you a six-digit code.</p>\n    <form id=\"form-email\" autocomplete=\"on\">\n      <label for=\"email\">Work email</label>\n      <input id=\"email\" name=\"email\" type=\"email\" inputmode=\"email\" autocomplete=\"email\"\n             placeholder=\"you@kantanna.com.au\" required autofocus>\n      <button id=\"btn-email\" type=\"submit\">Send me a code</button>\n    </form>\n  </div>\n\n  <div id=\"step-code\" class=\"hidden\">\n    <h1>Enter your code</h1>\n    <p class=\"sub\">We sent a six-digit code to <b id=\"sent-to\"></b>. It expires in 10 minutes.</p>\n    <form id=\"form-code\" autocomplete=\"off\">\n      <label for=\"code\">Sign-in code</label>\n      <input id=\"code\" class=\"code\" name=\"code\" type=\"text\" inputmode=\"numeric\" autocomplete=\"one-time-code\"\n             pattern=\"[0-9]*\" maxlength=\"6\" placeholder=\"000000\" required>\n      <button id=\"btn-code\" type=\"submit\">Sign in</button>\n    </form>\n    <div class=\"linkrow\">\n      <a id=\"resend\">Send another code</a> &middot; <a id=\"restart\">Use a different address</a>\n    </div>\n  </div>\n\n  <div id=\"msg\" class=\"msg\"></div>\n\n  <p class=\"foot\">\n    Access is limited to kantanna.com, kantanna.com.au and kantanna.ph addresses.\n    Signing in keeps you signed in on this browser for 14 days.\n  </p>\n</div>\n\n<script>\n// The page is served at whatever protected URL was asked for, so the auth\n// endpoints are addressed relative to it and a successful sign-in just\n// reloads - landing on the page the user actually wanted.\nvar msgEl = document.getElementById('msg');\nvar emailEl = document.getElementById('email');\nvar codeEl = document.getElementById('code');\nvar btnEmail = document.getElementById('btn-email');\nvar btnCode = document.getElementById('btn-code');\nvar sentTo = document.getElementById('sent-to');\nvar current = '';\n\nfunction show(text, kind) {\n  msgEl.textContent = text;\n  msgEl.className = 'msg show ' + (kind || 'bad');\n}\nfunction clear() { msgEl.className = 'msg'; }\n\nfunction post(path, payload) {\n  return fetch(path, {\n    method: 'POST',\n    headers: { 'Content-Type': 'application/json' },\n    // Same origin, but be explicit: the session cookie is the whole point.\n    credentials: 'same-origin',\n    body: JSON.stringify(payload)\n  }).then(function (r) {\n    return r.json().catch(function () { return {}; });\n  });\n}\n\nfunction step(which) {\n  document.getElementById('step-email').className = which === 'email' ? '' : 'hidden';\n  document.getElementById('step-code').className = which === 'code' ? '' : 'hidden';\n}\n\nfunction requestCode(quiet) {\n  var email = emailEl.value.trim();\n  if (!email) return;\n  btnEmail.disabled = true;\n  if (!quiet) clear();\n  return post('csp-auth-request', { email: email })\n    .then(function (res) {\n      current = email;\n      sentTo.textContent = email;\n      step('code');\n      codeEl.value = '';\n      codeEl.focus();\n      show(res.message || 'If that is a Kantanna address, a sign-in code is on its way.', 'ok');\n    })\n    .catch(function (e) { show('Could not reach the sign-in service: ' + e.message); })\n    .then(function () { btnEmail.disabled = false; });\n}\n\ndocument.getElementById('form-email').onsubmit = function (e) {\n  e.preventDefault();\n  requestCode(false);\n};\n\ndocument.getElementById('form-code').onsubmit = function (e) {\n  e.preventDefault();\n  var code = codeEl.value.trim();\n  if (!code) return;\n  btnCode.disabled = true;\n  clear();\n  post('csp-auth-verify', { email: current, code: code })\n    .then(function (res) {\n      if (res.ok) {\n        show('Signed in. Loading\u2026', 'ok');\n        location.reload();\n        return;\n      }\n      show(res.message || 'That code is not right.');\n      codeEl.value = '';\n      codeEl.focus();\n      btnCode.disabled = false;\n    })\n    .catch(function (e) {\n      show('Could not reach the sign-in service: ' + e.message);\n      btnCode.disabled = false;\n    });\n};\n\ndocument.getElementById('resend').onclick = function () {\n  var a = this;\n  a.style.pointerEvents = 'none';\n  a.style.opacity = '.5';\n  requestCode(true).then(function () {\n    // A short cooldown so the resend link cannot be leaned on; the server\n    // enforces the real limit, this only keeps the button honest.\n    setTimeout(function () { a.style.pointerEvents = ''; a.style.opacity = ''; }, 20000);\n  });\n};\n\ndocument.getElementById('restart').onclick = function () {\n  clear();\n  step('email');\n  emailEl.focus();\n  emailEl.select();\n};\n</script>\n</body>\n</html>\n" }]
+        assignments: [{ id: 'signin-html', name: 'html', type: 'string', value: "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"UTF-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n<title>Sign in &middot; CSP Pricing</title>\n<style>\n  :root {\n    --bg:#f1f4f8; --card:#fff; --ink:#0f172a; --ink2:#334155; --muted:#64748b;\n    --line:#e2e8f0; --brand:#2563eb; --bad:#b91c1c; --badbg:#fef2f2;\n    --ok:#166534; --okbg:#f0fdf4;\n  }\n  * { box-sizing:border-box; }\n  body {\n    margin:0; min-height:100vh; background:var(--bg); color:var(--ink);\n    font:15px/1.45 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif;\n    display:grid; place-items:center; padding:24px;\n  }\n  .card {\n    width:100%; max-width:400px; background:var(--card); border:1px solid var(--line);\n    border-radius:14px; padding:30px 30px 26px;\n    box-shadow:0 1px 2px rgba(15,23,42,.05), 0 8px 28px rgba(15,23,42,.08);\n  }\n  .logo {\n    width:40px; height:40px; border-radius:10px; background:#0d1b30; color:#fff;\n    display:grid; place-items:center; font-size:13px; font-weight:700;\n    letter-spacing:.06em; margin-bottom:18px;\n  }\n  h1 { margin:0 0 6px; font-size:19px; font-weight:600; letter-spacing:-.015em; }\n  .sub { margin:0 0 22px; font-size:13.5px; color:var(--muted); }\n  .sub b { color:var(--ink2); font-weight:600; }\n  label { display:block; font-size:12px; font-weight:600; color:var(--ink2);\n    text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px; }\n  input[type=email], input[type=text] {\n    width:100%; padding:10px 12px; font:inherit; font-size:14.5px;\n    border:1px solid var(--line); border-radius:9px; background:#fff; color:var(--ink);\n  }\n  input:focus { outline:2px solid #bfdbfe; outline-offset:-1px; border-color:var(--brand); }\n  /* The code is six digits and gets pasted out of an email - give it room\n     and tabular figures so a transposed digit is easy to spot. */\n  input.code {\n    font-size:23px; letter-spacing:.34em; text-align:center; font-variant-numeric:tabular-nums;\n    padding:12px; font-weight:600;\n  }\n  button {\n    width:100%; margin-top:14px; padding:11px 16px; font:inherit; font-size:14.5px;\n    font-weight:600; color:#fff; background:var(--brand); border:0; border-radius:9px;\n    cursor:pointer;\n  }\n  button:hover { background:#1d4ed8; }\n  .linkrow { margin-top:16px; font-size:13px; color:var(--muted); text-align:center; }\n  .linkrow a, .linkrow button.link {\n    color:var(--brand); text-decoration:none; cursor:pointer; background:none;\n    border:0; padding:0; margin:0; width:auto; font:inherit; font-size:13px;\n  }\n  .linkrow a:hover, .linkrow button.link:hover { text-decoration:underline; background:none; }\n  .msg { margin-top:14px; padding:9px 12px; border-radius:8px; font-size:13px; }\n  .msg.bad { background:var(--badbg); color:var(--bad); border:1px solid #fecaca; }\n  .msg.ok { background:var(--okbg); color:var(--ok); border:1px solid #bbf7d0; }\n  .foot { margin-top:22px; padding-top:16px; border-top:1px solid var(--line);\n    font-size:12px; color:var(--muted); line-height:1.5; }\n</style>\n</head>\n<body>\n<!--\n  Step one of sign-in. Deliberately a REAL form POST, not fetch().\n\n  n8n Cloud serves every webhook response under Content-Security-Policy:\n  sandbox with no allow-same-origin, which puts this page in an opaque\n  origin: no cookies, no localStorage, and any fetch() it makes counts as\n  third-party, so the Set-Cookie coming back is thrown away by the browser.\n\n  A form submit navigates the top-level window instead. That is a first-party\n  request to the host, so the session cookie the response sets is kept - and\n  the sandbox explicitly permits it (allow-forms,\n  allow-top-navigation-by-user-activation).\n-->\n<div class=\"card\">\n  <div class=\"logo\">CSP</div>\n  <h1>Sign in</h1>\n  <p class=\"sub\">Enter your Kantanna email address and we&rsquo;ll send you a six-digit code.</p>\n\n  <form method=\"POST\" action=\"csp-auth-request\">\n    <label for=\"email\">Work email</label>\n    <input id=\"email\" name=\"email\" type=\"email\" inputmode=\"email\" autocomplete=\"email\"\n           placeholder=\"you@kantanna.com.au\" required autofocus>\n    <input type=\"hidden\" id=\"next\" name=\"next\" value=\"csp-pricing\">\n    <button type=\"submit\">Send me a code</button>\n  </form>\n\n  <p class=\"foot\">\n    Access is limited to kantanna.com, kantanna.com.au and kantanna.ph addresses.\n    Signing in keeps you signed in on this browser for 14 days.\n  </p>\n</div>\n\n<script>\n// Remember which page was actually asked for, so signing in lands there\n// rather than always dumping you on the portal. The server only honours\n// values that look like one of our own routes.\n(function () {\n  var here = location.pathname.split('/').pop() + location.search;\n  if (/^csp-[a-z-]+(\\?[^#]*)?$/.test(here)) {\n    document.getElementById('next').value = here;\n  }\n})();\n</script>\n</body>\n</html>\n" }]
       }
     }
   },
@@ -847,6 +883,7 @@ export default workflow('kantanna-csp-02-portal', '02 · CSP Pricing Portal')
   .to(fetchInvoices)
   .to(portalTemplate)
   .to(buildPage)
+  .to(attachToken)
   .to(respondPage)
   .add(signinTemplate)
   .to(respondSignin)

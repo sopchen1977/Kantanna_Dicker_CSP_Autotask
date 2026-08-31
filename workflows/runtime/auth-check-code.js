@@ -16,6 +16,11 @@ const email = String(body.email || '').trim().toLowerCase();
 const code = String(body.code || '').trim();
 const ip = String(headers['x-forwarded-for'] || headers['x-real-ip'] || '')
   .split(',')[0].trim();
+const next = String(body.next || '').trim();
+// This goes straight into a Location header on success, so it is validated
+// here rather than trusted: our own routes only - no scheme, no host, no
+// protocol-relative "//evil", no traversal.
+const nextSafe = /^csp-[a-z-]+(\?[A-Za-z0-9=&%._-]*)?$/.test(next) ? next : 'csp-pricing';
 
 const now = new Date();
 const nowIso = now.toISOString();
@@ -56,6 +61,8 @@ const token = ok ? crypto.randomBytes(32).toString('hex') : '';
 return [{ json: {
   ok: ok,
   email: email,
+  next: next,
+  next_safe: nextSafe,
   message: ok ? 'Signed in.' : message,
   token: token,
   token_hash: ok ? crypto.createHash('sha256').update(token).digest('hex') : '',

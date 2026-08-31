@@ -127,9 +127,9 @@ check('x-forwarded-for chain uses the client, not the proxy',
 /* ------------------------------------------------------------------ */
 section('code verification');
 
-function verify(email, code, rows, headers) {
+function verify(email, code, rows, headers, next) {
   return run('auth-check-code.js',
-    { 'Auth Verify': [{ body: { email: email, code: code }, headers: headers || {} }] },
+    { 'Auth Verify': [{ body: { email: email, code: code, next: next }, headers: headers || {} }] },
     rows)[0].json;
 }
 const liveRow = (code, over) => Object.assign({
@@ -194,6 +194,9 @@ section('cookie parsing');
 function cookie(raw) {
   return run('auth-read-cookie.js', {}, [{ cookie: raw }])[0].json.token_hash;
 }
+function viaToken(tok) {
+  return run('auth-read-cookie.js', {}, [{ cookie: '', token: tok }])[0].json;
+}
 const tok = 'a'.repeat(64);
 check('reads the token', cookie('csp_session=' + tok) === sha(tok));
 check('reads it among others',
@@ -208,12 +211,24 @@ check('lookalike cookie name ignored',
   cookie('other_csp_session=' + tok) === 'none');
 check('prefix cookie name ignored', cookie('csp_session_x=' + tok) === 'none');
 
+// The portal's background calls cannot send the cookie from inside n8n
+// Cloud's sandbox, so they pass the token explicitly instead.
+check('explicit token is accepted', viaToken(tok).token_hash === sha(tok));
+check('explicit token is echoed back', viaToken(tok).token === tok);
+check('junk explicit token refused', viaToken('nope').token_hash === 'none');
+check('junk explicit token echoes nothing', viaToken('nope').token === '');
+check('an explicit token wins over the cookie',
+  run('auth-read-cookie.js', {},
+    [{ cookie: 'csp_session=' + 'b'.repeat(64), token: tok }])[0].json.token_hash === sha(tok));
+check('no token and no cookie is refused',
+  run('auth-read-cookie.js', {}, [{}])[0].json.token_hash === 'none');
+
 /* ------------------------------------------------------------------ */
 section('session check');
 
-function session(wantedHash, rows) {
+function session(wantedHash, rows, rawToken) {
   return run('auth-check-session.js',
-    { 'Read Cookie': [{ token_hash: wantedHash }] }, rows)[0].json;
+    { 'Read Cookie': [{ token_hash: wantedHash, token: rawToken || '' }] }, rows)[0].json;
 }
 const h = sha(tok);
 check('live session authorises',
@@ -233,6 +248,50 @@ check('"none" never matches a real row',
     .authed === false);
 check('row with no expiry refused',
   session(h, [{ token_hash: h, email: 'x' }]).authed === false);
+check('a live session echoes the token for the page to reuse',
+  session(h, [{ token_hash: h, email: 'x', expires_at: iso(60000) }], tok).token === tok);
+// A refused request must never be handed a usable token back.
+check('a refused session echoes nothing',
+  session(h, [{ token_hash: h, email: 'x', expires_at: iso(-60000) }], tok).token === '');
+
+/* ------------------------------------------------------------------ */
+section('next-page redirect is not an open redirect');
+
+// The verify step validates separately, because its value lands in a
+// Location header rather than an href.
+function nextSafeOf(v) {
+  return verify('sop@kantanna.com', '123456',
+    [liveRow('123456')], {}, v).next_safe;
+}
+for (const good of ['csp-pricing', 'csp-pricing-source?sheet=invoice']) {
+  check('verify keeps ' + JSON.stringify(good), nextSafeOf(good) === good);
+}
+for (const bad of ['https://evil.com', '//evil.com', 'javascript:alert(1)', '', '../x']) {
+  check('verify rejects ' + JSON.stringify(bad), nextSafeOf(bad) === 'csp-pricing');
+}
+
+function nextOf(v) {
+  const nodes = {
+    'Prepare Code': [{ email: 'a@kantanna.com', next: v, message: 'sent' }],
+    'Sign-in Code Template': [{ html: 'NEXT=__NEXT__' }]
+  };
+  return run('auth-build-code-page.js', nodes, [{}])[0].json.html.replace('NEXT=', '');
+}
+for (const good of ['csp-pricing', 'csp-pricing-source?sheet=annuity', 'csp-import']) {
+  check('keeps ' + JSON.stringify(good), nextOf(good) === good);
+}
+for (const bad of [
+  'https://evil.com',        // absolute
+  '//evil.com',              // protocol-relative
+  '/etc/passwd',
+  '../../admin',
+  'javascript:alert(1)',
+  'csp-pricing?x=<script>',  // angle brackets are not in the allowed set
+  '',
+  'anything-else'
+]) {
+  check('rejects ' + JSON.stringify(bad) + ' -> portal', nextOf(bad) === 'csp-pricing');
+}
 
 /* ------------------------------------------------------------------ */
 if (failures) {

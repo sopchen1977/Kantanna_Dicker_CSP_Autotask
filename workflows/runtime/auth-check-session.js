@@ -19,5 +19,9 @@ for (const item of $input.all()) {
 return [{ json: {
   authed: !!hit,
   email: hit ? String(hit.email || '') : '',
-  expires_at: hit ? String(hit.expires_at || '') : ''
+  expires_at: hit ? String(hit.expires_at || '') : '',
+  // Echoed back only when the session is real, so the portal can hand it to
+  // its own background calls - they cannot send the cookie from inside n8n
+  // Cloud's sandbox.
+  token: hit ? String($('Read Cookie').first().json.token || '') : ''
 } }];

@@ -23,6 +23,8 @@ const body = req.body || {};
 const email = String(body.email || '').trim().toLowerCase();
 const ip = String(headers['x-forwarded-for'] || headers['x-real-ip'] || '')
   .split(',')[0].trim();
+// Where to land after signing in; validated where it is used, never here.
+const next = String(body.next || '').trim();
 
 const now = new Date();
 
@@ -78,6 +80,7 @@ const emailHtml =
 return [{ json: {
   send: send,
   email: email,
+  next: next,
   email_subject: code + ' is your CSP pricing sign-in code',
   email_html: emailHtml,
   // The plaintext code goes to the email node and nowhere else. Only its

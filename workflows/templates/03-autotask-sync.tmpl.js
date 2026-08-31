@@ -37,10 +37,14 @@ const checkAccessSync = node({
       workflowId: { __rl: true, mode: 'id', value: 'pcJUTSSeW2cRow8s', cachedResultName: '00 CSP Access' },
       workflowInputs: {
         mappingMode: 'defineBelow',
-        value: { cookie: expr('{{ $json.headers.cookie || \'\' }}') },
+        value: {
+          cookie: expr('{{ $json.headers.cookie || \'\' }}'),
+          token: expr('{{ ($json.query && $json.query.t) || ($json.body && $json.body.t) || \'\' }}')
+        },
         matchingColumns: [],
         schema: [
-          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' }
+          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' },
+          { id: 'token', displayName: 'token', required: false, defaultMatch: false, display: true, canBeUsedToMatch: false, type: 'string' }
         ],
         attemptToConvertTypes: false,
         convertFieldsToString: true
