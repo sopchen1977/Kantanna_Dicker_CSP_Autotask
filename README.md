@@ -116,9 +116,23 @@ the deletes.
      customer's header does the whole customer at once — it includes every
      line shown when some or none are in, and clears them all when they are
      all in. It acts on the lines on screen, so it follows the filter.
+   - Read what the sync is going to do, under each service name: *new
+     service*, *will be added @ $34.55*, *re-price $30.00 → $34.55*, *units
+     259 → 275*, or *nothing to do*. Open a row for the same thing with its
+     dates. The contract header says *will be created* or *extend to …*, and
+     the **Autotask plan** tile counts what is left to do across the page.
+     The import works this out; **Check Autotask** does it again after you
+     change something. It only ever reads Autotask.
    - **Save prices**, then **Sync to Autotask**.
 3. Refresh the portal to see per-line results (contract id, actions taken, or
    the exact Autotask error).
+
+> **A price edited by hand in Autotask will be pushed back.** The Sell column
+> shows what the contract charges today, but the sync's own default is the
+> **RRP** — so a service repriced directly in Autotask, on a line with no
+> custom price here, is set back to RRP on the next sync. The plan says so
+> (*re-price $30.00 → $34.55*) rather than letting it happen quietly. Tick
+> *Custom* and enter the price you want to keep it.
 
 The two links under the page title, **Annuity DETAILS** and **CSP Invoice
 Details**, show the tabs of the workbooks this page was built from exactly as

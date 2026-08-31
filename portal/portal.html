@@ -280,6 +280,23 @@
   .chg.same, .chg.none { font-size:12.5px; font-weight:400; text-transform:none; letter-spacing:0;
     padding:0; border:none; color:var(--muted); }
 
+  /* What the sync WILL do, sitting directly under the service name: it leads
+     the row because it is the one thing on this screen you are being asked to
+     approve. Everything else on the row - the billing pill, the invoiced tag,
+     the last-posted drawer - is what has already happened. Sentence case and
+     a size up from the uppercase chips beside it, because it is a sentence
+     about the future rather than a label on a state. */
+  .planline { display:flex; align-items:center; gap:5px; flex-wrap:wrap; margin:3px 0 0; }
+  .plan {
+    display:inline-flex; align-items:center; padding:1px 7px; border-radius:6px; white-space:nowrap;
+    font-size:11.5px; font-weight:600; line-height:1.5; border:1px solid transparent; cursor:help;
+  }
+  .plan.do { background:#eef2ff; border-color:#c7d2fe; color:#4338ca; }
+  .plan.price { background:var(--violetbg); border-color:#ddd6fe; color:var(--violet); }
+  .plan.err { background:var(--errbg); border-color:#fecaca; color:var(--err); }
+  .plan.flat { background:none; border:none; padding:0; color:var(--muted); font-weight:400; }
+  .planline .sep { color:var(--muted); opacity:.55; font-size:11px; }
+
   tr.detail { display:none; }
   tr.detail.open { display:table-row; }
   tr.detail td { padding:0 12px 13px 46px; border-bottom:1px solid var(--line2); background:#fcfdfe; }
@@ -326,6 +343,8 @@
        title="Approve &amp; Post lives under Contracts &gt; Approve &amp; Post">Autotask &#8599;</a>
     <button class="btn ghost" onclick="location.reload()">Refresh</button>
     <button class="btn primary" onclick="saveAll(this)">Save prices</button>
+    <button class="btn ghost" onclick="checkAutotask(this)"
+      title="Read Autotask and work out what a sync would do, without doing any of it">Check Autotask</button>
     <button class="btn go" onclick="syncNow(this)">Sync to Autotask</button>
   </div>
 </header>
@@ -862,6 +881,38 @@ function render() {
   wire();
 }
 
+// What the sync has left to do, before it does any of it. Until Autotask has
+// been read this tile is the empty state for the whole page - it is the one
+// place that can say "nobody has looked yet" once rather than on every row.
+function planTile(visible) {
+  var incl = visible.filter(effInclude);
+  var checked = incl.filter(hasPlan);
+  if (!checked.length) {
+    return { k: 'Autotask plan', v: '—', s: 'press Check Autotask' };
+  }
+  var todo = 0, failed = 0, unmapped = 0;
+  checked.forEach(function (l) {
+    if (String(l.plan_status) === 'error') { failed++; return; }
+    // Unmapped is not a change waiting to be made - it is a question waiting
+    // to be answered, and it is already counted under Needs attention.
+    if (String(l.plan_status) === 'needs_mapping') { unmapped++; return; }
+    if (l.plan_service_action === 'create' || l.plan_service_action === 'rename' ||
+        l.plan_contract_action === 'create' || l.plan_contract_action === 'extend' ||
+        l.plan_cs_action === 'create' || l.plan_cs_action === 'redescribe' ||
+        planPrice(l).kind !== 'same' || planUnits(l).length) todo++;
+  });
+  // Everything standing between this number and a sync you can trust, said in
+  // one line rather than only the first of them.
+  var behind = incl.length - checked.length;
+  var caveats = [];
+  if (failed) caveats.push(failed + ' could not be read');
+  if (unmapped) caveats.push(unmapped + ' unmapped');
+  if (behind) caveats.push(behind + ' not checked yet');
+  var sub = caveats.length ? caveats.join(' · ') : 'checked ' + String(planCheckedAt()).slice(0, 10);
+  return { k: 'Autotask plan', v: todo + (todo === 1 ? ' change' : ' changes'), s: sub,
+    cls: (failed || unmapped) ? 'attn' : (todo ? 'due' : 'clear') };
+}
+
 function renderStats(visible) {
   var due = 0, monthly = 0, attn = 0, incl = 0;
   var contracts = {}, custs = {}, span = { first: '', last: '' };
@@ -886,7 +937,8 @@ function renderStats(visible) {
       s: spanLabel(span) || (due > 0 ? 'sitting in Autotask now' : 'nothing outstanding'),
       cls: due > 0 ? 'due' : 'clear' },
     { k: 'Needs attention', v: attn, s: attn ? 'unmapped or failed' : 'all clear',
-      cls: attn ? 'attn' : 'clear' }
+      cls: attn ? 'attn' : 'clear' },
+    planTile(visible)
   ];
   document.getElementById('stats').innerHTML = tiles.map(function (t) {
     return '<div class="stat ' + (t.cls || '') + '"><div class="k">' + escapeHtml(t.k) + '</div>' +
@@ -1079,6 +1131,35 @@ function contractHtml(customer, cname, block) {
   }
   var atId = (lines.filter(function (l) { return l.autotask_contract_id; })[0] || {}).autotask_contract_id;
 
+  // The contract belongs to the co-term GROUP, so what happens to it is one
+  // fact for the whole block rather than something to repeat on every line.
+  // Whether it EXISTS is already said by the Open #7001 link beside this;
+  // what is missing is what the sync is about to do to it.
+  var planNew = 0, planErr = 0, planExtend = '', planFound = 0;
+  lines.forEach(function (l) {
+    if (!effInclude(l) || !hasPlan(l)) return;
+    if (l.autotask_contract_id) planFound++;
+    if (String(l.plan_status) === 'error') planErr++;
+    if (l.plan_contract_action === 'create') planNew++;
+    else if (l.plan_contract_action === 'extend' && l.plan_contract_end) planExtend = l.plan_contract_end;
+  });
+  var planTag = '';
+  // Every line in a co-term group sits on the ONE contract, so a check that
+  // found it for any of them found it. Saying "will be created" beside the
+  // Open #7001 link that follows would be the page contradicting itself.
+  if (planNew && !planFound) {
+    planTag = '<span class="plan do" title="' + attr('No Autotask contract carries the reference ' +
+      (lines[0] && lines[0].contract_number ? lines[0].contract_number : '') +
+      ' yet, so the sync will create this contract.') + '">will be created</span>';
+  } else if (planExtend) {
+    planTag = '<span class="plan do" title="' + attr('This contract ends before the term the report ' +
+      'covers, so the sync will extend it in place - Autotask rejects adjustments dated outside the ' +
+      'contract window.') + '">extend to ' + escapeHtml(longDateIso(planExtend)) + '</span>';
+  } else if (planErr) {
+    planTag = '<span class="plan err" title="' + attr(planErr + ' of these services could not be read ' +
+      'from Autotask, so what the sync would do to this contract is not known.') + '">check failed</span>';
+  }
+
   var title, meta;
   if (!cname) {
     title = '<div class="ctitle"><span class="cname">Not billed through Autotask</span>' +
@@ -1101,6 +1182,7 @@ function contractHtml(customer, cname, block) {
             ? '<span class="pill clear" style="cursor:default"><span class="tick">&#10003;</span>all posted</span>'
             : '<span class="pill none" style="cursor:default">nothing to bill</span>'))
         : '') +
+      planTag +
       chgTag +
       invTag +
       (atId ? contractLink(atId) : '') +
@@ -1226,6 +1308,7 @@ function lineHtml(l) {
       (bits.length
         ? '<div class="svcsub">' + bits.join('') + '</div>'
         : '') +
+      planHtml(l) +
       invoiceHtml(l, i) + '</td>' +
     '<td class="num">' + escapeHtml(String(l.qty || 0)) + '</td>' +
     '<td class="num muted">' + fmt(periodCost(l)) + '<span class="per">' + suffix + '</span></td>' +
@@ -1298,6 +1381,205 @@ function marginHtml(l, i) {
     (m !== null && m < 10 ? ' title="Thin margin — cost ' + fmt(periodCost(l)) + ' against sell ' + fmt(effSell(l)) + '"' : '') +
     '>' + (m === null ? '—' : m.toFixed(1) + '%') + '</span>';
 }
+/* ============================================================
+   The plan - what the sync WOULD do, worked out by workflow 04
+   against Autotask without writing anything.
+
+   Everything here is READ from what 04 computed rather than
+   derived again, so the preview cannot drift from the sync that
+   follows it. The one exception is price: a price typed on this
+   screen a moment ago has not been anywhere near Autotask, and a
+   preview that ignored it would be describing a price you have
+   already changed. Comparing the sell price to the contract price
+   client-side keeps "will re-price to $X" live under your hands,
+   and it is the one comparison this page can make honestly,
+   because both numbers are in front of it.
+   ============================================================ */
+
+// A line 04 has never reached has no plan_checked_at. "Nothing will happen"
+// and "nobody has looked" are different answers, and only one of them can be
+// shown as a plan.
+function hasPlan(l) { return !!l.plan_checked_at; }
+
+// Whether ANY line has been checked. A page where nothing has been decides
+// the empty state at the top rather than putting "not checked" on 109 rows;
+// a page where only some have needs to mark the rest, or a blank row reads as
+// "nothing to do".
+var PLAN_RUN = null;
+function planWasRun() {
+  if (PLAN_RUN === null) {
+    PLAN_RUN = LINES.filter(function (l) { return hasPlan(l); }).length > 0;
+  }
+  return PLAN_RUN;
+}
+function planCheckedAt() {
+  var stamps = LINES.filter(hasPlan).map(function (l) { return String(l.plan_checked_at); }).sort();
+  return stamps.length ? stamps[stamps.length - 1] : '';
+}
+
+// The price the sync would push, by the sync's own rule (Prepare Lines): the
+// portal price when one has been typed, otherwise the per-period RRP.
+//
+// This is NOT the same as effSell, and the difference is the point. effSell
+// answers "what is this service charged at" and so falls back to the LIVE
+// Autotask price, which is right for the Sell column - it is what the
+// customer is paying. The sync falls back to RRP. So a price edited by hand
+// in Autotask, on a line with no custom price here, will be pushed back to
+// RRP on the next sync, and a preview built on effSell would have said
+// "nothing to do" about exactly the change you most needed warning of.
+function planSell(l) {
+  return (l.use_custom_price && l.sell_price !== null && l.sell_price !== undefined && l.sell_price !== '')
+    ? Number(l.sell_price) : periodRrp(l);
+}
+
+// The live price comparison - see the note above. A line with no contract
+// service is not a re-price at all, it is an addition.
+function planPrice(l) {
+  var have = (l.contract_price === null || l.contract_price === undefined || l.contract_price === '')
+    ? null : Number(l.contract_price);
+  var want = planSell(l);
+  if (have === null || !l.autotask_contract_service_id) return { kind: 'add', from: null, to: want };
+  return { kind: Math.abs(have - want) < 0.005 ? 'same' : 'change', from: have, to: want };
+}
+
+// The unit adjustments 04 worked out, as [{ change, date }] oldest first.
+function planUnits(l) {
+  try {
+    var u = JSON.parse(l.plan_units || '[]');
+    return Array.isArray(u) ? u : [];
+  } catch (e) { return []; }
+}
+function signed(n) { return (Number(n) > 0 ? '+' : '') + String(Number(n) || 0); }
+
+// The chips under the service name. An excluded line is not going to Autotask
+// at all, so it has no plan to show - the row already says excluded.
+function planHtml(l) {
+  if (!effInclude(l)) return '';
+  if (!hasPlan(l)) {
+    return planWasRun()
+      ? '<div class="planline"><span class="plan flat" title="' +
+        attr('Autotask has not been checked for this line. Press Check Autotask to bring it up to date.') +
+        '">not checked</span></div>'
+      : '';
+  }
+  var st = String(l.plan_status || '');
+  if (st === 'needs_mapping') {
+    return '<div class="planline"><span class="plan err" title="' +
+      attr('This customer is not mapped to an Autotask company, so there is nothing to plan against. ' +
+        'Map it above, then press Check Autotask.') + '">needs mapping</span></div>';
+  }
+  if (st === 'error') {
+    return '<div class="planline"><span class="plan err" title="' +
+      attr('Autotask could not be read for this line, so nothing can be said about it: ' +
+        (l.plan_error || 'no message')) + '">check failed</span></div>';
+  }
+
+  var chips = [];
+  if (l.plan_service_action === 'create') {
+    chips.push('<span class="plan do" title="' + attr('No Autotask service carries the SKU ' +
+      (l.service_key || '') + ' yet, so the sync will create one.') + '">new service</span>');
+  } else if (l.plan_service_action === 'rename') {
+    chips.push('<span class="plan do" title="' + attr('The service exists but its name has drifted ' +
+      'from the current stock description; the sync will rename it in place.') + '">rename service</span>');
+  } else if (l.autotask_service_id) {
+    chips.push('<span class="plan flat" title="' + attr('Autotask service #' + l.autotask_service_id +
+      ', matched on its SKU field.') + '">service exists</span>');
+  }
+
+  var pr = planPrice(l);
+  var suffix = periodSuffix(l);
+  if (l.plan_cs_action === 'create' || pr.kind === 'add') {
+    chips.push('<span class="plan do" title="' + attr('This service is not on the contract yet; the ' +
+      'sync will add it at the sell price on this screen.') + '">will be added @ ' +
+      escapeHtml(money(pr.to)) + suffix + '</span>');
+  } else if (pr.kind === 'change') {
+    chips.push('<span class="plan price" title="' + attr('The contract charges ' + money(pr.from) +
+      ' today; the sync would set ' + money(pr.to) +
+      (l.use_custom_price ? ' - the price typed on this screen.' :
+        ' - the RRP, which is what the sync uses when no price has been set here. ' +
+        'Set a custom price to keep the current one.') +
+      ' Effective ' + (l.price_effective_date || 'today') + '.') +
+      '">re-price ' + escapeHtml(money(pr.from)) + ' &rarr; ' + escapeHtml(money(pr.to)) + suffix + '</span>');
+  } else if (l.plan_cs_action === 'redescribe') {
+    chips.push('<span class="plan price" title="' + attr('The wording on the invoice line will be ' +
+      'set to: ' + invoiceDesc(l).text) + '">new invoice text</span>');
+  }
+
+  var steps = planUnits(l);
+  if (steps.length) {
+    chips.push('<span class="plan do" title="' + attr('Autotask holds ' + (l.plan_current_units || 0) +
+      ' units; the report says ' + (l.plan_target_units || 0) + '. The sync posts ' + steps.length +
+      ' adjustment' + (steps.length > 1 ? 's' : '') + ' dated from the report: ' +
+      (l.plan_units_summary || '') + '. Open the row for the dates.') + '">units ' +
+      escapeHtml(String(l.plan_current_units || 0)) + ' &rarr; ' +
+      escapeHtml(String(l.plan_target_units || 0)) + '</span>');
+  }
+
+  var doing = chips.filter(function (c) { return c.indexOf('plan flat') < 0; }).length;
+  if (!doing) {
+    return '<div class="planline"><span class="plan flat" title="' +
+      attr('Autotask already matches this line - the sync would post nothing for it. Checked ' +
+        String(l.plan_checked_at).slice(0, 16).replace('T', ' ') + ' UTC.') +
+      '">nothing to do</span></div>';
+  }
+  return '<div class="planline">' + chips.join('<span class="sep">&middot;</span>') + '</div>';
+}
+
+// The same plan, spelled out with its dates, inside the row's drawer.
+function planDetailHtml(l) {
+  if (!effInclude(l) || !hasPlan(l)) return '';
+  // The same rule the chips follow, and the reason 04 records a status at
+  // all: when the lookup failed or the customer is unmapped, NO plan was
+  // made. The actions below would otherwise read a missing contract service
+  // id as "not there yet" and spell out an addition nobody has established
+  // is needed - which is how you end up approving a duplicate.
+  var st = String(l.plan_status || '');
+  if (st === 'error') {
+    return '<div class="dsec">What the sync will do</div>' +
+      '<div class="dline"><span class="muted">Not known — Autotask could not be read for this ' +
+      'service.</span></div><div class="dfoot">' + escapeHtml(String(l.plan_error || '')) +
+      '<br>Press Check Autotask to try again.</div>';
+  }
+  if (st === 'needs_mapping') {
+    return '<div class="dsec">What the sync will do</div>' +
+      '<div class="dline"><span class="muted">Nothing yet — this customer is not mapped to an ' +
+      'Autotask company, so there is no company to plan against.</span></div>' +
+      '<div class="dfoot">Map it in the customer header above, then press Check Autotask.</div>';
+  }
+  var rows = [];
+  function step(when, tag, what) {
+    rows.push('<div class="dline"><span class="when">' + escapeHtml(when) + '</span>' +
+      '<span class="dtag">' + escapeHtml(tag) + '</span>' +
+      '<span class="muted">' + what + '</span></div>');
+  }
+  if (l.plan_service_action === 'create') step('—', 'service', 'create ' + escapeHtml(l.service_name || ''));
+  else if (l.plan_service_action === 'rename') step('—', 'service', 'rename to ' + escapeHtml(l.service_name || ''));
+  if (l.plan_contract_action === 'create') step('—', 'contract', 'create ' + escapeHtml(l.contract_name || ''));
+  else if (l.plan_contract_action === 'extend') {
+    step(longDateIso(l.plan_contract_end), 'contract', 'extend the end date to cover this term');
+  }
+  var pr = planPrice(l);
+  if (l.plan_cs_action === 'create' || pr.kind === 'add') {
+    step(longDateIso(l.price_effective_date), 'service', 'add to the contract at ' + escapeHtml(money(pr.to)));
+  } else if (pr.kind === 'change') {
+    step(longDateIso(l.price_effective_date), 'price',
+      escapeHtml(money(pr.from)) + ' &rarr; ' + escapeHtml(money(pr.to)));
+  }
+  planUnits(l).forEach(function (u) {
+    step(longDateIso(u.date), 'units', escapeHtml(signed(u.change)) + ' units');
+  });
+  if (!rows.length) rows.push('<div class="dline"><span class="muted">Autotask already matches ' +
+    'this line — nothing would be posted.</span></div>');
+
+  var foot = 'Read from Autotask ' + escapeHtml(String(l.plan_checked_at).slice(0, 16).replace('T', ' ')) +
+    ' UTC, without changing anything. Press Check Autotask to read it again.';
+  if (String(l.plan_status || '') === 'error') {
+    foot = 'The check failed, so this is incomplete: ' + escapeHtml(String(l.plan_error || ''));
+  }
+  return '<div class="dsec">What the sync will do</div>' + rows.join('') +
+    '<div class="dfoot">' + foot + '</div>';
+}
+
 // A green "synced" badge on every healthy row is just noise; only the rows
 // that need a human get a badge.
 function syncHtml(l) {
@@ -1370,6 +1652,7 @@ function detailHtml(l) {
       'cycle is expected to bill.';
   }
   return '<tr class="detail" data-d="' + l._i + '"><td colspan="10"><div class="dpanel">' +
+    planDetailHtml(l) +
     '<div class="dsec">' + (nothingPending
       ? 'Next cycle (estimate)'
       : (checked ? 'Waiting to be approved &amp; posted' : 'Charged by this month&#39;s CSP report')) + '</div>' +
@@ -1706,6 +1989,32 @@ function saveAll(btn) {
   doSave()
     .then(function (res) { setMsg(savedMsg(res)); btn.disabled = false; })
     .catch(function (e) { setMsg('Save failed: ' + e.message); btn.disabled = false; });
+}
+
+// The dry run: workflow 04 reads Autotask and records what a sync WOULD do,
+// writing nothing to Autotask at all. It saves the on-screen prices first for
+// the same reason the sync does - the plan is made against what is stored, so
+// a price still sitting in an input box would be planned around rather than
+// planned for.
+//
+// It takes as long as a sync does (the same four queries a line, against the
+// same three-thread limit) and answers into the table rather than to this
+// page, so there is nothing to await - refresh when it has had its couple of
+// minutes. The import runs it too, so most of the time the plan is already
+// there when this page opens.
+function checkAutotask(btn) {
+  btn.disabled = true;
+  setMsg('Saving prices…');
+  doSave()
+    .then(function (res) {
+      setMsg(savedMsg(res) + ' Checking Autotask…');
+      return fetch(BASE + '/csp-autotask-plan', { method: 'POST' });
+    })
+    .then(function () {
+      setMsg('Checking Autotask — ~2–3 minutes, nothing is being changed. Refresh after that.');
+      btn.disabled = false;
+    })
+    .catch(function (e) { setMsg('Check could not start: ' + e.message); btn.disabled = false; });
 }
 
 // Sync ALWAYS saves the on-screen prices first, so what you see is what
