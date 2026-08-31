@@ -11,6 +11,69 @@ const startSync = trigger({
   output: [{ body: {} }]
 });
 
+
+/* ============================================================
+   Access gate
+   ------------------------------------------------------------
+   This endpoint pushes contracts, services and unit adjustments
+   into Autotask. Anyone who knew the URL could POST to it, so it
+   calls the same Access Check sub-workflow as the portal and only
+   proceeds with a live session.
+
+   The webhook still answers immediately (responseMode onReceived)
+   and the refused branch simply does no work. The portal saves
+   prices before it starts a sync, and that save returns 401 on an
+   expired session, so the user is told before it gets this far.
+   ============================================================ */
+const checkAccessSync = node({
+  type: 'n8n-nodes-base.executeWorkflow',
+  version: 1.3,
+  config: {
+    name: 'Check Access Sync',
+    position: [-500, 0],
+    parameters: {
+      mode: 'once',
+      source: 'database',
+      workflowId: { __rl: true, mode: 'id', value: 'pcJUTSSeW2cRow8s', cachedResultName: '00 CSP Access' },
+      workflowInputs: {
+        mappingMode: 'defineBelow',
+        value: { cookie: expr('{{ $json.headers.cookie || \'\' }}') },
+        matchingColumns: [],
+        schema: [
+          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' }
+        ],
+        attemptToConvertTypes: false,
+        convertFieldsToString: true
+      },
+      options: { waitForSubWorkflow: true }
+    }
+  },
+  output: [{ authed: false, email: '', expires_at: '' }]
+});
+
+const authedSync = ifElse({
+  version: 2.2,
+  config: {
+    name: 'Authed Sync?',
+    position: [-380, 0],
+    parameters: {
+      conditions: {
+        options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+        conditions: [
+          { leftValue: expr('{{ $json.authed }}'), operator: { type: 'boolean', operation: 'true', singleValue: true } }
+        ],
+        combinator: 'and'
+      }
+    }
+  }
+});
+
+const refusedSync = node({
+  type: 'n8n-nodes-base.noOp',
+  version: 1,
+  config: { name: 'Refused - Not Signed In', position: [-260, 140], parameters: {} }
+});
+
 const autotaskConfig = node({
   type: 'n8n-nodes-base.set',
   version: 3.4,
@@ -879,7 +942,9 @@ const noteSync = sticky(
 
 export default workflow('kantanna-csp-03-sync', '03 · Autotask Sync')
   .add(startSync)
-  .to(autotaskConfig)
+  .to(checkAccessSync)
+  .to(authedSync.onTrue(autotaskConfig).onFalse(refusedSync))
+  .add(autotaskConfig)
   .to(fetchSyncLines)
   .to(prepareLines)
   .to(syncLoop

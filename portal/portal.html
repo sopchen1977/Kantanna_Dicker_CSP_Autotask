@@ -816,7 +816,10 @@ function render() {
     ' · <a href="' + attr(BASE + '/csp-pricing-source?sheet=annuity') +
       '" title="The Annuity Information DETAILS tab, exactly as uploaded">Annuity DETAILS</a>' +
     ' · <a href="' + attr(BASE + '/csp-pricing-source?sheet=invoice') +
-      '" title="The CSP Invoice Report Invoice Details tab, exactly as uploaded">CSP Invoice Details</a>';
+      '" title="The CSP Invoice Report Invoice Details tab, exactly as uploaded">CSP Invoice Details</a>' +
+    ' · <a href="#" id="signout" title="End this session on this browser">Sign out</a>';
+  var so = document.getElementById('signout');
+  if (so) so.onclick = function (e) { e.preventDefault(); signOut(); };
 
   if (!LINES.length) {
     app.innerHTML = '<div class="empty">No subscription lines yet.<br>Run the ' +
@@ -1490,8 +1493,12 @@ function wireMapper(input) {
     var q = input.value.trim();
     if (q.length < 2) { results.style.display = 'none'; return; }
     timer = setTimeout(function () {
-      fetch(BASE + '/csp-pricing-companies?q=' + encodeURIComponent(q))
-        .then(function (r) { return r.json(); })
+      fetch(BASE + '/csp-pricing-companies?q=' + encodeURIComponent(q),
+        { credentials: 'same-origin' })
+        .then(function (r) {
+          if (r.status === 401) throw expiredError();
+          return r.json();
+        })
         .then(function (list) {
           results.innerHTML = '';
           (list.companies || []).forEach(function (c) {
@@ -1562,11 +1569,26 @@ function savePayload() {
   });
 }
 
+// A 401 means the sign-in session ran out while this page sat open. Say so
+// plainly: the alternative is "Saved 0 lines", which reads like the save
+// worked and there was simply nothing to do.
+function expiredError() {
+  return new Error('Your session has expired \u2014 reload the page and sign in again.');
+}
 function doSave() {
   return fetch(BASE + '/csp-pricing-save', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
     body: JSON.stringify({ lines: savePayload() })
-  }).then(function (r) { return r.json(); });
+  }).then(function (r) {
+    if (r.status === 401) throw expiredError();
+    return r.json();
+  });
+}
+function signOut() {
+  fetch(BASE + '/csp-auth-signout', { method: 'POST', credentials: 'same-origin' })
+    .then(function () { location.reload(); })
+    .catch(function () { location.reload(); });
 }
 
 // How many lines are carrying wording of your own, so a save visibly

@@ -1,4 +1,4 @@
-import { workflow, node, trigger, sticky, newCredential, expr } from '@n8n/workflow-sdk';
+import { workflow, node, trigger, sticky, newCredential, ifElse, expr } from '@n8n/workflow-sdk';
 
 const portalPage = trigger({
   type: 'n8n-nodes-base.webhook',
@@ -293,16 +293,16 @@ const upsertMapping = node({
       matchType: 'allConditions',
       filters: {
         conditions: [
-          { keyName: 'tenant_name', condition: 'eq', keyValue: expr('{{ $json.body.tenant_name }}') }
+          { keyName: 'tenant_name', condition: 'eq', keyValue: expr('{{ $(\'Save Mapping\').first().json.body.tenant_name }}') }
         ]
       },
       columns: {
         mappingMode: 'defineBelow',
         matchingColumns: [],
         value: {
-          tenant_name: expr('{{ $json.body.tenant_name }}'),
-          autotask_company_id: expr('{{ $json.body.autotask_company_id }}'),
-          autotask_company_name: expr('{{ $json.body.autotask_company_name }}')
+          tenant_name: expr('{{ $(\'Save Mapping\').first().json.body.tenant_name }}'),
+          autotask_company_id: expr('{{ $(\'Save Mapping\').first().json.body.autotask_company_id }}'),
+          autotask_company_name: expr('{{ $(\'Save Mapping\').first().json.body.autotask_company_name }}')
         },
         schema: [
           { id: 'tenant_name', displayName: 'tenant_name', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: true },
@@ -501,6 +501,335 @@ const respondReport = node({
   }
 });
 
+
+/* ============================================================
+   Access gates
+   ------------------------------------------------------------
+   Every endpoint calls the same Access Check sub-workflow in
+   workflow 00 before it touches any data. The check sits BEFORE
+   the fetches deliberately: an anonymous request should not cost
+   an Autotask API call, and should not read a customer's prices
+   only to throw the page away afterwards.
+
+   Pages fall back to the sign-in screen, so signing in and
+   reloading lands on the page that was asked for. The JSON
+   endpoints answer 401 instead, which the portal turns into
+   "your session has expired".
+   ============================================================ */
+
+const checkAccessPortal = node({
+  type: 'n8n-nodes-base.executeWorkflow',
+  version: 1.3,
+  config: {
+    name: 'Check Access Portal',
+    position: [-600, -240],
+    parameters: {
+      mode: 'once',
+      source: 'database',
+      workflowId: { __rl: true, mode: 'id', value: 'pcJUTSSeW2cRow8s', cachedResultName: '00 CSP Access' },
+      workflowInputs: {
+        mappingMode: 'defineBelow',
+        value: { cookie: expr('{{ $json.headers.cookie || \'\' }}') },
+        matchingColumns: [],
+        schema: [
+          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' }
+        ],
+        attemptToConvertTypes: false,
+        convertFieldsToString: true
+      },
+      options: { waitForSubWorkflow: true }
+    }
+  },
+  output: [{ authed: false, email: '', expires_at: '' }]
+});
+
+const authedPortal = ifElse({
+  version: 2.2,
+  config: {
+    name: 'Authed Portal?',
+    position: [-480, -240],
+    parameters: {
+      conditions: {
+        options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+        conditions: [
+          { leftValue: expr('{{ $json.authed }}'), operator: { type: 'boolean', operation: 'true', singleValue: true } }
+        ],
+        combinator: 'and'
+      }
+    }
+  }
+});
+
+const checkAccessSave = node({
+  type: 'n8n-nodes-base.executeWorkflow',
+  version: 1.3,
+  config: {
+    name: 'Check Access Save',
+    position: [-600, 0],
+    parameters: {
+      mode: 'once',
+      source: 'database',
+      workflowId: { __rl: true, mode: 'id', value: 'pcJUTSSeW2cRow8s', cachedResultName: '00 CSP Access' },
+      workflowInputs: {
+        mappingMode: 'defineBelow',
+        value: { cookie: expr('{{ $json.headers.cookie || \'\' }}') },
+        matchingColumns: [],
+        schema: [
+          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' }
+        ],
+        attemptToConvertTypes: false,
+        convertFieldsToString: true
+      },
+      options: { waitForSubWorkflow: true }
+    }
+  },
+  output: [{ authed: false, email: '', expires_at: '' }]
+});
+
+const authedSave = ifElse({
+  version: 2.2,
+  config: {
+    name: 'Authed Save?',
+    position: [-480, 0],
+    parameters: {
+      conditions: {
+        options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+        conditions: [
+          { leftValue: expr('{{ $json.authed }}'), operator: { type: 'boolean', operation: 'true', singleValue: true } }
+        ],
+        combinator: 'and'
+      }
+    }
+  }
+});
+
+const checkAccessMapping = node({
+  type: 'n8n-nodes-base.executeWorkflow',
+  version: 1.3,
+  config: {
+    name: 'Check Access Mapping',
+    position: [-600, 240],
+    parameters: {
+      mode: 'once',
+      source: 'database',
+      workflowId: { __rl: true, mode: 'id', value: 'pcJUTSSeW2cRow8s', cachedResultName: '00 CSP Access' },
+      workflowInputs: {
+        mappingMode: 'defineBelow',
+        value: { cookie: expr('{{ $json.headers.cookie || \'\' }}') },
+        matchingColumns: [],
+        schema: [
+          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' }
+        ],
+        attemptToConvertTypes: false,
+        convertFieldsToString: true
+      },
+      options: { waitForSubWorkflow: true }
+    }
+  },
+  output: [{ authed: false, email: '', expires_at: '' }]
+});
+
+const authedMapping = ifElse({
+  version: 2.2,
+  config: {
+    name: 'Authed Mapping?',
+    position: [-480, 240],
+    parameters: {
+      conditions: {
+        options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+        conditions: [
+          { leftValue: expr('{{ $json.authed }}'), operator: { type: 'boolean', operation: 'true', singleValue: true } }
+        ],
+        combinator: 'and'
+      }
+    }
+  }
+});
+
+const checkAccessCompanies = node({
+  type: 'n8n-nodes-base.executeWorkflow',
+  version: 1.3,
+  config: {
+    name: 'Check Access Companies',
+    position: [-600, 480],
+    parameters: {
+      mode: 'once',
+      source: 'database',
+      workflowId: { __rl: true, mode: 'id', value: 'pcJUTSSeW2cRow8s', cachedResultName: '00 CSP Access' },
+      workflowInputs: {
+        mappingMode: 'defineBelow',
+        value: { cookie: expr('{{ $json.headers.cookie || \'\' }}') },
+        matchingColumns: [],
+        schema: [
+          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' }
+        ],
+        attemptToConvertTypes: false,
+        convertFieldsToString: true
+      },
+      options: { waitForSubWorkflow: true }
+    }
+  },
+  output: [{ authed: false, email: '', expires_at: '' }]
+});
+
+const authedCompanies = ifElse({
+  version: 2.2,
+  config: {
+    name: 'Authed Companies?',
+    position: [-480, 480],
+    parameters: {
+      conditions: {
+        options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+        conditions: [
+          { leftValue: expr('{{ $json.authed }}'), operator: { type: 'boolean', operation: 'true', singleValue: true } }
+        ],
+        combinator: 'and'
+      }
+    }
+  }
+});
+
+const checkAccessReport = node({
+  type: 'n8n-nodes-base.executeWorkflow',
+  version: 1.3,
+  config: {
+    name: 'Check Access Report',
+    position: [-600, 620],
+    parameters: {
+      mode: 'once',
+      source: 'database',
+      workflowId: { __rl: true, mode: 'id', value: 'pcJUTSSeW2cRow8s', cachedResultName: '00 CSP Access' },
+      workflowInputs: {
+        mappingMode: 'defineBelow',
+        value: { cookie: expr('{{ $json.headers.cookie || \'\' }}') },
+        matchingColumns: [],
+        schema: [
+          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' }
+        ],
+        attemptToConvertTypes: false,
+        convertFieldsToString: true
+      },
+      options: { waitForSubWorkflow: true }
+    }
+  },
+  output: [{ authed: false, email: '', expires_at: '' }]
+});
+
+const authedReport = ifElse({
+  version: 2.2,
+  config: {
+    name: 'Authed Report?',
+    position: [-480, 620],
+    parameters: {
+      conditions: {
+        options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+        conditions: [
+          { leftValue: expr('{{ $json.authed }}'), operator: { type: 'boolean', operation: 'true', singleValue: true } }
+        ],
+        combinator: 'and'
+      }
+    }
+  }
+});
+
+const checkAccessImport = node({
+  type: 'n8n-nodes-base.executeWorkflow',
+  version: 1.3,
+  config: {
+    name: 'Check Access Import',
+    position: [-600, 720],
+    parameters: {
+      mode: 'once',
+      source: 'database',
+      workflowId: { __rl: true, mode: 'id', value: 'pcJUTSSeW2cRow8s', cachedResultName: '00 CSP Access' },
+      workflowInputs: {
+        mappingMode: 'defineBelow',
+        value: { cookie: expr('{{ $json.headers.cookie || \'\' }}') },
+        matchingColumns: [],
+        schema: [
+          { id: 'cookie', displayName: 'cookie', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' }
+        ],
+        attemptToConvertTypes: false,
+        convertFieldsToString: true
+      },
+      options: { waitForSubWorkflow: true }
+    }
+  },
+  output: [{ authed: false, email: '', expires_at: '' }]
+});
+
+const authedImport = ifElse({
+  version: 2.2,
+  config: {
+    name: 'Authed Import?',
+    position: [-480, 720],
+    parameters: {
+      conditions: {
+        options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+        conditions: [
+          { leftValue: expr('{{ $json.authed }}'), operator: { type: 'boolean', operation: 'true', singleValue: true } }
+        ],
+        combinator: 'and'
+      }
+    }
+  }
+});
+
+// Served in place of any protected PAGE when there is no session.
+// Generated from portal/signin.html at build time - edit that file.
+const signinTemplate = node({
+  type: 'n8n-nodes-base.set',
+  version: 3.4,
+  config: {
+    name: 'Sign-in Template',
+    position: [-140, -120],
+    parameters: {
+      mode: 'manual',
+      includeOtherFields: false,
+      assignments: {
+        assignments: [{ id: 'signin-html', name: 'html', type: 'string', value: __SIGNIN_HTML__ }]
+      }
+    }
+  },
+  output: [{ html: '<!DOCTYPE html>…' }]
+});
+
+const respondSignin = node({
+  type: 'n8n-nodes-base.respondToWebhook',
+  version: 1.5,
+  config: {
+    name: 'Respond Sign-in',
+    position: [80, -120],
+    parameters: {
+      respondWith: 'text',
+      responseBody: expr('{{ $json.html }}'),
+      options: { responseCode: 200, responseHeaders: { entries: [
+        { name: 'Content-Type', value: 'text/html; charset=utf-8' },
+        { name: 'Cache-Control', value: 'no-store, must-revalidate' }
+      ] } }
+    }
+  }
+});
+
+// The JSON endpoints get a 401 rather than a login page - they are called by
+// fetch() from a page that is already open, so the useful thing to say is
+// "reload", not "here is a form you cannot see".
+const respondUnauthorised = node({
+  type: 'n8n-nodes-base.respondToWebhook',
+  version: 1.5,
+  config: {
+    name: 'Respond Unauthorised',
+    position: [-140, 900],
+    parameters: {
+      respondWith: 'json',
+      responseBody: expr("{{ JSON.stringify({ ok: false, error: 'Not signed in', message: 'Your session has expired. Reload the page and sign in again.' }) }}"),
+      options: { responseCode: 401, responseHeaders: { entries: [
+        { name: 'Cache-Control', value: 'no-store' }
+      ] } }
+    }
+  }
+});
+
 const notePortal = sticky(
   '## 02 · Pricing Portal\nOpen GET /webhook/csp-pricing in a browser.\n- Sell price defaults to the monthly RRP from the annuity file; tick Custom to override per line.\n- Map each Dicker tenant to an Autotask company before syncing.\n- The Sync button POSTs to workflow 03 (path csp-autotask-sync).\n\nSet your Autotask zone URL in "Portal Autotask Config".',
   [portalPage, fetchLines],
@@ -509,7 +838,9 @@ const notePortal = sticky(
 
 export default workflow('kantanna-csp-02-portal', '02 · CSP Pricing Portal')
   .add(portalPage)
-  .to(fetchLines)
+  .to(checkAccessPortal)
+  .to(authedPortal.onTrue(fetchLines).onFalse(signinTemplate))
+  .add(fetchLines)
   .to(fetchMappings)
   .to(fetchLiveServices)
   .to(fetchBillingItems)
@@ -517,24 +848,35 @@ export default workflow('kantanna-csp-02-portal', '02 · CSP Pricing Portal')
   .to(portalTemplate)
   .to(buildPage)
   .to(respondPage)
+  .add(signinTemplate)
+  .to(respondSignin)
   .add(savePricing)
-  .to(splitSaved)
+  .to(checkAccessSave)
+  .to(authedSave.onTrue(splitSaved).onFalse(respondUnauthorised))
+  .add(splitSaved)
   .to(updatePricing)
   .to(saveSummary)
   .to(respondSave)
   .add(saveMapping)
-  .to(upsertMapping)
+  .to(checkAccessMapping)
+  .to(authedMapping.onTrue(upsertMapping).onFalse(respondUnauthorised))
+  .add(upsertMapping)
   .to(respondMapping)
   .add(companySearch)
-  .to(portalConfig)
+  .to(checkAccessCompanies)
+  .to(authedCompanies.onTrue(portalConfig).onFalse(respondUnauthorised))
+  .add(portalConfig)
   .to(queryCompanies)
   .to(companiesResponse)
   .to(respondCompanies)
   .add(reportView)
-  .to(fetchReportRows)
+  .to(checkAccessReport)
+  .to(authedReport.onTrue(fetchReportRows).onFalse(signinTemplate))
+  .add(fetchReportRows)
   .to(reportTemplate)
   .to(buildReport)
   .to(respondReport)
   .add(importRedirect)
-  .to(redirectToForm)
+  .to(checkAccessImport)
+  .to(authedImport.onTrue(redirectToForm).onFalse(signinTemplate))
   .add(notePortal);
