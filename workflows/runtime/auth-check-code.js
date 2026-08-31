@@ -22,6 +22,17 @@ const next = String(body.next || '').trim();
 // protocol-relative "//evil", no traversal.
 const nextSafe = /^csp-[a-z-]+(\?[A-Za-z0-9=&%._-]*)?$/.test(next) ? next : 'csp-pricing';
 
+// n8n's Respond to Webhook treats a bare "csp-pricing" as a HOSTNAME and
+// redirects to https://csp-pricing/, so the Location has to be absolute.
+// Build it from the URL this request actually arrived on rather than
+// hard-coding the instance, and keep a fallback for the odd case where the
+// trigger does not report one.
+const arrivedAt = String(req.webhookUrl || '');
+const base = /^https?:\/\/[^/]+\/.*\//.test(arrivedAt)
+  ? arrivedAt.replace(/[^/]*$/, '')
+  : 'https://gayleai.app.n8n.cloud/webhook/';
+const redirectUrl = base + nextSafe;
+
 const now = new Date();
 const nowIso = now.toISOString();
 
@@ -63,6 +74,7 @@ return [{ json: {
   email: email,
   next: next,
   next_safe: nextSafe,
+  redirect_url: redirectUrl,
   message: ok ? 'Signed in.' : message,
   token: token,
   token_hash: ok ? crypto.createHash('sha256').update(token).digest('hex') : '',

@@ -337,7 +337,9 @@ const respondSignedIn = node({
     position: [900, -80],
     parameters: {
       respondWith: 'redirect',
-      redirectURL: expr('{{ $(\'Check Code\').first().json.next_safe }}'),
+      // Absolute: n8n reads a relative value as a hostname and would send
+      // the browser to https://csp-pricing/. Built in auth-check-code.js.
+      redirectURL: expr('{{ $(\'Check Code\').first().json.redirect_url }}'),
       options: { responseHeaders: { entries: [
         { name: 'Set-Cookie', value: expr('{{ "csp_session=" + $(\'Check Code\').first().json.token + "; Path=/webhook/; HttpOnly; Secure; SameSite=Lax; Max-Age=" + $(\'Check Code\').first().json.session_max_age }}') },
         { name: 'Cache-Control', value: 'no-store' }

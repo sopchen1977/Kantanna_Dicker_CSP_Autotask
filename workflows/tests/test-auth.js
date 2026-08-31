@@ -127,10 +127,14 @@ check('x-forwarded-for chain uses the client, not the proxy',
 /* ------------------------------------------------------------------ */
 section('code verification');
 
-function verify(email, code, rows, headers, next) {
+function verify(email, code, rows, headers, next, webhookUrl) {
   return run('auth-check-code.js',
-    { 'Auth Verify': [{ body: { email: email, code: code, next: next }, headers: headers || {} }] },
-    rows)[0].json;
+    { 'Auth Verify': [{
+      body: { email: email, code: code, next: next },
+      headers: headers || {},
+      webhookUrl: webhookUrl === undefined
+        ? 'https://gayleai.app.n8n.cloud/webhook/csp-auth-verify' : webhookUrl
+    }] }, rows)[0].json;
 }
 const liveRow = (code, over) => Object.assign({
   id: 7, email: 'sop@kantanna.com', code_hash: sha(code),
@@ -269,6 +273,26 @@ for (const good of ['csp-pricing', 'csp-pricing-source?sheet=invoice']) {
 for (const bad of ['https://evil.com', '//evil.com', 'javascript:alert(1)', '', '../x']) {
   check('verify rejects ' + JSON.stringify(bad), nextSafeOf(bad) === 'csp-pricing');
 }
+
+// n8n reads a relative redirectURL as a hostname, so Location must be
+// absolute - and must stay on our own host whatever `next` said.
+function redirectOf(v, webhookUrl) {
+  return verify('sop@kantanna.com', '123456', [liveRow('123456')], {}, v, webhookUrl).redirect_url;
+}
+check('redirect is absolute',
+  redirectOf('csp-pricing') === 'https://gayleai.app.n8n.cloud/webhook/csp-pricing');
+check('redirect keeps the query',
+  redirectOf('csp-pricing-source?sheet=invoice')
+    === 'https://gayleai.app.n8n.cloud/webhook/csp-pricing-source?sheet=invoice');
+check('redirect is built from the URL the request arrived on',
+  redirectOf('csp-pricing', 'https://other.app.n8n.cloud/webhook/csp-auth-verify')
+    === 'https://other.app.n8n.cloud/webhook/csp-pricing');
+for (const bad of ['https://evil.com', '//evil.com', 'javascript:alert(1)']) {
+  check('redirect stays on our host despite ' + JSON.stringify(bad),
+    redirectOf(bad) === 'https://gayleai.app.n8n.cloud/webhook/csp-pricing');
+}
+check('a missing webhookUrl still yields an absolute redirect',
+  redirectOf('csp-pricing', '') === 'https://gayleai.app.n8n.cloud/webhook/csp-pricing');
 
 function nextOf(v) {
   const nodes = {
