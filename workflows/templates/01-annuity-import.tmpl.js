@@ -1,4 +1,4 @@
-import { workflow, node, trigger, sticky, merge, expr } from '@n8n/workflow-sdk';
+import { workflow, node, trigger, sticky, merge, newCredential, expr } from '@n8n/workflow-sdk';
 
 const uploadForm = trigger({
   type: 'n8n-nodes-base.formTrigger',
@@ -7,6 +7,13 @@ const uploadForm = trigger({
     name: 'Monthly Import Form',
     position: [-380, 0],
     parameters: {
+      // The last anonymous endpoint, and the most destructive one: an upload
+      // replaces every subscription line. Basic Auth rather than the portal's
+      // OTP sign-in because the n8n Form trigger only offers basicAuth or an
+      // n8n account - it renders before any node runs, so there is nowhere to
+      // check the session cookie. Rebuilding this as a custom page behind the
+      // same sign-in is the follow-up.
+      authentication: 'basicAuth',
       formTitle: 'Dicker Data CSP Monthly Import',
       formDescription: 'Upload this month’s Annuity Information export and CSP Invoice Report (.xlsx). Only the DETAILS / Invoice Details tabs are read.',
       formFields: {
@@ -22,7 +29,8 @@ const uploadForm = trigger({
       // Upload Portal" is still active and holds that path, and n8n refuses to
       // publish a second workflow claiming it.
       options: { appendAttribution: false, path: 'csp-monthly-upload' }
-    }
+    },
+    credentials: { httpBasicAuth: newCredential('Kantanna Dicker CSP and Autotask project') }
   },
   output: [{ submittedAt: '2026-08-26T00:00:00.000Z', formMode: 'production' }]
 });
