@@ -567,8 +567,11 @@ function marginPct(l) {
 // posted: each pro-rata change from the CSP report plus the billing-cycle
 // charge, valued at the sell price (pro-rata scaled by the same day
 // fraction Dicker used: window unit cost / full-period unit cost). What is
-// already posted (per the last sync's BillingItems check) is dropped; when
-// the whole report is posted, the NEXT cycle's charge is shown instead.
+// already posted is NOT dropped: guessing that from the last posting's date
+// twice hid charges that had never been billed, so the report is now shown as
+// it arrived and what Autotask has posted is reported beside it instead of
+// quietly subtracted from it. Only a subscription with no rows at all in the
+// report falls back to the NEXT cycle's estimate.
 function pendingItems(l) {
   var sell = effSell(l);
   var perUnitCost = Number(l.period_cost) || 0;
@@ -576,10 +579,6 @@ function pendingItems(l) {
   try { inv = JSON.parse(l.invoice_lines || '[]'); } catch (e) {}
   inv = inv.filter(function (x) { return x && x.s; })
     .sort(function (a, b) { return String(a.s).localeCompare(String(b.s)); });
-  // Everything Autotask has already billed for this service - see
-  // postedThroughIso. It is the END of the last posted period, not the date
-  // stamped on it.
-  var postedThrough = postedThroughIso(l);
   var lastPosted = lastPostedIso(l) || null;
 
   var cycleEnd = '';
@@ -591,7 +590,6 @@ function pendingItems(l) {
 
   var items = [];
   inv.forEach(function (x) {
-    if (postedThrough && String(x.s) <= postedThrough) return; // billed by that posting
     var isCycle = String(x.s) === cycleStart && String(x.e) === cycleEnd;
     var factor = perUnitCost > 0 ? Math.min(Number(x.u || 0) / perUnitCost, 1) : (isCycle ? 1 : 0);
     items.push({ s: String(x.s), e: String(x.e || ''), q: Number(x.q || 0),
@@ -631,23 +629,29 @@ function pendingCount(l) {
   if (!effInclude(l) || !l.billing_last) return 0;
   return pendingItems(l).filter(function (i) { return i.type !== 'next cycle'; }).length;
 }
-// The dates the waiting charges actually carry, which is what Autotask's
-// Approve & Post screen asks you for. Both ends are CHARGE dates - the start
-// of each period, which is how Autotask dates a billing item - never the end
-// of the last period. Running the range on to that end date would reach past
-// the last charge in this report and sweep in the cycles after it.
+// The dates to type into Autotask's Approve & Post screen: the earliest and
+// the latest USAGE START in this month's report. Both ends are CHARGE dates -
+// the start of a period, which is how Autotask dates a billing item - never
+// the end of the last period, which would reach past the last charge in this
+// report and sweep in the cycles after it.
 //
 // The first date is the point of printing this at all: it is NOT the billing
-// month. Seats that moved part way through an earlier cycle arrive in this
-// report as pro-rata lines dated back to the day they changed, so a range
-// starting at this month's cycle silently leaves them behind.
+// month. Seats that moved part way through an earlier cycle arrive as pro-rata
+// lines dated back to the day they changed, so a range starting at this
+// month's cycle silently leaves them behind.
+//
+// It is an indicator and nothing else. It is read straight off the report
+// rather than from any reading of what Autotask has posted, and it decides
+// nothing about what this page shows - a range that also filtered the rows is
+// what hid two of Atlas's pro-rata charges.
 function pendingSpan(l) {
   var span = { first: '', last: '' };
-  if (!effInclude(l) || !l.billing_last) return span;
-  pendingItems(l).forEach(function (x) {
-    if (x.type === 'next cycle') return;
-    var a = String(x.s || '');
-    if (!a) return;
+  if (!effInclude(l)) return span;
+  var inv = [];
+  try { inv = JSON.parse(l.invoice_lines || '[]'); } catch (e) { return span; }
+  inv.forEach(function (x) {
+    var a = String((x && x.s) || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(a)) return;
     if (!span.first || a < span.first) span.first = a;
     if (!span.last || a > span.last) span.last = a;
   });
@@ -673,15 +677,16 @@ function spanLabel(span) {
 function rangeHint(scope, span) {
   if (!span.first || !span.last) return '';
   return (span.first === span.last
-      ? 'Every charge waiting to be approved & posted for ' + scope + ' is dated ' +
+      ? 'Every charge in this month’s report for ' + scope + ' is dated ' +
         longDateIso(span.first) + '.'
-      : 'The charges waiting to be approved & posted for ' + scope + ' are dated ' +
+      : 'The charges in this month’s report for ' + scope + ' are dated ' +
         longDateIso(span.first) + ' to ' + longDateIso(span.last) + '.') +
     ' Use that as the date range in Autotask’s Approve & Post screen. These are charge dates - ' +
     'Autotask dates a charge at the start of the period it covers - so the range stops at the last ' +
     'charge rather than running on to the end of its period, which would sweep in cycles that are ' +
     'not in this report. The first date reaches back to any pro-rata change carried over from an ' +
-    'earlier cycle, dated the day the seats moved.';
+    'earlier cycle, dated the day the seats moved. It is a guide to the dates only, and says ' +
+    'nothing about which of these charges Autotask has already posted.';
 }
 // The customer header has no pill to hang the range off, so there it is a
 // chip of its own - labelled, because a bare pair of dates sitting beside a
@@ -1330,7 +1335,7 @@ function lastPostedHtml(l) {
     '<span class="amt">' + money(l.billing_last_amount) + '</span></div>';
   var bits = [];
   if (l.billing_last_posted_on) bits.push('posted ' + longDateIso(l.billing_last_posted_on));
-  if (through) bits.push('covers everything dated to ' + longDateIso(through));
+  if (through) bits.push('billed the period ending ' + longDateIso(through));
   if (inv || invId) {
     bits.push('invoice ' + invoiceLink(invId, inv) +
       (l.billing_last_invoice_date ? ' of ' + escapeHtml(longDateIso(l.billing_last_invoice_date)) : ''));
