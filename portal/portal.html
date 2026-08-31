@@ -606,13 +606,23 @@ function pendingItems(l) {
   }
   return items;
 }
-// The one number that matters per line: what is still waiting to be
-// approved and posted (the "next cycle" placeholder is not owed yet).
-function dueNow(l) {
-  if (!effInclude(l) || !l.billing_last) return 0;
+// What THIS MONTH'S REPORT charges for a line, which is known from the upload
+// alone. Two different questions hang off the same list of items, and running
+// them together is what hid a customer's pro-rata charges until a sync had
+// been run: this one the report can answer on its own, dueNow() below only
+// after Autotask has been read.
+function reportDue(l) {
+  if (!effInclude(l)) return 0;
   return pendingItems(l).reduce(function (s, i) {
     return i.type === 'next cycle' ? s : s + i.amount;
   }, 0);
+}
+// The one number that matters per line: what is still waiting to be
+// approved and posted (the "next cycle" placeholder is not owed yet). Only
+// answerable once a sync has read Autotask's billing state.
+function dueNow(l) {
+  if (!l.billing_last) return 0;
+  return reportDue(l);
 }
 // How many charges are still waiting to be approved & posted. A $0 line
 // still has one, so it is the COUNT — never the dollar value — that decides
@@ -1150,7 +1160,14 @@ function lineHtml(l) {
   if (!on) {
     pill = '<span class="pill none">excluded</span>';
   } else if (!l.billing_last) {
-    pill = '<span class="pill none" title="Run a sync to read Autotask billing state">not checked yet</span>';
+    // Autotask has not been read for this line, so nothing can be said about
+    // its Approve & Post queue - but what the CSP report charges is already
+    // known, and saying only "not checked yet" hid a mid-cycle change from
+    // the one screen where it was supposed to be reviewed.
+    pill = '<button class="pill none js-bill" style="cursor:pointer" data-i="' + i + '" ' +
+      'title="' + attr('What this month’s CSP report charges for this service. ' +
+        'Autotask has not been read yet, so it is not known how much of it is already posted - ' +
+        'run a sync for that.') + '">' + money(reportDue(l)) + ' to bill</button>';
   } else {
     var n = pendingCount(l);
     if (n > 0) {
@@ -1325,7 +1342,7 @@ function lastPostedHtml(l) {
 
 // The breakdown behind the billing pill — hidden until asked for.
 function detailHtml(l) {
-  if (!effInclude(l) || !l.billing_last) return '';
+  if (!effInclude(l)) return '';
   var items = pendingItems(l);
   var rows = items.map(function (x) {
     var when = longDateIso(x.s) + (x.e ? ' → ' + longDateIso(x.e) : '');
@@ -1337,8 +1354,12 @@ function detailHtml(l) {
   }).join('');
   var nothingPending = !items.filter(function (x) { return x.type !== 'next cycle'; }).length;
   var everPosted = !!lastPostedIso(l);
+  var checked = !!l.billing_last;
   var foot;
-  if (!nothingPending) {
+  if (!nothingPending && !checked) {
+    foot = 'Estimated at the sell price on this screen. Autotask has not been read for this ' +
+      'service yet, so none of it can be shown as already posted - run a sync for that.';
+  } else if (!nothingPending) {
     foot = 'Estimated at the sell price on this screen.';
   } else if (everPosted) {
     foot = 'The whole CSP report is posted for this service — the line above is next cycle&#39;s estimate.';
@@ -1347,7 +1368,9 @@ function detailHtml(l) {
       'cycle is expected to bill.';
   }
   return '<tr class="detail" data-d="' + l._i + '"><td colspan="10"><div class="dpanel">' +
-    '<div class="dsec">' + (nothingPending ? 'Next cycle (estimate)' : 'Waiting to be approved &amp; posted') + '</div>' +
+    '<div class="dsec">' + (nothingPending
+      ? 'Next cycle (estimate)'
+      : (checked ? 'Waiting to be approved &amp; posted' : 'Charged by this month&#39;s CSP report')) + '</div>' +
     rows +
     '<div class="dfoot">' + foot + '</div>' +
     '<div class="dsec">Last approved &amp; posted</div>' +
