@@ -1646,7 +1646,7 @@ function savePayload() {
 // plainly: the alternative is "Saved 0 lines", which reads like the save
 // worked and there was simply nothing to do.
 function expiredError() {
-  return new Error('Your session has expired \u2014 reload the page and sign in again.');
+  return new Error('Your session has expired — reload the page and sign in again.');
 }
 function doSave() {
   return fetch(BASE + '/csp-pricing-save', {
