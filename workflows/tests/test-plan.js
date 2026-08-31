@@ -129,4 +129,33 @@ assert.notStrictEqual(p4.plan_contract_action, 'create',
 assert.notStrictEqual(p4.plan_cs_action, 'create',
   'nor a duplicate contract service');
 
+// ---- Two subscriptions of one product: both rows carry the same plan ----
+// prepare-lines.js bills them as ONE contract service, so the plan is made
+// once - against the primary - and has to be written back to every sibling,
+// or the second row reads as a line nobody has checked.
+const mergedLine = Object.assign({}, line, {
+  merged_note: 'combined 2 subscriptions of the same product (SUB-13 x3, SUB-14 x5)',
+  merged_keys: [
+    { subscription_id: 'SUB-13', stock_code: 'P1Y:CFQ7TTC0LH04:0001:1:' },
+    { subscription_id: 'SUB-14', stock_code: 'P1Y:CFQ7TTC0LH04:0001:1:' },
+  ],
+});
+const mergedNodes = Object.assign({}, moved, { 'Current Line': [{ json: mergedLine }] });
+const pMerged = runNode('plan-result.js', mergedNodes['Units Decision'], mergedNodes);
+
+assert.strictEqual(pMerged.length, 2, 'both subscriptions get a plan row');
+assert.deepStrictEqual(pMerged.map((i) => i.json.subscription_id), ['SUB-13', 'SUB-14']);
+assert.deepStrictEqual(pMerged.map((i) => i.json.stock_code),
+  ['P1Y:CFQ7TTC0LH04:0001:1:', 'P1Y:CFQ7TTC0LH04:0001:1:'],
+  'each row is addressed by its OWN key, which is what Save Plan filters on');
+for (const i of pMerged) {
+  assert.strictEqual(i.json.plan_summary, p3.plan_summary, 'one shared plan, written twice');
+  assert.strictEqual(i.json.autotask_contract_service_id, 8001,
+    'both rows point at the one shared contract service');
+  assert.strictEqual(i.json.plan_target_units, 275);
+}
+
+// An unmerged line still produces exactly one row.
+assert.strictEqual(runNode('plan-result.js', moved['Units Decision'], moved).length, 1);
+
 console.log('ALL PLAN TESTS PASSED');

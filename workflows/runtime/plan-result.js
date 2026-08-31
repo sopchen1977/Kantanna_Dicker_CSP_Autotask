@@ -55,10 +55,18 @@ else if (csAction === 'reprice') notes.push('re-price ' + Number(cs.old_price ||
 else if (csAction === 'redescribe') notes.push('update invoice description');
 if (plan.length) notes.push(units.plan_summary);
 
-return [{ json: {
+// When two subscriptions of the same product share one contract service the
+// plan was made once, against the primary - but BOTH rows have to carry it,
+// or a merged sibling shows a blank plan beside a line that has one and
+// reads as "not checked yet".
+const keys = Array.isArray(line.merged_keys) && line.merged_keys.length
+  ? line.merged_keys
+  : [{ subscription_id: line.subscription_id, stock_code: line.stock_code }];
+
+return keys.map((k) => ({ json: {
   line_key: line.line_key,
-  subscription_id: line.subscription_id,
-  stock_code: line.stock_code,
+  subscription_id: k.subscription_id,
+  stock_code: k.stock_code,
 
   // What Autotask holds right now. These are the same columns the sync
   // writes after it acts, because they answer the same question - what is
@@ -83,4 +91,4 @@ return [{ json: {
   plan_status: errors.length ? 'error' : 'ok',
   plan_error: errors.join('; ').slice(0, 300),
   plan_checked_at: new Date().toISOString(),
-} }];
+} }));
