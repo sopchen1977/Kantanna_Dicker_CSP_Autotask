@@ -91,6 +91,16 @@
   .chead-cust h2 { margin:0; font-size:16px; font-weight:650; letter-spacing:-.01em; }
   .custsum { margin-left:auto; display:flex; align-items:center; gap:16px; font-size:12.5px; color:var(--muted); }
   .custsum b { color:var(--ink); font-weight:600; }
+  /* Include/exclude every line of one customer at once. It lives in the
+     header, which is itself the collapse toggle, so it is boxed to read as
+     its own control rather than as part of the heading. */
+  .pickall {
+    display:inline-flex; align-items:center; gap:7px; flex:none; cursor:pointer;
+    font-size:12px; color:var(--muted); white-space:nowrap; user-select:none;
+    border:1px solid var(--line); border-radius:7px; padding:4px 9px; background:#fff;
+  }
+  .pickall:hover { border-color:var(--brand); color:var(--ink); background:#f8fafc; }
+  .pickall input { margin:0; cursor:pointer; }
   .caret { width:16px; color:var(--muted); font-size:11px; transition:transform .15s; flex:none; }
   .collapsed > .caret, .collapsed .caret { transform:rotate(-90deg); }
   .customer.collapsed .cbody { display:none; }
@@ -900,6 +910,56 @@ var COLHEAD = '<div class="colhead"><table>' + COLS + '<thead><tr>' +
   '<th class="num">Sync</th>' +
 '</tr></thead></table></div>';
 
+// One tick that includes or excludes every line shown for a customer. It
+// counts and acts on the lines on screen, so a filtered page does what it
+// looks like it will do rather than reaching lines the filter is hiding.
+function pickAllHtml(lines) {
+  var on = 0;
+  lines.forEach(function (l) { if (effInclude(l)) on++; });
+  return '<label class="pickall" onclick="event.stopPropagation()" title="' +
+    attr('Include or exclude every line shown for this customer') + '">' +
+    '<input type="checkbox" class="js-inclall"' + (lines.length && on === lines.length ? ' checked' : '') + '>' +
+    '<span class="js-inclall-n">' + escapeHtml(pickAllLabel(on, lines.length)) + '</span></label>';
+}
+
+function pickAllLabel(on, total) {
+  if (on === 0) return 'None incl.';
+  if (on === total) return 'All ' + total + ' incl.';
+  return on + ' of ' + total + ' incl.';
+}
+
+// The customer <section> a control sits in. Both checkboxes live inside one,
+// which is what makes a customer the unit the master tick acts on.
+function customerOf(el) {
+  var n = el;
+  while (n && (' ' + (n.className || '') + ' ').indexOf(' customer ') < 0) n = n.parentNode;
+  return n;
+}
+
+function setIncluded(box, on) {
+  box.checked = on;
+  LINES[+box.getAttribute('data-i')].include = on;
+  var tr = box.parentNode.parentNode;
+  tr.className = 'line' + (on ? '' : ' off');
+}
+
+// The master tick is a reading of the rows under it, so it is recomputed from
+// them rather than remembered - after a bulk change and after a single row.
+// "Some included" is the indeterminate state, which no attribute can set.
+function refreshPickAll(el) {
+  var sec = customerOf(el);
+  if (!sec) return;
+  var master = sec.querySelector('.js-inclall');
+  var label = sec.querySelector('.js-inclall-n');
+  var boxes = sec.querySelectorAll('.js-incl');
+  if (!master) return;
+  var on = 0;
+  for (var i = 0; i < boxes.length; i++) if (boxes[i].checked) on++;
+  master.checked = boxes.length > 0 && on === boxes.length;
+  master.indeterminate = on > 0 && on < boxes.length;
+  if (label) label.textContent = pickAllLabel(on, boxes.length);
+}
+
 function customerHtml(name, lines) {
   var mapping = MAPPINGS[name.toLowerCase()];
   var key = 'c:' + name;
@@ -939,6 +999,7 @@ function customerHtml(name, lines) {
       (due > 0 ? '<span style="color:var(--warn)"><b style="color:var(--warn)">' + money(due) + '</b> awaiting</span>' : '') +
       rangeHtml(span, 'this customer') +
     '</div>' +
+    pickAllHtml(lines) +
   '</div>';
 
   return '<section class="customer' + (closed ? ' collapsed' : '') + '">' + head +
@@ -1343,10 +1404,22 @@ function wire() {
 
   each('.js-incl', function (el) {
     el.onchange = function () {
-      var l = LINES[+el.getAttribute('data-i')];
-      l.include = el.checked;
-      var tr = el.parentNode.parentNode;
-      tr.className = 'line' + (el.checked ? '' : ' off');
+      setIncluded(el, el.checked);
+      refreshPickAll(el);
+      renderStats(LINES.filter(matches));
+    };
+  });
+
+  each('.js-inclall', function (el) {
+    refreshPickAll(el);
+    el.onchange = function () {
+      // A partly included customer shows as indeterminate, and a click on
+      // that resolves to checked - so the first click includes the rest, and
+      // the second clears the lot. Only the rows on screen are touched: the
+      // filter decides what this customer currently is.
+      var boxes = customerOf(el).querySelectorAll('.js-incl');
+      for (var i = 0; i < boxes.length; i++) setIncluded(boxes[i], el.checked);
+      refreshPickAll(el);
       renderStats(LINES.filter(matches));
     };
   });
