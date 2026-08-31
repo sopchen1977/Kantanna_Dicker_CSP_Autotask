@@ -245,10 +245,57 @@ n3['Contract From Create'] = runNode('contract-from-create.js', [{ json: { error
 n3['CS Decision'] = runNode('cs-decision.js', [{ json: { items: [] } }], n3);
 assert.strictEqual(n3['CS Decision'][0].json.action, 'none');
 n3['Units Decision'] = runNode('units-decision.js', [{ json: { items: [] } }], n3);
-// existing history with different count -> single delta dated per the report
+// A service that already bills replays the report the same way a new one
+// does. This is the case that lost money: the mid-cycle changes used to
+// collapse into a single +6 at the cycle start, so the days Dicker charged
+// pro-rata for (13-Jul and 27-Jul) were never billed on to the customer.
 const n4 = { 'Current Line': [{ json: line }], 'CS Decision': [{ json: { line_key: line.line_key, contract_id: 7001, service_id: 9001, cs_id: 8001, sell: 34.55 } }] };
 const ud4 = runNode('units-decision.js', [{ json: { items: [{ startDate: '2026-06-01', units: 45 }] } }], n4)[0].json;
-assert.deepStrictEqual(ud4.plan, [{ change: 6, date: '2026-07-31' }], 'existing units -> one delta at the billing cycle start');
+assert.deepStrictEqual(ud4.plan.map((p) => [p.change, p.date]),
+  [[4, '2026-07-13'], [2, '2026-07-27']],
+  'existing units -> each pro-rata change posted on the day it happened');
+
+// Syncing the same report again must post nothing: every event already sits
+// in Autotask's unit history, so each one nets to zero.
+const n4b = { 'Current Line': [{ json: line }], 'CS Decision': [{ json: { line_key: line.line_key, contract_id: 7001, service_id: 9001, cs_id: 8001, sell: 34.55 } }] };
+const ud4b = runNode('units-decision.js', [{ json: { items: [
+  { startDate: '2026-06-01', units: 45 },
+  { startDate: '2026-07-13', units: 49 },
+  { startDate: '2026-07-27', units: 51 },
+] } }], n4b)[0].json;
+assert.deepStrictEqual(ud4b.plan, [], 're-syncing the same report adjusts nothing');
+
+// The Atlas case end to end: 259 seats standing, +6 on 13-Jul and +10 on
+// 27-Jul, cycle quantity 275 from 31-Jul. Both pro-rata charges must reach
+// Autotask on their own dates, and the cycle must add nothing on top.
+const atlas = Object.assign({}, line, {
+  qty: 275, contract_start: '2025-08-31', contract_end: '2026-08-30',
+  invoice_lines: JSON.stringify([
+    { s: '2026-07-13', e: '2026-07-30', q: 6, u: 16.37 },
+    { s: '2026-07-27', e: '2026-07-30', q: 10, u: 3.64 },
+    { s: '2026-07-31', e: '2026-08-30', q: 275, u: 28.19 },
+  ]),
+});
+const nAtlas = { 'Current Line': [{ json: atlas }], 'CS Decision': [{ json: { line_key: atlas.line_key, contract_id: 7001, service_id: 9001, cs_id: 8001, sell: 34.55 } }] };
+const udAtlasNew = runNode('units-decision.js', [{ json: { items: [] } }], nAtlas)[0].json;
+assert.strictEqual(udAtlasNew.plan_summary, '+6 @2026-07-13, +10 @2026-07-27, +259 @2026-07-31',
+  'a new service replays the whole cycle');
+const udAtlasOld = runNode('units-decision.js',
+  [{ json: { items: [{ startDate: '2026-06-30', units: 259 }] } }], nAtlas)[0].json;
+assert.strictEqual(udAtlasOld.plan_summary, '+6 @2026-07-13, +10 @2026-07-27',
+  'a standing service is charged the two pro-rata changes, not one lump at cycle start');
+assert.strictEqual(udAtlasOld.target_units, 275);
+
+// A report event older than the service's first unit record is not
+// back-dated: Autotask never billed that period, and inventing one would
+// charge for days before the service existed. The quantity still lands.
+const nOld = { 'Current Line': [{ json: atlas }], 'CS Decision': [{ json: { line_key: atlas.line_key, contract_id: 7001, service_id: 9001, cs_id: 8001, sell: 34.55 } }] };
+const udOld = runNode('units-decision.js',
+  [{ json: { items: [{ startDate: '2026-07-20', units: 259 }] } }], nOld)[0].json;
+assert.ok(udOld.plan.every((p) => p.date >= '2026-07-20'),
+  'nothing is dated before the service had units');
+assert.strictEqual(udOld.plan.reduce((s, p) => s + p.change, 0), 275 - 259,
+  'the standing quantity still reaches the annuity count');
 
 // A fresh service whose cycle quantity is short of the annuity quantity plans
 // the cycle set AND a correction, both dated at the cycle start. Autotask keys

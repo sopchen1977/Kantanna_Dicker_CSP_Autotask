@@ -11,6 +11,11 @@
 // e.g. Atlas M365 BP: +6 @13-Jul, +10 @27-Jul, +259 @31-Jul (cycle start)
 // = 275. Units never exist before dates shown in the report, so Autotask
 // does not back-bill earlier periods.
+//
+// Every event is posted as the gap between the report's quantity and the
+// quantity Autotask already holds on that date, so this runs the same way on
+// a service that is new and on one billing for the tenth month - and posts
+// nothing at all the second time the same report is synced.
 const line = $('Current Line').first().json;
 
 // Recover the contract-service identifiers from whichever branch ran for
@@ -34,6 +39,28 @@ if (items.length) {
   current = Number(latest.units || 0);
 }
 const target = Number(line.qty || 0);
+
+// The same records as a dated timeline, oldest first. `current` is what the
+// service bills today; only the series can say whether a mid-cycle change
+// from the report has already been given to Autotask, which is what makes
+// replaying one safe to repeat.
+const history = items
+  .filter((u) => u && u.startDate)
+  .map((u) => ({ date: String(u.startDate).slice(0, 10), units: Number(u.units || 0) }))
+  .sort((a, b) => a.date.localeCompare(b.date));
+const historyStart = history.length ? history[0].date : '';
+// Units in force on a date, and just before one: Autotask holds a step
+// series, so a date carries the last value that started on or before it.
+function unitsAt(date) {
+  let v = 0;
+  for (const h of history) { if (h.date > date) break; v = h.units; }
+  return v;
+}
+function unitsBefore(date) {
+  let v = 0;
+  for (const h of history) { if (h.date >= date) break; v = h.units; }
+  return v;
+}
 
 // Autotask rejects adjustments dated outside the contract window.
 const cStart = String(line.contract_start || '');
@@ -76,22 +103,37 @@ if (invLines.length) {
     ? (a.type === 'set' ? 1 : -1)
     : a.date.localeCompare(b.date)));
 
-  let running = current;
+  // Replay the report's timeline against Autotask's own. Each event posts the
+  // difference between the units the report says are in force from that date
+  // and the units Autotask already has there, so a change it has already been
+  // given costs nothing and re-running a sync posts no adjustments at all.
+  //
+  // Replaying only when the service was new (units === 0) is what lost
+  // pro-rata charges: from the second month on, a customer who moved seats
+  // mid-cycle had every change collapsed into one delta at the cycle start,
+  // so the days Dicker charged pro-rata for were never billed on.
+  let desired = unitsBefore(events[0].date);
+  let applied = 0;
   let lastDate = cycleStart;
-  if (current === 0) {
-    // Fresh contract service: replay the cycle.
-    for (const ev of events) {
-      const change = ev.type === 'set' ? ev.q - running : ev.q;
-      if (change !== 0) { plan.push({ change: change, date: clampDate(ev.date) }); running += change; }
-      if (ev.date > lastDate) lastDate = ev.date;
-    }
+  for (const ev of events) {
+    desired = ev.type === 'set' ? ev.q : desired + ev.q;
+    if (ev.date > lastDate) lastDate = ev.date;
+    // Autotask holds no units for this service before its first record, so an
+    // adjustment dated earlier would invent a period it never billed. The
+    // correction below still carries the quantity; only the back-dating goes.
+    if (historyStart && ev.date < historyStart) continue;
+    const change = desired - (unitsAt(ev.date) + applied);
+    if (change !== 0) { plan.push({ change: change, date: clampDate(ev.date) }); applied += change; }
   }
-  // Correct to the annuity quantity (also the single-delta path when the
-  // contract already has unit history). Dated at the billing cycle start so
-  // Autotask bills the corrected quantity for the whole cycle, the way Dicker
-  // invoices it.
-  if (running !== target) {
-    plan.push({ change: target - running, date: clampDate(lastDate || line.price_effective_date || line.today) });
+  // Correct to the annuity quantity, which is the count Dicker bills from here
+  // on whatever the cycle line said. Dated at the last event so Autotask bills
+  // the corrected quantity for the rest of the cycle, never before the service
+  // had units at all.
+  let correctionDate = lastDate;
+  if (historyStart && correctionDate < historyStart) correctionDate = historyStart;
+  if (current + applied !== target) {
+    plan.push({ change: target - current - applied,
+      date: clampDate(correctionDate || line.price_effective_date || line.today) });
   }
 } else if (target !== current) {
   // No invoice detail available (annual-upfront plans are invoiced once a

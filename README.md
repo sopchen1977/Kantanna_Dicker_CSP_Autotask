@@ -204,10 +204,17 @@ items first in date order, the cycle quantity at cycle start, then a
 final correction to the annuity quantity (e.g. Atlas M365 BP: +6 @
 13-Jul, +10 @ 27-Jul, +259 @ 31-Jul = 275; cycle 31-Jul..30-Aug). Units
 only ever exist from dates shown in the report, so Autotask never
-back-bills earlier periods. For contracts that already have unit history,
-a single delta is posted, dated at the cycle start — never "today".
-Adjustments are posted oldest-first, one at a time (Autotask's 3-thread
-API limit).
+back-bills earlier periods.
+
+The replay runs the same way on a service Autotask has never billed and on
+one in its tenth month. Each event is posted as the gap between the quantity
+the report puts in force from that date and the quantity Autotask already
+holds there, read from the service's own unit history — so a change Autotask
+already has costs nothing, and syncing the same report twice posts no
+adjustments at all. An event older than the service's first unit record is
+not back-dated onto a period Autotask never billed; the quantity still lands
+in the correction. Adjustments are posted oldest-first, one at a time
+(Autotask's 3-thread API limit).
 
 ### Price-change effective dates
 
