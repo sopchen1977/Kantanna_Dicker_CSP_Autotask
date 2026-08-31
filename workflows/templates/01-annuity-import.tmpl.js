@@ -192,6 +192,50 @@ const summarizeImport = node({
   output: [{ line_count: 12, customer_count: 2 }]
 });
 
+// With the lines in the table, ask Autotask what the sync would do to them,
+// so the portal has a plan to show the moment it is opened rather than after
+// a two-minute wait for the Check Autotask button.
+//
+// waitForSubWorkflow is off, and that is the whole point: the plan is ~4
+// Autotask queries per line against a 3-thread limit, so it takes minutes.
+// The form must not sit on it - it starts the run and hands straight on to
+// the completion page, and the plan lands in the table while you are reading
+// it. n8n passes this node's input through untouched when it is not waiting,
+// so the summary reaches Import Complete unchanged.
+//
+// 04's webhook is gated and stays gated; this calls its Execute Sub-workflow
+// trigger instead. Whoever is standing here got past the sign-in on the
+// upload form to do it.
+const runPlan = node({
+  type: 'n8n-nodes-base.executeWorkflow',
+  version: 1.3,
+  config: {
+    name: 'Check Autotask',
+    position: [1160, 0],
+    executeOnce: true,
+    // A plan that fails is a portal without a preview, not a lost import:
+    // the lines are already saved, and Check Autotask will run it again.
+    onError: 'continueRegularOutput',
+    parameters: {
+      mode: 'once',
+      source: 'database',
+      workflowId: { __rl: true, mode: 'id', value: '__PLAN_WORKFLOW_ID__', cachedResultName: '04 · Autotask Plan' },
+      workflowInputs: {
+        mappingMode: 'defineBelow',
+        value: { source: 'import' },
+        matchingColumns: [],
+        schema: [
+          { id: 'source', displayName: 'source', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' }
+        ],
+        attemptToConvertTypes: false,
+        convertFieldsToString: true
+      },
+      options: { waitForSubWorkflow: false }
+    }
+  },
+  output: [{ line_count: 12, customer_count: 2 }]
+});
+
 // The upload is only half the job - the prices still have to be reviewed and
 // synced - so the completion page's real purpose is to hand you to the portal.
 // respondWith 'showText' renders portal/import-complete.html as the whole page,
@@ -281,7 +325,7 @@ const insertReportRow = node({
 });
 
 const noteImport = sticky(
-  '## 01 · Annuity Import\nUpload both monthly Dicker Data files. Lines are matched on Subscription ID + Stock Code and upserted, so custom sell prices and include/exclude choices saved in the portal survive re-imports.\n\n**Customer filter:** PILOT_CUSTOMERS at the top of the "Parse Subscription Lines" node is currently empty, so **every customer in the file is imported**. Add names to that list to restrict the import again; names are matched as a substring.',
+  '## 01 · Annuity Import\nUpload both monthly Dicker Data files. Lines are matched on Subscription ID + Stock Code and upserted, so custom sell prices and include/exclude choices saved in the portal survive re-imports.\n\n**Customer filter:** PILOT_CUSTOMERS at the top of the "Parse Subscription Lines" node is currently empty, so **every customer in the file is imported**. Add names to that list to restrict the import again; names are matched as a substring.\n\n**Check Autotask** starts 04 · Autotask Plan on the way out and does not wait for it - the plan takes minutes, the completion page does not. Open the portal and it fills in.',
   [uploadForm, normalizeUploads],
   { color: 4 }
 );
@@ -300,5 +344,6 @@ export default workflow('kantanna-csp-01-import', '01 · Annuity Import (Upload)
   .to(parseLines)
   .to(upsertLine)
   .to(summarizeImport)
+  .to(runPlan)
   .to(importDone)
   .add(noteImport);

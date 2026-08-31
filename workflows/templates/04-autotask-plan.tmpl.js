@@ -88,6 +88,32 @@ const refusedPlan = node({
   output: [{}]
 });
 
+// The import calls the plan as a sub-workflow rather than over its webhook.
+// The webhook is gated, and rightly so - but an internal call carries no
+// session cookie, so it would be refused by the gate rather than weakening
+// it. The caller is workflow 01, whose upload form is itself behind sign-in,
+// so whoever set this run going was signed in before a file was read.
+//
+// It joins the chain at Autotask Config, past the gate, because the gate is
+// the only thing being skipped. Everything after it is the same run the
+// portal's Check Autotask button gets.
+const planFromImport = trigger({
+  type: 'n8n-nodes-base.executeWorkflowTrigger',
+  version: 1.2,
+  config: {
+    name: 'Plan From Import',
+    position: [-620, 200],
+    parameters: {
+      inputSource: 'workflowInputs',
+      // Nothing here is read - the plan is made over the whole table, exactly
+      // as the webhook run makes it. It says who asked, so the execution list
+      // tells an import-triggered run from a button press at a glance.
+      workflowInputs: { values: [{ name: 'source', type: 'string' }] }
+    }
+  },
+  output: [{ source: 'import' }]
+});
+
 const autotaskConfig = node({
   type: 'n8n-nodes-base.set',
   version: 3.4,
@@ -567,8 +593,8 @@ const savePlan = node({
 });
 
 const notePlan = sticky(
-  '## 04 · Autotask Plan (read only)\nPOST /webhook/csp-autotask-plan - called at the end of the import, and by the portal\'s **Check Autotask** button.\n\nRuns the sync\'s four decisions without any of its writes, and stores per line what WOULD happen: create/rename the service, create/extend the contract, add or re-price the contract service, and the unit adjustments with their dates.\n\n**Nothing in this workflow creates, patches or posts anything.** Every HTTP node is a `/query`. If you are adding a node here and it is not a query, it belongs in 03.',
-  [startPlan, autotaskConfig],
+  '## 04 · Autotask Plan (read only)\nTwo ways in, one run. **Plan From Import** is called as a sub-workflow at the end of the import; POST /webhook/csp-autotask-plan is the portal\'s **Check Autotask** button, behind the sign-in gate. The import joins past the gate because an internal call carries no session cookie - its own caller was signed in to reach the upload form.\n\nRuns the sync\'s four decisions without any of its writes, and stores per line what WOULD happen: create/rename the service, create/extend the contract, add or re-price the contract service, and the unit adjustments with their dates.\n\n**Nothing in this workflow creates, patches or posts anything.** Every HTTP node is a `/query`. If you are adding a node here and it is not a query, it belongs in 03.',
+  [startPlan, planFromImport, autotaskConfig],
   { color: 4 }
 );
 
@@ -576,6 +602,8 @@ export default workflow('kantanna-csp-04-plan', '04 · Autotask Plan')
   .add(startPlan)
   .to(checkAccessPlan)
   .to(authedPlan.onTrue(autotaskConfig).onFalse(refusedPlan))
+  .add(planFromImport)
+  .to(autotaskConfig)
   .add(autotaskConfig)
   .to(fetchPlanLines)
   .to(prepareLines)

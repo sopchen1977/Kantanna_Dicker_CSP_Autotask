@@ -46,6 +46,7 @@ and carry an explicit session token instead.
 | 01 | **Annuity Import (Upload)** (`YvQ9T1rEFfIUnQUj`) | n8n Form | Upload the monthly **Annuity Information** + **CSP Invoice Report** (.xlsx). Reads only the `DETAILS` / `Invoice Details` tabs, normalises each subscription line (SKU + term parsed from the stock code, product name from the annuity STOCK DESCRIPTION, per-term prices converted to per-unit **monthly** cost/RRP, term dates taken from the invoice report), and upserts into the `csp_subscription_lines` data table keyed by *Subscription ID + Stock Code*. Custom sell prices and include/exclude choices survive re-imports. |
 | 02 | **CSP Pricing Portal** (`X9YtsHTLZJd1B21n`) | Webhook `GET /webhook/csp-pricing` | Web page grouped by customer: qty, monthly cost, monthly RRP, margin. Sell price **defaults to RRP**; tick *Custom* to set your own price. Map each Dicker tenant to an Autotask company (live company search). *Save prices* persists, *Sync to Autotask* kicks off workflow 03. |
 | 03 | **Autotask Sync** (`s9t606cOMcSVkufg`) | Webhook `POST /webhook/csp-autotask-sync` | Per included line: resolve the company mapping → ensure an Autotask **Service** exists for the SKU+term, matched on its **SKU field** and renamed in place if its name has drifted (created with monthly RRP/cost) → ensure a **Contract** exists for the co-term group, matched on its Autotask **External Contract Number** → add/re-price the contract service at the chosen sell price → adjust units to the imported quantity. Results (synced / needs_mapping / error + message and Autotask IDs) are written back per line and shown in the portal. |
+| 04 | **Autotask Plan** (`iTE2TSNj225YXBqq`) | Sub-workflow (end of the import) · Webhook `POST /webhook/csp-autotask-plan` | Workflow 03 with every write taken out. Runs the same four decisions over the same four `/query` calls and stores per line what the sync **would** do — create or rename the service, create or extend the contract, add or re-price the contract service, and the unit adjustments with their dates — into the `plan_*` columns, so the portal can show the job before you approve it. Nothing here creates, patches or posts. |
 
 ### Data tables (n8n project storage)
 
@@ -102,7 +103,11 @@ the deletes.
 1. Open the upload form at
    `https://gayleai.app.n8n.cloud/webhook/csp-import` and sign in when asked
    (see [Signing in](#signing-in)), then upload both files. File detection is
-   by name: one must contain “Annuity”, the other “Invoice”/“CSP”.
+   by name: one must contain “Annuity”, the other “Invoice”/“CSP”. The
+   completion page appears straight away; workflow 04 keeps running behind it,
+   working out what the sync would do to each line. It takes a couple of
+   minutes — roughly four Autotask queries per line against a three-thread
+   limit — so open the portal and it fills in.
 2. Open the portal: `https://gayleai.app.n8n.cloud/webhook/csp-pricing`.
    - Map any customers flagged **not mapped**.
    - Review sell prices (default = monthly RRP); tick *Custom* to override.
