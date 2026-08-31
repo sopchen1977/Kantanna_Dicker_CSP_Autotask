@@ -7,11 +7,10 @@ RRP but can be overridden per subscription line.
 Everything lives in the n8n project **Kantanna Dicker CSP and Autotask**
 (`https://gayleai.app.n8n.cloud`, project id `RGbuWbB4pjqi8VT3`).
 
-> **Pilot scope:** the import currently only keeps lines for
-> **ATLAS OUTSOURCING PTY LTD**, **Galilee Solicitors** and
-> **B E Smart Admin Services**. Edit the `PILOT_CUSTOMERS` list at the top
-> of the *Parse Subscription Lines* Code node (workflow 01) to add
-> customers, or make the list empty to import all.
+> **Customer scope:** the customer filter is **off** — `PILOT_CUSTOMERS` at
+> the top of the *Parse Subscription Lines* Code node (workflow 01) is an
+> empty list, so every customer in the uploaded files is imported. Put names
+> back in that list (matched as a substring) to narrow the import again.
 
 ## The three workflows
 

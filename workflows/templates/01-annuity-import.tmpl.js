@@ -273,7 +273,7 @@ const insertReportRow = node({
 });
 
 const noteImport = sticky(
-  '## 01 · Annuity Import\nUpload both monthly Dicker Data files. Lines are matched on Subscription ID + Stock Code and upserted, so custom sell prices and include/exclude choices saved in the portal survive re-imports.\n\n**Pilot filter:** edit PILOT_CUSTOMERS at the top of the "Parse Subscription Lines" node. Currently B E Smart Admin Services + Kantanna Pty Ltd (Kantanna is the in-house test customer). Names are matched as a substring; an empty list = all customers.',
+  '## 01 · Annuity Import\nUpload both monthly Dicker Data files. Lines are matched on Subscription ID + Stock Code and upserted, so custom sell prices and include/exclude choices saved in the portal survive re-imports.\n\n**Customer filter:** PILOT_CUSTOMERS at the top of the "Parse Subscription Lines" node is currently empty, so **every customer in the file is imported**. Add names to that list to restrict the import again; names are matched as a substring.',
   [uploadForm, normalizeUploads],
   { color: 4 }
 );

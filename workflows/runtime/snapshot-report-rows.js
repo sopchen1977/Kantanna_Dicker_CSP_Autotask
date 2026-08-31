@@ -5,8 +5,8 @@
 // so each item is already one sheet row keyed by its column heading, with the
 // cell text UNPARSED - "$144.64", "275.00", "02-MAR-2025", an invoice number
 // still carrying its leading spaces. That is the point: this is the file, not
-// our reading of it. Parse Subscription Lines does the interpreting, and only
-// for the pilot customers; this snapshot keeps every row of both tabs.
+// our reading of it. Parse Subscription Lines does the interpreting (and any
+// customer filtering); this snapshot keeps every row of both tabs regardless.
 //
 // One row per sheet row, the whole row as JSON in `data` so the tab can gain
 // or lose a column without a schema change. row_no preserves sheet order.

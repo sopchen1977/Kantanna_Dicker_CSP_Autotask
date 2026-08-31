@@ -2,7 +2,7 @@
 // "Invoice Details" rows and emit one normalised item per subscription line.
 //
 // ==== CONFIG: pilot customers. Empty array = import every customer. ====
-const PILOT_CUSTOMERS = ['B E Smart Admin Services', 'Kantanna Pty Ltd'];
+const PILOT_CUSTOMERS = [];
 // =======================================================================
 
 const MONTHS = { JAN: '01', FEB: '02', MAR: '03', APR: '04', MAY: '05', JUN: '06',
@@ -130,6 +130,6 @@ for (const r of annuityRows) {
 }
 
 if (!out.length) {
-  throw new Error('No matching subscription rows found in the DETAILS sheet. Check the PILOT_CUSTOMERS filter in this node.');
+  throw new Error('No subscription rows found in the DETAILS sheet. Check the uploaded file, and the PILOT_CUSTOMERS filter in this node if it is not empty.');
 }
 return out;
