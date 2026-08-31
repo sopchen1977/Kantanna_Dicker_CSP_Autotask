@@ -146,11 +146,9 @@ const sendCodeEmail = node({
       bodyContent: expr('{{ $(\'Prepare Code\').first().json.email_html }}'),
       additionalFields: { bodyContentType: 'html', saveToSentItems: false }
     },
-    // TODO: codes should come FROM a Kantanna mailbox, not gayle.ai - a
-    // sign-in code arriving from another company's domain reads as phishing
-    // and will hurt deliverability. 'Sop Kantanna Email' is not shared with
-    // this n8n project, so it cannot be selected yet; share it, then swap.
-    credentials: { microsoftOutlookOAuth2Api: newCredential('info@gayle.ai') }
+    // Codes come FROM a Kantanna mailbox on purpose: a sign-in code arriving
+    // from another company's domain reads as phishing and lands in junk.
+    credentials: { microsoftOutlookOAuth2Api: newCredential('Sop Kantanna Email') }
   },
   output: [{ success: true }]
 });
