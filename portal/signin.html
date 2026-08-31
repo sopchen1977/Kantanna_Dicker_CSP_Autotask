@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign in &middot; CSP Pricing</title>
+<style>
+  :root {
+    --bg:#f1f4f8; --card:#fff; --ink:#0f172a; --ink2:#334155; --muted:#64748b;
+    --line:#e2e8f0; --brand:#2563eb; --bad:#b91c1c; --badbg:#fef2f2;
+    --ok:#166534; --okbg:#f0fdf4;
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; min-height:100vh; background:var(--bg); color:var(--ink);
+    font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    display:grid; place-items:center; padding:24px;
+  }
+  .card {
+    width:100%; max-width:400px; background:var(--card); border:1px solid var(--line);
+    border-radius:14px; padding:30px 30px 26px;
+    box-shadow:0 1px 2px rgba(15,23,42,.05), 0 8px 28px rgba(15,23,42,.08);
+  }
+  .logo {
+    width:40px; height:40px; border-radius:10px; background:#0d1b30; color:#fff;
+    display:grid; place-items:center; font-size:13px; font-weight:700;
+    letter-spacing:.06em; margin-bottom:18px;
+  }
+  h1 { margin:0 0 6px; font-size:19px; font-weight:600; letter-spacing:-.015em; }
+  .sub { margin:0 0 22px; font-size:13.5px; color:var(--muted); }
+  .sub b { color:var(--ink2); font-weight:600; }
+  label { display:block; font-size:12px; font-weight:600; color:var(--ink2);
+    text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px; }
+  input {
+    width:100%; padding:10px 12px; font:inherit; font-size:14.5px;
+    border:1px solid var(--line); border-radius:9px; background:#fff; color:var(--ink);
+  }
+  input:focus { outline:2px solid #bfdbfe; outline-offset:-1px; border-color:var(--brand); }
+  /* The code is six digits and gets pasted out of an email - give it room
+     and tabular figures so a transposed digit is easy to spot. */
+  input.code {
+    font-size:23px; letter-spacing:.34em; text-align:center; font-variant-numeric:tabular-nums;
+    padding:12px; font-weight:600;
+  }
+  button {
+    width:100%; margin-top:14px; padding:11px 16px; font:inherit; font-size:14.5px;
+    font-weight:600; color:#fff; background:var(--brand); border:0; border-radius:9px;
+    cursor:pointer;
+  }
+  button:hover:not(:disabled) { background:#1d4ed8; }
+  button:disabled { opacity:.55; cursor:default; }
+  .linkrow { margin-top:16px; font-size:13px; color:var(--muted); text-align:center; }
+  .linkrow a { color:var(--brand); text-decoration:none; cursor:pointer; }
+  .linkrow a:hover { text-decoration:underline; }
+  .msg { margin-top:14px; padding:9px 12px; border-radius:8px; font-size:13px; display:none; }
+  .msg.show { display:block; }
+  .msg.bad { background:var(--badbg); color:var(--bad); border:1px solid #fecaca; }
+  .msg.ok { background:var(--okbg); color:var(--ok); border:1px solid #bbf7d0; }
+  .foot { margin-top:22px; padding-top:16px; border-top:1px solid var(--line);
+    font-size:12px; color:var(--muted); line-height:1.5; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">CSP</div>
+
+  <div id="step-email">
+    <h1>Sign in</h1>
+    <p class="sub">Enter your Kantanna email address and we&rsquo;ll send you a six-digit code.</p>
+    <form id="form-email" autocomplete="on">
+      <label for="email">Work email</label>
+      <input id="email" name="email" type="email" inputmode="email" autocomplete="email"
+             placeholder="you@kantanna.com.au" required autofocus>
+      <button id="btn-email" type="submit">Send me a code</button>
+    </form>
+  </div>
+
+  <div id="step-code" class="hidden">
+    <h1>Enter your code</h1>
+    <p class="sub">We sent a six-digit code to <b id="sent-to"></b>. It expires in 10 minutes.</p>
+    <form id="form-code" autocomplete="off">
+      <label for="code">Sign-in code</label>
+      <input id="code" class="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code"
+             pattern="[0-9]*" maxlength="6" placeholder="000000" required>
+      <button id="btn-code" type="submit">Sign in</button>
+    </form>
+    <div class="linkrow">
+      <a id="resend">Send another code</a> &middot; <a id="restart">Use a different address</a>
+    </div>
+  </div>
+
+  <div id="msg" class="msg"></div>
+
+  <p class="foot">
+    Access is limited to kantanna.com, kantanna.com.au and kantanna.ph addresses.
+    Signing in keeps you signed in on this browser for 14 days.
+  </p>
+</div>
+
+<script>
+// The page is served at whatever protected URL was asked for, so the auth
+// endpoints are addressed relative to it and a successful sign-in just
+// reloads - landing on the page the user actually wanted.
+var msgEl = document.getElementById('msg');
+var emailEl = document.getElementById('email');
+var codeEl = document.getElementById('code');
+var btnEmail = document.getElementById('btn-email');
+var btnCode = document.getElementById('btn-code');
+var sentTo = document.getElementById('sent-to');
+var current = '';
+
+function show(text, kind) {
+  msgEl.textContent = text;
+  msgEl.className = 'msg show ' + (kind || 'bad');
+}
+function clear() { msgEl.className = 'msg'; }
+
+function post(path, payload) {
+  return fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    // Same origin, but be explicit: the session cookie is the whole point.
+    credentials: 'same-origin',
+    body: JSON.stringify(payload)
+  }).then(function (r) {
+    return r.json().catch(function () { return {}; });
+  });
+}
+
+function step(which) {
+  document.getElementById('step-email').className = which === 'email' ? '' : 'hidden';
+  document.getElementById('step-code').className = which === 'code' ? '' : 'hidden';
+}
+
+function requestCode(quiet) {
+  var email = emailEl.value.trim();
+  if (!email) return;
+  btnEmail.disabled = true;
+  if (!quiet) clear();
+  return post('csp-auth-request', { email: email })
+    .then(function (res) {
+      current = email;
+      sentTo.textContent = email;
+      step('code');
+      codeEl.value = '';
+      codeEl.focus();
+      show(res.message || 'If that is a Kantanna address, a sign-in code is on its way.', 'ok');
+    })
+    .catch(function (e) { show('Could not reach the sign-in service: ' + e.message); })
+    .then(function () { btnEmail.disabled = false; });
+}
+
+document.getElementById('form-email').onsubmit = function (e) {
+  e.preventDefault();
+  requestCode(false);
+};
+
+document.getElementById('form-code').onsubmit = function (e) {
+  e.preventDefault();
+  var code = codeEl.value.trim();
+  if (!code) return;
+  btnCode.disabled = true;
+  clear();
+  post('csp-auth-verify', { email: current, code: code })
+    .then(function (res) {
+      if (res.ok) {
+        show('Signed in. Loading…', 'ok');
+        location.reload();
+        return;
+      }
+      show(res.message || 'That code is not right.');
+      codeEl.value = '';
+      codeEl.focus();
+      btnCode.disabled = false;
+    })
+    .catch(function (e) {
+      show('Could not reach the sign-in service: ' + e.message);
+      btnCode.disabled = false;
+    });
+};
+
+document.getElementById('resend').onclick = function () {
+  var a = this;
+  a.style.pointerEvents = 'none';
+  a.style.opacity = '.5';
+  requestCode(true).then(function () {
+    // A short cooldown so the resend link cannot be leaned on; the server
+    // enforces the real limit, this only keeps the button honest.
+    setTimeout(function () { a.style.pointerEvents = ''; a.style.opacity = ''; }, 20000);
+  });
+};
+
+document.getElementById('restart').onclick = function () {
+  clear();
+  step('email');
+  emailEl.focus();
+  emailEl.select();
+};
+</script>
+</body>
+</html>

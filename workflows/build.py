@@ -23,11 +23,17 @@ IDS = {
     "__MAPPINGS_TABLE_ID__": "U7ymd9nAyD0GCLYb",    # csp_customer_mappings
     "__SERVICES_TABLE_ID__": "ai3p8JIYv082bfjn",    # csp_sku_services
     "__REPORT_TABLE_ID__": "bMh0poIYCCOyVsAj",      # csp_report_rows
+    "__AUTH_CODES_TABLE_ID__": "Am9KrzhbyWdKOEeY",  # csp_auth_codes
+    "__SESSIONS_TABLE_ID__": "dejMhLWVWTKdyYpo",    # csp_sessions
     "__AUTOTASK_CREDENTIAL_ID__": "YXJai935T9ICrDqi",  # KantannaAutotask (httpCustomAuth)
 }
 
 # ---- runtime scripts embedded as Code-node jsCode
 CODE_TOKENS = {
+    "__AUTH_PREPARE_CODE__": "auth-prepare-code.js",
+    "__AUTH_CHECK_CODE__": "auth-check-code.js",
+    "__AUTH_READ_COOKIE__": "auth-read-cookie.js",
+    "__AUTH_CHECK_SESSION__": "auth-check-session.js",
     "__NORMALIZE_UPLOADS__": "normalize-uploads.js",
     "__PARSE_LINES__": "parse-lines.js",
     "__SUMMARIZE_IMPORT__": "summarize-import.js",
@@ -67,6 +73,12 @@ def portal_html() -> str:
     return json.dumps((HERE.parent / "portal" / "portal.html").read_text())
 
 
+def signin_html() -> str:
+    """The sign-in page, served in place of any protected page when the
+    caller has no live session."""
+    return json.dumps((HERE.parent / "portal" / "signin.html").read_text())
+
+
 def report_html() -> str:
     """The uploaded-tab viewer, injected into the Report Template Set node."""
     return json.dumps((HERE.parent / "portal" / "report.html").read_text())
@@ -95,6 +107,8 @@ def build() -> None:
                 text = text.replace(token, runtime_literal(filename))
         if "__PORTAL_HTML__" in text:
             text = text.replace("__PORTAL_HTML__", portal_html())
+        if "__SIGNIN_HTML__" in text:
+            text = text.replace("__SIGNIN_HTML__", signin_html())
         if "__REPORT_HTML__" in text:
             text = text.replace("__REPORT_HTML__", report_html())
         if "__IMPORT_DONE_HTML__" in text:
