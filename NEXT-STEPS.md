@@ -4,8 +4,7 @@ Working branch: `claude/csp-plan-work-8lzqqb` (no PR). Everything below is
 committed and pushed. Read this with `git log` — the commit messages carry the
 reasoning for each change.
 
-**04 and 01 are deployed and published. 02 is not** — see
-[Deploying what is here](#deploying-what-is-here).
+**All three workflows are deployed and published.**
 
 ## The job in progress
 
@@ -85,16 +84,7 @@ rows — all `plan_status: ok`, nothing unmapped, no failed reads.
 
 ## Still to do
 
-1. **Deploy 02.** The portal HTML is the only thing left. It is a 101KB single
-   parameter and the sandbox cannot verify it — egress to
-   `gayleai.app.n8n.cloud` is blocked, so the page cannot be loaded, and a
-   100KB string cannot be diffed back through the MCP. Paste it by hand: n8n →
-   *02 · CSP Pricing Portal* → **Portal Template** node → replace the `html`
-   value with `portal/portal.html` from this branch, then **publish** (saving
-   is not publishing). Until then the live portal shows no plan, though the
-   `plan_*` columns behind it are already filled in.
-
-2. **`Mark Unmapped` writes only the primary row.** The same merged-sibling
+1. **`Mark Unmapped` writes only the primary row.** The same merged-sibling
    gap that `plan-result.js` just closed still exists on the needs-mapping
    branch — of **both** 03 (`Mark Needs Mapping`) and 04 (`Mark Unmapped`).
    Those are data-table nodes rather than Code nodes, so fanning out needs a
@@ -102,7 +92,7 @@ rows — all `plan_status: ok`, nothing unmapped, no failed reads.
    unmapped customer, so the row is stale rather than wrong), but it is the
    last place the two rows disagree.
 
-3. **`plan_sell` column.** The plan stores the price Autotask holds
+2. **`plan_sell` column.** The plan stores the price Autotask holds
    (`contract_price`) but not the price it would push, so the portal derives
    that with `planSell()`. One more column and one more field in `Plan Result`
    / `Save Plan` would put it back to a single source of truth.
@@ -113,7 +103,7 @@ rows — all `plan_status: ok`, nothing unmapped, no failed reads.
 |---|---|---|
 | 04 · Autotask Plan | new *Plan From Import* trigger → *Autotask Config*; `Plan Result` code | **deployed & published** |
 | 01 · Annuity Import | new *Check Autotask* Execute Workflow node between *Summarize Import* and *Import Complete* | **deployed & published** |
-| 02 · CSP Pricing Portal | the *Portal Template* node's `html` (101KB) — plan chips, contract tag, drawer section, stat tile, Check Autotask button | **not deployed** — paste by hand, see above |
+| 02 · CSP Pricing Portal | the *Portal Template* node's `html` (101KB) — plan chips, contract tag, drawer section, stat tile, Check Autotask button | **deployed & published** — pasted by hand, verified byte-exact |
 
 04 goes first because 01 calls it; that order has been followed.
 
@@ -129,8 +119,34 @@ be done that way — its one parameter *is* the whole file.
   Never edit `workflows/generated/` by hand.
 - **Deploying is a hand-transcription into the n8n MCP, so verify it.** After
   every deploy, pull the node back with `get_workflow_details` and diff it
-  against the repo file. That check has caught two real drifts. `portal.html`
-  is ~95KB in one node and is the worst of them.
+  against the repo file. That check has now caught three real drifts.
+  `portal.html` is ~101KB in one node and is the worst of them.
+
+  The diff is mechanical, and worth doing exactly this way. A
+  `get_workflow_details` on 02 is too big to return inline, so it is written
+  to a file — which is the thing that makes a real diff possible:
+
+  ```
+  jq -r '.workflow.nodes[] | select(.name=="Portal Template")
+         | .parameters.assignments.assignments[0].value' "$TOOL_RESULT_FILE"
+  ```
+
+  Strip a leading `=` (expression mode) and compare `md5sum` against
+  `portal/portal.html`. Anything but an exact match is a failed deploy.
+
+- **Paste the portal into the field's EXPRESSION editor, never the plain one.**
+  The Set node's string field is a single-line input in Fixed mode, and
+  pasting 2045 lines into it silently replaces **every newline with a space**.
+  The byte count does not change, so nothing looks wrong — but the page's
+  script has 271 `//` line comments, the first 63 characters in, and with no
+  newline to end it 99.9% of the JavaScript is commented out. The portal
+  serves a header and an empty page. This happened on 1 Sep and was caught by
+  the diff above, not by looking at it.
+
+  Toggling the value to **Expression** gives a multi-line editor that keeps
+  the newlines, and stores it with a leading `=`. That is safe here because
+  `portal.html` contains no `{{` — check that it still holds before relying on
+  it. A deploy through `update_workflow` does not have the problem at all.
 - **Saving is not publishing.** `update_workflow` writes a draft: `versionId`
   moves but `activeVersionId` does not, and the live webhook still serves the
   old version until `publish_workflow` runs. This was missed once already.
