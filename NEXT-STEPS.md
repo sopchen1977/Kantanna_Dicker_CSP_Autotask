@@ -4,8 +4,8 @@ Working branch: `claude/csp-plan-work-8lzqqb` (no PR). Everything below is
 committed and pushed. Read this with `git log` — the commit messages carry the
 reasoning for each change.
 
-**Nothing in this branch has been deployed to n8n yet.** The repo is ahead of
-the live workflows by three commits; see [Deploying what is here](#deploying-what-is-here).
+**04 and 01 are deployed and published. 02 is not** — see
+[Deploying what is here](#deploying-what-is-here).
 
 ## The job in progress
 
@@ -70,12 +70,29 @@ another Autotask round trip.
 > the sync should perhaps default to the live contract price instead. That is
 > a pricing decision, not a code one.
 
+**Smoke-tested against real data**, 31 Aug 2026, execution `26956` — 04's
+first real run. Entered through *Plan From Import* (`test_workflow` with
+`triggerNodeName`, since a manual run picks the webhook trigger and correctly
+takes the refused branch), 5m15s, success. 95 loop runs produced **96** plan
+rows — all `plan_status: ok`, nothing unmapped, no failed reads.
+
+- The extra row is the merged pair: subscriptions `D1E47C24…` and
+  `DE3858AA…` share stock code `P1Y:CFQ7TTC0LH16:0001:1:` and now both carry
+  the plan under the primary's `line_key`. Before the fix the second was blank.
+- Atlas reads exactly as the sketch above:
+  `+6 @2026-07-13, +10 @2026-07-27, +259 @2026-07-31` (0 → 275), service 677
+  already there, contract to be created.
+
 ## Still to do
 
-1. **Deploy and smoke-test.** See below. 04 has still never been run against
-   real data — the gate was why, and that is fixed, but nothing has been
-   deployed. Run an import, then check Atlas's `plan_*` columns and open the
-   portal.
+1. **Deploy 02.** The portal HTML is the only thing left. It is a 101KB single
+   parameter and the sandbox cannot verify it — egress to
+   `gayleai.app.n8n.cloud` is blocked, so the page cannot be loaded, and a
+   100KB string cannot be diffed back through the MCP. Paste it by hand: n8n →
+   *02 · CSP Pricing Portal* → **Portal Template** node → replace the `html`
+   value with `portal/portal.html` from this branch, then **publish** (saving
+   is not publishing). Until then the live portal shows no plan, though the
+   `plan_*` columns behind it are already filled in.
 
 2. **`Mark Unmapped` writes only the primary row.** The same merged-sibling
    gap that `plan-result.js` just closed still exists on the needs-mapping
@@ -92,15 +109,18 @@ another Autotask round trip.
 
 ## Deploying what is here
 
-Three live workflows are behind the repo:
-
-| Workflow | What changed | File |
+| Workflow | What changed | State |
 |---|---|---|
-| 01 · Annuity Import | new *Check Autotask* Execute Workflow node after *Summarize Import* | `workflows/generated/01-annuity-import.js` |
-| 02 · CSP Pricing Portal | the portal HTML node (~95KB) — plan chips, tile, button | `workflows/generated/02-pricing-portal.js` |
-| 04 · Autotask Plan | new *Plan From Import* trigger → *Autotask Config*; `Plan Result` code | `workflows/generated/04-autotask-plan.js` |
+| 04 · Autotask Plan | new *Plan From Import* trigger → *Autotask Config*; `Plan Result` code | **deployed & published** |
+| 01 · Annuity Import | new *Check Autotask* Execute Workflow node between *Summarize Import* and *Import Complete* | **deployed & published** |
+| 02 · CSP Pricing Portal | the *Portal Template* node's `html` (101KB) — plan chips, contract tag, drawer section, stat tile, Check Autotask button | **not deployed** — paste by hand, see above |
 
-Deploy 04 first (01 calls it), then 01, then 02.
+04 goes first because 01 calls it; that order has been followed.
+
+Both deployed changes went in as targeted `update_workflow` operations
+(`addNode` / `addConnection` / `updateNodeParameters`) rather than a whole-file
+rewrite, which is much easier to get right than a re-transcription. 02 cannot
+be done that way — its one parameter *is* the whole file.
 
 ## How to work on this safely
 
