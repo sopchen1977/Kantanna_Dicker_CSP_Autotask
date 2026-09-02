@@ -59,15 +59,16 @@ Everything is read from what 04 computed rather than derived again — except
 price, deliberately, so a price typed on screen updates the preview without
 another Autotask round trip.
 
-> **That exception found a real divergence, and it is now visible rather than
-> fixed.** The portal's Sell column falls back to the **live Autotask price**;
-> the sync (`prepare-lines.js`) falls back to **RRP**. So a service repriced by
-> hand in Autotask, on a line with no custom price in the portal, gets pushed
-> back to RRP on the next sync. `planSell()` follows the sync's rule, so the
-> plan now says *re-price $30.00 → $34.55* where the page used to say nothing.
-> **Decide which behaviour is wanted** — the plan warning may be enough, or
-> the sync should perhaps default to the live contract price instead. That is
-> a pricing decision, not a code one.
+> **An earlier version of this note claimed the exception had found a
+> divergence — that the sync reverts hand-edited Autotask prices to RRP. It
+> does not, and the claim came from reading `prepare-lines.js`'s RRP fallback
+> without following it to where it is used.** `cs-decision.js` pushes that
+> number only when CREATING the contract service or when `use_custom_price`
+> is set; on an existing service with no portal price the action is `none`
+> and the contract's own price is carried through. So RRP is the default for
+> a service being added, Autotask's price stands for one already there, and
+> `planSell()` is simply `effSell` — column and plan agree because the sync
+> agrees with both. The portal's **use RRP** link is how you ask for RRP back.
 
 **Smoke-tested against real data**, 31 Aug 2026, execution `26956` — 04's
 first real run. Entered through *Plan From Import* (`test_workflow` with

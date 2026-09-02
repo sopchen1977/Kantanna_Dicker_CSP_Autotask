@@ -1334,6 +1334,13 @@ function lineHtml(l) {
       '</div>' +
       '<div class="selledit">' +
         '<input type="number" step="0.01" min="0" class="js-sell" data-i="' + i + '" value="' + fmt(effSell(l)) + '">' +
+        // Typing a price is how you tell the sync to change one - without it
+        // an existing service keeps whatever Autotask charges. So going BACK
+        // to RRP has to be said explicitly too, and this is how it is said.
+        '<div class="picks"><a class="js-rrp" data-i="' + i + '" ' +
+          'title="' + attr('Charge Dicker\'s RRP for this billing period, ' + money(periodRrp(l)) +
+            '. Without this an existing service keeps the price Autotask already has.') +
+          '">use RRP ' + fmt(periodRrp(l)) + '</a></div>' +
         '<div class="fromlbl">effective from</div>' +
         '<input type="date" class="js-date" data-i="' + i + '" value="' + attr(l.price_effective_date) + '">' +
         '<div class="picks"><a class="js-pick" data-i="' + i + '" data-p="post" title="The next Approve &amp; Post billing start">next post</a>' +
@@ -1430,23 +1437,23 @@ function planCheckedAt() {
   return stamps.length ? stamps[stamps.length - 1] : '';
 }
 
-// The price the sync would push, by the sync's own rule (Prepare Lines): the
-// portal price when one has been typed, otherwise the per-period RRP.
+// The price the sync would push, and it is exactly effSell - the same number
+// the Sell column shows. Worth saying why, because an earlier version of this
+// file got it wrong in a way that put a false "re-price" on healthy rows.
 //
-// This is NOT the same as effSell, and the difference is the point. effSell
-// answers "what is this service charged at" and so falls back to the LIVE
-// Autotask price, which is right for the Sell column - it is what the
-// customer is paying. The sync falls back to RRP. So a price edited by hand
-// in Autotask, on a line with no custom price here, will be pushed back to
-// RRP on the next sync, and a preview built on effSell would have said
-// "nothing to do" about exactly the change you most needed warning of.
+// prepare-lines.js does fall back to RRP when no price has been typed, which
+// reads like the sync reverting hand edits. It does not: cs-decision.js only
+// ever pushes that number when it is CREATING the contract service, or when
+// use_custom_price is set. On an existing service with no portal price the
+// action is 'none' and `sell` is carried through as the contract's own
+// current price. So RRP is the default for a service being added, and
+// Autotask's price stands for one already there - which is why the column and
+// the plan agree, and why unticking Custom never reverts anything.
 function planSell(l) {
-  return (l.use_custom_price && l.sell_price !== null && l.sell_price !== undefined && l.sell_price !== '')
-    ? Number(l.sell_price) : periodRrp(l);
+  return effSell(l);
 }
 
-// The live price comparison - see the note above. A line with no contract
-// service is not a re-price at all, it is an addition.
+// A line with no contract service is not a re-price at all, it is an addition.
 function planPrice(l) {
   var have = (l.contract_price === null || l.contract_price === undefined || l.contract_price === '')
     ? null : Number(l.contract_price);
@@ -1507,11 +1514,8 @@ function planHtml(l) {
       escapeHtml(money(pr.to)) + suffix + '</span>');
   } else if (pr.kind === 'change') {
     chips.push('<span class="plan price" title="' + attr('The contract charges ' + money(pr.from) +
-      ' today; the sync would set ' + money(pr.to) +
-      (l.use_custom_price ? ' - the price typed on this screen.' :
-        ' - the RRP, which is what the sync uses when no price has been set here. ' +
-        'Set a custom price to keep the current one.') +
-      ' Effective ' + (l.price_effective_date || 'today') + '.') +
+      ' today; the sync will set ' + money(pr.to) + ', the price typed on this screen, effective ' +
+      (l.price_effective_date || 'today') + '.') +
       '">re-price ' + escapeHtml(money(pr.from)) + ' &rarr; ' + escapeHtml(money(pr.to)) + suffix + '</span>');
   } else if (l.plan_cs_action === 'redescribe') {
     chips.push('<span class="plan price" title="' + attr('The wording on the invoice line will be ' +
@@ -1762,6 +1766,15 @@ function wire() {
     el.onchange = function () {
       var l = LINES[+el.getAttribute('data-i')];
       l.sell_price = Number(el.value);
+      refreshLine(l);
+    };
+  });
+  each('.js-rrp', function (el) {
+    el.onclick = function () {
+      var l = LINES[+el.getAttribute('data-i')];
+      l.sell_price = periodRrp(l);
+      var input = document.querySelector('.js-sell[data-i="' + l._i + '"]');
+      if (input) input.value = fmt(l.sell_price);
       refreshLine(l);
     };
   });

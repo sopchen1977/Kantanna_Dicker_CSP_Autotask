@@ -127,12 +127,12 @@ the deletes.
 3. Refresh the portal to see per-line results (contract id, actions taken, or
    the exact Autotask error).
 
-> **A price edited by hand in Autotask will be pushed back.** The Sell column
-> shows what the contract charges today, but the sync's own default is the
-> **RRP** — so a service repriced directly in Autotask, on a line with no
-> custom price here, is set back to RRP on the next sync. The plan says so
-> (*re-price $30.00 → $34.55*) rather than letting it happen quietly. Tick
-> *Custom* and enter the price you want to keep it.
+> **An existing price in Autotask is left alone.** The Sell column shows what
+> the contract charges today, read live from Autotask on every page load. The
+> sync only changes a price you have explicitly set here — tick *Custom*, or
+> use the **use RRP** link in the price editor to go back to Dicker's RRP.
+> Unticking never reverts anything. RRP is the default only for a service
+> being added to a contract for the first time.
 
 The two links under the page title, **Annuity DETAILS** and **CSP Invoice
 Details**, show the tabs of the workbooks this page was built from exactly as
