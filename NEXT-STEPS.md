@@ -147,6 +147,24 @@ be done that way — its one parameter *is* the whole file.
   the newlines, and stores it with a leading `=`. That is safe here because
   `portal.html` contains no `{{` — check that it still holds before relying on
   it. A deploy through `update_workflow` does not have the problem at all.
+
+- **The portal cannot be deployed through the MCP, and splitting it does not
+  help.** Tried and reverted on 1 Sep; do not spend the afternoon on it again.
+  `update_workflow` replaces a node parameter WHOLE, and a JSON Pointer cannot
+  address one element of the assignments array — `setNodeParameter` with
+  `/assignments/assignments/0/name` returns *"cannot descend into non-object
+  at '/assignments/assignments'"*, confirmed against the live instance rather
+  than assumed. So the page can only go through in one ~33K-token call, which
+  is more than a tool call can carry.
+
+  Splitting it across three chained Set nodes DOES make each part sendable
+  (~36KB each) and the round trip is byte-exact — but it turns one paste into
+  three for whoever is doing it by hand, which is worse for the common case.
+  It was built, verified and reverted for that reason. If a future session
+  wants the shape back it is in commits `1a39e06` and `1e633eb`.
+
+  The working process is: paste into the Expression editor, publish, then
+  verify with the md5 diff above. That has caught every deploy fault so far.
 - **Saving is not publishing.** `update_workflow` writes a draft: `versionId`
   moves but `activeVersionId` does not, and the live webhook still serves the
   old version until `publish_workflow` runs. This was missed once already.
