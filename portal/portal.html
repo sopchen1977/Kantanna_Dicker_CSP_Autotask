@@ -342,7 +342,7 @@
     <a class="btn ghost" href="https://ww31.autotask.net/" target="_blank" rel="noopener"
        title="Approve &amp; Post lives under Contracts &gt; Approve &amp; Post">Autotask &#8599;</a>
     <button class="btn ghost" onclick="resync(this)"
-      title="Re-read everything from Autotask and work out what a sync would do — without creating, changing or posting anything">Refresh and Resync</button>
+      title="Re-read everything from Autotask and work out what a sync would do — without creating, changing or posting anything">Refresh and re-read Autotask</button>
     <button class="btn primary" onclick="saveAll(this)">Save prices</button>
     <button class="btn go" onclick="syncNow(this)">Sync to Autotask</button>
   </div>
@@ -889,7 +889,7 @@ function planTile(visible) {
   var incl = visible.filter(effInclude);
   var checked = incl.filter(hasPlan);
   if (!checked.length) {
-    return { k: 'Autotask plan', v: '—', s: 'press Refresh and Resync' };
+    return { k: 'Autotask plan', v: '—', s: 'press Refresh and re-read Autotask' };
   }
   var todo = 0, failed = 0, unmapped = 0;
   checked.forEach(function (l) {
@@ -1438,19 +1438,21 @@ function planCheckedAt() {
   return stamps.length ? stamps[stamps.length - 1] : '';
 }
 
-// The price the sync would push, and it is exactly effSell - the same number
-// the Sell column shows. Worth saying why, because an earlier version of this
-// file got it wrong in a way that put a false "re-price" on healthy rows.
+// The price the sync would push. Read from what 04 recorded rather than
+// worked out again here - cs-decision.js already holds the whole rule (the
+// price being set when creating or re-pricing, the contract's own price when
+// the answer is "leave it alone"), and a second copy of that rule on this
+// side is exactly what put a false "re-price" on healthy rows once already.
 //
-// prepare-lines.js does fall back to RRP when no price has been typed, which
-// reads like the sync reverting hand edits. It does not: cs-decision.js only
-// ever pushes that number when it is CREATING the contract service, or when
-// use_custom_price is set. On an existing service with no portal price the
-// action is 'none' and `sell` is carried through as the contract's own
-// current price. So RRP is the default for a service being added, and
-// Autotask's price stands for one already there - which is why the column and
-// the plan agree, and why unticking Custom never reverts anything.
+// The one case that still has to be derived is a price typed on this screen a
+// moment ago, which has not been anywhere near Autotask and so cannot be in
+// plan_sell. That is what use_custom_price means, and it is checked first so
+// the chip follows the price under your hands.
 function planSell(l) {
+  if (l.use_custom_price && l.sell_price !== null && l.sell_price !== undefined && l.sell_price !== '') {
+    return Number(l.sell_price);
+  }
+  if (l.plan_sell !== null && l.plan_sell !== undefined && l.plan_sell !== '') return Number(l.plan_sell);
   return effSell(l);
 }
 
@@ -1479,7 +1481,7 @@ function planHtml(l) {
   if (!hasPlan(l)) {
     return planWasRun()
       ? '<div class="planline"><span class="plan flat" title="' +
-        attr('Autotask has not been checked for this line. Press Refresh and Resync to bring it up to date.') +
+        attr('Autotask has not been checked for this line. Press Refresh and re-read Autotask to bring it up to date.') +
         '">not checked</span></div>'
       : '';
   }
@@ -1487,7 +1489,7 @@ function planHtml(l) {
   if (st === 'needs_mapping') {
     return '<div class="planline"><span class="plan err" title="' +
       attr('This customer is not mapped to an Autotask company, so there is nothing to plan against. ' +
-        'Map it above, then press Refresh and Resync.') + '">needs mapping</span></div>';
+        'Map it above, then press Refresh and re-read Autotask.') + '">needs mapping</span></div>';
   }
   if (st === 'error') {
     return '<div class="planline"><span class="plan err" title="' +
@@ -1556,13 +1558,13 @@ function planDetailHtml(l) {
     return '<div class="dsec">What the sync will do</div>' +
       '<div class="dline"><span class="muted">Not known — Autotask could not be read for this ' +
       'service.</span></div><div class="dfoot">' + escapeHtml(String(l.plan_error || '')) +
-      '<br>Press Refresh and Resync to try again.</div>';
+      '<br>Press Refresh and re-read Autotask to try again.</div>';
   }
   if (st === 'needs_mapping') {
     return '<div class="dsec">What the sync will do</div>' +
       '<div class="dline"><span class="muted">Nothing yet — this customer is not mapped to an ' +
       'Autotask company, so there is no company to plan against.</span></div>' +
-      '<div class="dfoot">Map it in the customer header above, then press Refresh and Resync.</div>';
+      '<div class="dfoot">Map it in the customer header above, then press Refresh and re-read Autotask.</div>';
   }
   var rows = [];
   function step(when, tag, what) {
@@ -1590,7 +1592,7 @@ function planDetailHtml(l) {
     'this line — nothing would be posted.</span></div>');
 
   var foot = 'Read from Autotask ' + escapeHtml(String(l.plan_checked_at).slice(0, 16).replace('T', ' ')) +
-    ' UTC, without changing anything. Press Refresh and Resync to read it again.';
+    ' UTC, without changing anything. Press Refresh and re-read Autotask to read it again.';
   if (String(l.plan_status || '') === 'error') {
     foot = 'The check failed, so this is incomplete: ' + escapeHtml(String(l.plan_error || ''));
   }

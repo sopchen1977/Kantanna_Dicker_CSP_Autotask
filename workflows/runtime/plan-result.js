@@ -78,6 +78,14 @@ return keys.map((k) => ({ json: {
   contract_price: cs.old_price === null || cs.old_price === undefined ? '' : cs.old_price,
   contract_invoice_description: cs.cs_invoice_description || '',
 
+  // The price the sync would actually push, straight from CS Decision - not
+  // re-derived. It already holds the whole rule: the price being set when
+  // creating or re-pricing, and the contract's OWN current price when the
+  // answer is "leave it alone". It is also the price the unit adjustments
+  // are posted at, so it is the one number that says what this line costs
+  // after a sync.
+  plan_sell: cs.sell === null || cs.sell === undefined ? '' : cs.sell,
+
   // What would happen, per step.
   plan_service_action: serviceAction,
   plan_contract_action: contractAction,

@@ -60,6 +60,8 @@ assert.strictEqual(p1.plan_units_summary, '+6 @2026-07-13, +10 @2026-07-27, +259
 assert.strictEqual(p1.plan_target_units, 275);
 assert.ok(/create contract/.test(p1.plan_summary), 'summary names the contract');
 assert.ok(/create service/.test(p1.plan_summary), 'summary names the service');
+assert.strictEqual(p1.plan_sell, 34.55,
+  'a service being added is added at the price prepare-lines settled on');
 assert.deepStrictEqual(JSON.parse(p1.plan_units).map((x) => [x.change, x.date]),
   [[6, '2026-07-13'], [10, '2026-07-27'], [259, '2026-07-31']]);
 
@@ -92,6 +94,8 @@ assert.strictEqual(p2.autotask_service_id, 9001, 'the plan records the ids it fo
 assert.strictEqual(p2.autotask_contract_id, 7001);
 assert.strictEqual(p2.autotask_contract_service_id, 8001);
 assert.strictEqual(p2.contract_price, 34.55, 'the live contract price is read back without syncing');
+assert.strictEqual(p2.plan_sell, 34.55,
+  'nothing to do -> the price after a sync is the one the contract already carries');
 
 // ---- Standing contract, seats moved mid-cycle: the pro-rata case --------
 const moved = { 'Current Line': [{ json: line }] };
@@ -157,5 +161,38 @@ for (const i of pMerged) {
 
 // An unmerged line still produces exactly one row.
 assert.strictEqual(runNode('plan-result.js', moved['Units Decision'], moved).length, 1);
+
+// ---- plan_sell carries cs-decision's answer, not a second copy of it -----
+// The portal used to work the sync's price out for itself and got it wrong.
+// This is the number it reads instead, so it has to BE cs-decision's `sell`
+// in every branch - including the one where the two differ most: a custom
+// price that re-prices an existing service.
+const priced = Object.assign({}, line, { use_custom_price: true, sell_price: 39.9, effective_sell: 39.9 });
+const repriced = { 'Current Line': [{ json: priced }] };
+repriced['Service Decision'] = runNode('service-decision.js', [{ json: { items: [svcRow] } }], repriced);
+repriced['Contract Decision'] = runNode('contract-decision.js', [{ json: { items: [conRow] } }], repriced);
+repriced['Record Service'] = [{ json: { sku: line.service_key, autotask_service_id: 9001 } }];
+repriced['CS Decision'] = runNode('cs-decision.js', [{ json: { items: [csRow] } }], repriced);
+repriced['Units Decision'] = runNode('units-decision.js',
+  [{ json: { items: [{ startDate: '2026-06-30', units: 275 }] } }], repriced);
+const p5 = runNode('plan-result.js', repriced['Units Decision'], repriced)[0].json;
+
+assert.strictEqual(p5.plan_cs_action, 'reprice');
+assert.strictEqual(p5.contract_price, 34.55, 'what Autotask charges today');
+assert.strictEqual(p5.plan_sell, 39.9, 'what it would charge after the sync');
+assert.strictEqual(p5.plan_sell, repriced['CS Decision'][0].json.sell,
+  'plan_sell IS cs-decision\'s sell - one rule, not two');
+
+// And on the branch that changes nothing, the two agree with each other.
+assert.strictEqual(p2.plan_sell, p2.contract_price,
+  'leave it alone -> the price after a sync is the price before it');
+
+// A failed lookup still carries cs-decision's answer verbatim - blanking it
+// here would be this file forming its own opinion, which is the thing being
+// avoided. What stops it being READ as a price is plan_status: the chips and
+// the drawer both bail on 'error' before they reach any of these fields.
+assert.strictEqual(p4.plan_status, 'error');
+assert.strictEqual(p4.plan_sell, runNode('cs-decision.js', [{ json: { items: [] } }], broken)[0].json.sell,
+  'carried through unchanged; plan_status is what gates it being shown');
 
 console.log('ALL PLAN TESTS PASSED');

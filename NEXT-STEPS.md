@@ -36,7 +36,7 @@ no-op run, the pro-rata case, a failed lookup and a merged pair.
 
 **Reachable from the import.** 04 has a second trigger, *Plan From Import*
 (Execute Sub-workflow), joining the chain at `Autotask Config` — past the
-access gate and nowhere else. Workflow 01 calls it from a *Refresh and Resync*
+access gate and nowhere else. Workflow 01 calls it from a *Refresh and re-read Autotask*
 node after *Summarize Import*, with `waitForSubWorkflow` **off** so the
 completion page does not sit on a two-minute run, and `onError:
 continueRegularOutput` so a failed plan is a portal without a preview rather
@@ -53,11 +53,13 @@ merged product carry the plan.
 created*, *extend to 21 Sep 2026*); the same plan with its dates in the row
 drawer, above the billing history; an **Autotask plan** stat tile counting the
 changes and naming what undermines that count (reads that failed, unmapped
-customers, lines not checked). A **Refresh and Resync** button re-runs 04.
+customers, lines not checked). A **Refresh and re-read Autotask** button re-runs 04.
 
-Everything is read from what 04 computed rather than derived again — except
-price, deliberately, so a price typed on screen updates the preview without
-another Autotask round trip.
+Everything is read from what 04 computed rather than derived again, price
+included: 04 stores `plan_sell` (cs-decision's own `sell`) and the portal
+reads it. The single exception is a price typed on screen a moment ago, which
+by definition has not been near Autotask — `use_custom_price` is checked first
+so the chip follows the price under your hands.
 
 > **An earlier version of this note claimed the exception had found a
 > divergence — that the sync reverts hand-edited Autotask prices to RRP. It
@@ -93,18 +95,16 @@ rows — all `plan_status: ok`, nothing unmapped, no failed reads.
    unmapped customer, so the row is stale rather than wrong), but it is the
    last place the two rows disagree.
 
-2. **`plan_sell` column.** The plan stores the price Autotask holds
-   (`contract_price`) but not the price it would push, so the portal derives
-   that with `planSell()`. One more column and one more field in `Plan Result`
-   / `Save Plan` would put it back to a single source of truth.
+2. **`Mark Unmapped` / `Mark Needs Mapping` write only the primary row.**
+   The last place a merged pair disagrees — see the note in the README.
 
 ## Deploying what is here
 
 | Workflow | What changed | State |
 |---|---|---|
 | 04 · Autotask Plan | new *Plan From Import* trigger → *Autotask Config*; `Plan Result` code | **deployed & published** |
-| 01 · Annuity Import | new *Refresh and Resync* Execute Workflow node between *Summarize Import* and *Import Complete* | **deployed & published** |
-| 02 · CSP Pricing Portal | the *Portal Template* node's `html` (101KB) — plan chips, contract tag, drawer section, stat tile, Refresh and Resync button | **deployed & published** — pasted by hand, verified byte-exact |
+| 01 · Annuity Import | new *Refresh and re-read Autotask* Execute Workflow node between *Summarize Import* and *Import Complete* | **deployed & published** |
+| 02 · CSP Pricing Portal | the *Portal Template* node's `html` (101KB) — plan chips, contract tag, drawer section, stat tile, Refresh and re-read Autotask button | **deployed & published** — pasted by hand, verified byte-exact |
 
 04 goes first because 01 calls it; that order has been followed.
 

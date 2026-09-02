@@ -193,6 +193,9 @@ lines = lines.map((l) => {
     out.plan_cs_action = 'create';
     out.contract_price = '';
     out.contract_invoice_description = '';
+    // Worked out against a contract service that is gone, so it says nothing
+    // about what the sync would charge now.
+    out.plan_sell = '';
     out.plan_current_units = 0;
     // The dated adjustments were worked out against a unit history that is
     // gone. What replaces them is units-decision's job, not this file's, so

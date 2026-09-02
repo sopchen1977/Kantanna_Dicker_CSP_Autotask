@@ -121,7 +121,7 @@ the deletes.
      259 → 275*, or *nothing to do*. Open a row for the same thing with its
      dates. The contract header says *will be created* or *extend to …*, and
      the **Autotask plan** tile counts what is left to do across the page.
-     The import works this out; **Refresh and Resync** does it again after you
+     The import works this out; **Refresh and re-read Autotask** does it again after you
      change something. It only ever reads Autotask.
    - **Save prices**, then **Sync to Autotask**.
 3. Refresh the portal to see per-line results (contract id, actions taken, or

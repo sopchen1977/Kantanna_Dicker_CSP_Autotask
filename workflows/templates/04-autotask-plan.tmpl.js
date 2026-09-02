@@ -564,6 +564,7 @@ const savePlan = node({
           autotask_contract_id: expr('{{ $json.autotask_contract_id }}'),
           autotask_contract_service_id: expr('{{ $json.autotask_contract_service_id }}'),
           contract_price: expr('{{ $json.contract_price }}'),
+          plan_sell: expr('{{ $json.plan_sell }}'),
           contract_invoice_description: expr('{{ $json.contract_invoice_description }}')
         },
         schema: [
@@ -583,6 +584,7 @@ const savePlan = node({
           { id: 'autotask_contract_id', displayName: 'autotask_contract_id', required: false, defaultMatch: false, display: true, type: 'number', canBeUsedToMatch: false },
           { id: 'autotask_contract_service_id', displayName: 'autotask_contract_service_id', required: false, defaultMatch: false, display: true, type: 'number', canBeUsedToMatch: false },
           { id: 'contract_price', displayName: 'contract_price', required: false, defaultMatch: false, display: true, type: 'number', canBeUsedToMatch: false },
+          { id: 'plan_sell', displayName: 'plan_sell', required: false, defaultMatch: false, display: true, type: 'number', canBeUsedToMatch: false },
           { id: 'contract_invoice_description', displayName: 'contract_invoice_description', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false }
         ]
       },
