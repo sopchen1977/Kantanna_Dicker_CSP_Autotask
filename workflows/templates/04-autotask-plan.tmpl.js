@@ -96,7 +96,7 @@ const refusedPlan = node({
 //
 // It joins the chain at Autotask Config, past the gate, because the gate is
 // the only thing being skipped. Everything after it is the same run the
-// portal's Check Autotask button gets.
+// portal's Refresh and re-read Autotask button gets.
 const planFromImport = trigger({
   type: 'n8n-nodes-base.executeWorkflowTrigger',
   version: 1.2,
@@ -595,7 +595,7 @@ const savePlan = node({
 });
 
 const notePlan = sticky(
-  '## 04 · Autotask Plan (read only)\nTwo ways in, one run. **Plan From Import** is called as a sub-workflow at the end of the import; POST /webhook/csp-autotask-plan is the portal\'s **Check Autotask** button, behind the sign-in gate. The import joins past the gate because an internal call carries no session cookie - its own caller was signed in to reach the upload form.\n\nRuns the sync\'s four decisions without any of its writes, and stores per line what WOULD happen: create/rename the service, create/extend the contract, add or re-price the contract service, and the unit adjustments with their dates.\n\n**Nothing in this workflow creates, patches or posts anything.** Every HTTP node is a `/query`. If you are adding a node here and it is not a query, it belongs in 03.',
+  '## 04 · Autotask Plan (read only)\nTwo ways in, one run. **Plan From Import** is called as a sub-workflow at the end of the import; POST /webhook/csp-autotask-plan is the portal\'s **Refresh and re-read Autotask** button, behind the sign-in gate. The import joins past the gate because an internal call carries no session cookie - its own caller was signed in to reach the upload form.\n\nRuns the sync\'s four decisions without any of its writes, and stores per line what WOULD happen: create/rename the service, create/extend the contract, add or re-price the contract service, and the unit adjustments with their dates.\n\n**Nothing in this workflow creates, patches or posts anything.** Every HTTP node is a `/query`. If you are adding a node here and it is not a query, it belongs in 03.',
   [startPlan, planFromImport, autotaskConfig],
   { color: 4 }
 );

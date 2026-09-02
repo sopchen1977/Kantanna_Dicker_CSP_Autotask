@@ -155,7 +155,7 @@ lines = lines.map((l) => {
 // Bring the stored plan back into line with what Autotask actually holds.
 //
 // The plan_* columns are written by workflow 04, which runs at the end of an
-// import and behind Check Autotask - not on a page load, because it is four
+// import and behind Refresh and re-read Autotask - not on a page load: it is four
 // queries A LINE and takes minutes. So between runs the world moves: delete a
 // contract in Autotask and the page went on reporting the plan made against
 // it, which is worse than reporting nothing.
@@ -200,7 +200,7 @@ lines = lines.map((l) => {
     // The dated adjustments were worked out against a unit history that is
     // gone. What replaces them is units-decision's job, not this file's, so
     // they are cleared rather than guessed - the chip still says the service
-    // will be added, and Check Autotask fills the dates back in.
+    // will be added, and Refresh and re-read Autotask fills the dates back in.
     out.plan_units = '[]';
     out.plan_units_summary = '';
     // Nothing has been approved & posted against a contract that no longer

@@ -194,7 +194,7 @@ const summarizeImport = node({
 
 // With the lines in the table, ask Autotask what the sync would do to them,
 // so the portal has a plan to show the moment it is opened rather than after
-// a two-minute wait for the Check Autotask button.
+// a two-minute wait for the portal's Refresh and re-read Autotask button.
 //
 // waitForSubWorkflow is off, and that is the whole point: the plan is ~4
 // Autotask queries per line against a 3-thread limit, so it takes minutes.
@@ -214,7 +214,7 @@ const runPlan = node({
     position: [1160, 0],
     executeOnce: true,
     // A plan that fails is a portal without a preview, not a lost import:
-    // the lines are already saved, and Check Autotask will run it again.
+    // the lines are already saved, and Refresh and re-read Autotask runs it again.
     onError: 'continueRegularOutput',
     parameters: {
       mode: 'once',
@@ -325,7 +325,7 @@ const insertReportRow = node({
 });
 
 const noteImport = sticky(
-  '## 01 · Annuity Import\nUpload both monthly Dicker Data files. Lines are matched on Subscription ID + Stock Code and upserted, so custom sell prices and include/exclude choices saved in the portal survive re-imports.\n\n**Customer filter:** PILOT_CUSTOMERS at the top of the "Parse Subscription Lines" node is currently empty, so **every customer in the file is imported**. Add names to that list to restrict the import again; names are matched as a substring.\n\n**Check Autotask** starts 04 · Autotask Plan on the way out and does not wait for it - the plan takes minutes, the completion page does not. Open the portal and it fills in.',
+  '## 01 · Annuity Import\nUpload both monthly Dicker Data files. Lines are matched on Subscription ID + Stock Code and upserted, so custom sell prices and include/exclude choices saved in the portal survive re-imports.\n\n**Customer filter:** PILOT_CUSTOMERS at the top of the "Parse Subscription Lines" node is currently empty, so **every customer in the file is imported**. Add names to that list to restrict the import again; names are matched as a substring.\n\n**Refresh and re-read Autotask** starts 04 · Autotask Plan on the way out and does not wait for it - the plan takes minutes, the completion page does not. Open the portal and it fills in.',
   [uploadForm, normalizeUploads],
   { color: 4 }
 );
