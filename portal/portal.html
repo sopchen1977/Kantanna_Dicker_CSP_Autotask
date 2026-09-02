@@ -1100,15 +1100,28 @@ function contractHtml(customer, cname, block) {
   // named; a contract that simply repeats last cycle says so in one word,
   // because that is the answer that needs no follow-up.
   var chgParts = [];
-  // Nothing on this contract has ever billed, so the contract itself is new -
-  // the sync created it on this run rather than adding to something standing.
-  if (chg.new) chgParts.push(chg.new === classified ? 'new contract' : chg.new + ' new');
+  // Nothing on this contract has ever billed. That is NOT the same claim as
+  // "the contract is new", which is what this used to say: a contract an
+  // earlier sync created and nobody has approved & posted against is standing
+  // in Autotask with nothing billed on it, and calling that a new contract
+  // beside a plan chip that (correctly) does not say "will be created" is the
+  // page contradicting itself an inch apart. Whether the contract exists is
+  // the plan's question, answered from Autotask; this column only ever
+  // reports what the report does to the billing.
+  if (chg.new) chgParts.push(chg.new === classified ? 'nothing billed yet' : chg.new + ' new');
   if (chg.prorata) chgParts.push(chg.prorata + ' pro-rata');
   if (chg.qty) chgParts.push(chg.qty + ' qty change' + (chg.qty > 1 ? 's' : ''));
   var chgTag = '';
   if (chgParts.length) {
+    // "Nothing billed yet" is the one that invites the wrong conclusion, so it
+    // is the one that explains itself.
+    var chgTitle = (classified && chg.new === classified)
+      ? 'No service on this contract has ever been approved & posted in Autotask, so every ' +
+        'charge here is a first. Whether the contract itself exists is a separate question - ' +
+        'the plan says "will be created" when it does not.'
+      : 'What this month\'s report changes on this contract';
     chgTag = '<span class="chg ' + (chg.new ? 'new' : (chg.prorata ? 'prorata' : 'qty')) +
-      '" title="What this month&#39;s report changes on this contract">' +
+      '" title="' + attr(chgTitle) + '">' +
       escapeHtml(chgParts.join(' · ')) + '</span>';
   } else if (chg.same) {
     chgTag = '<span class="chg same" title="Every service on this contract bills the same as last cycle">' +
