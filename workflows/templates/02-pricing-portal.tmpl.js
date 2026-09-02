@@ -150,8 +150,24 @@ const portalTemplate = node({
     parameters: {
       mode: 'manual',
       includeOtherFields: false,
+      // Six fields, not one. n8n takes a node parameter WHOLE - there is no
+      // way to patch part of one - so a single 100KB field can only ever be
+      // redeployed by re-sending the entire page in one go, which is more
+      // than a tool call can carry and far more than anyone can check by
+      // eye. That is how a paste that silently replaced every newline with a
+      // space reached production. In parts the page deploys, and each part
+      // can be compared against the repo on its own. Build Portal Page joins
+      // them back in order; the split is at line boundaries and means
+      // nothing.
       assignments: {
-        assignments: [{ id: 'portal-html', name: 'html', type: 'string', value: __PORTAL_HTML__ }]
+        assignments: [
+          { id: 'portal-html-1', name: 'html_1', type: 'string', value: __PORTAL_HTML_1__ },
+          { id: 'portal-html-2', name: 'html_2', type: 'string', value: __PORTAL_HTML_2__ },
+          { id: 'portal-html-3', name: 'html_3', type: 'string', value: __PORTAL_HTML_3__ },
+          { id: 'portal-html-4', name: 'html_4', type: 'string', value: __PORTAL_HTML_4__ },
+          { id: 'portal-html-5', name: 'html_5', type: 'string', value: __PORTAL_HTML_5__ },
+          { id: 'portal-html-6', name: 'html_6', type: 'string', value: __PORTAL_HTML_6__ }
+        ]
       }
     }
   },

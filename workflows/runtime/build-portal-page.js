@@ -132,6 +132,15 @@ lines = lines.map((l) => {
 
 const payload = { lines: lines, mappings: mappings };
 const encoded = Buffer.from(JSON.stringify(payload)).toString('base64');
-const html = $('Portal Template').first().json.html
-  .replace('__DATA_PLACEHOLDER__', encoded);
+// The page arrives from Portal Template in numbered parts - see the note on
+// that node for why - and is joined back in order. The count is not fixed
+// here: it reads html_1, html_2, ... until one is missing, so changing how
+// many parts the build emits needs no change on this side. A node still
+// carrying the whole page in one `html` field works unchanged.
+const tpl = $('Portal Template').first().json;
+let page = '';
+for (let i = 1; tpl['html_' + i] !== undefined; i++) page += tpl['html_' + i];
+if (!page) page = tpl.html || '';
+
+const html = page.replace('__DATA_PLACEHOLDER__', encoded);
 return [{ json: { html: html } }];
