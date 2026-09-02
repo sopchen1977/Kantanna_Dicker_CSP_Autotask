@@ -579,16 +579,19 @@ assert.strictEqual(rDescFail.contract_invoice_description, 'Thing - sub SUB-A',
 // -- The portal page reads Autotask live ------------------------------------
 // A description or price edited by hand in Autotask must show on a plain
 // refresh, without waiting for a sync.
-function runPortal(nodes) {
+// The page reaches this node as its INPUT, in numbered parts: the three
+// Portal Template nodes are chained and each passes the ones before it down,
+// so the last hands over the whole page. Fed here the same way, split across
+// parts, so the join is exercised rather than assumed.
+function runPortal(nodes, template) {
   const code = fs.readFileSync(path.join(RUNTIME, 'build-portal-page.js'), 'utf8');
   const fn = new Function('$input', '$', 'Buffer', code);
-  const withTemplate = Object.assign({
-    'Portal Template': [{ json: { html: '<html>__DATA_PLACEHOLDER__</html>' } }],
-  }, nodes);
-  return fn({ all: () => [], first: () => ({ json: {} }) }, makeDollar(withTemplate), Buffer);
+  const input = template || { html_1: '<html>__DATA_', html_2: 'PLACEHOLDER', html_3: '__</html>' };
+  return fn({ all: () => [{ json: input }], first: () => ({ json: input }) },
+    makeDollar(nodes), Buffer);
 }
-function portalLines(nodes) {
-  const html = runPortal(nodes)[0].json.html;
+function portalLines(nodes, template) {
+  const html = runPortal(nodes, template)[0].json.html;
   const b64 = html.replace('<html>', '').replace('</html>', '');
   return JSON.parse(Buffer.from(b64, 'base64').toString('utf8')).lines;
 }
@@ -609,6 +612,17 @@ const portalNodes = {
   'Fetch Invoices': [{ json: { items: [] } }],
 };
 const shown = portalLines(portalNodes)[0];
+// The parts are joined in order, and a placeholder straddling two of them is
+// still found - the join happens before the substitution, which is the whole
+// reason build.py may split at any line boundary it likes.
+assert.ok(runPortal(portalNodes)[0].json.html.startsWith('<html>'),
+  'the parts are joined in order');
+assert.ok(!/__DATA_PLACEHOLDER__/.test(runPortal(portalNodes)[0].json.html),
+  'a placeholder split across parts is still substituted once joined');
+// A node still holding the whole page in one `html` field keeps working.
+assert.ok(!/__DATA_PLACEHOLDER__/.test(
+  runPortal(portalNodes, { html: '<html>__DATA_PLACEHOLDER__</html>' })[0].json.html),
+  'the single-field fallback still renders');
 assert.strictEqual(shown.contract_invoice_description, 'Edited by hand in Autotask',
   'a hand-edited Autotask description must show on refresh');
 assert.ok(Math.abs(shown.contract_price - 30) < 0.005,

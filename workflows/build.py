@@ -73,7 +73,7 @@ def runtime_literal(filename: str) -> str:
     return json.dumps(code)
 
 
-PORTAL_PARTS = 6
+PORTAL_PARTS = 3
 
 
 def portal_html_parts() -> list:
