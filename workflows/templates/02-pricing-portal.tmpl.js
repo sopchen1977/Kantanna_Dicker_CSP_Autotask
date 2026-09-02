@@ -60,6 +60,63 @@ const fetchMappings = node({
 // shows up on the next page load. One query covers every contract on screen
 // (Autotask's `in` operator), and a failure here is non-fatal: the page still
 // renders from the stored values.
+// Do the contracts and services we have ids for still EXIST? The three
+// queries below all filter on the stored autotask_contract_id, so a contract
+// deleted in Autotask does not come back as "gone" - it comes back as no
+// rows, which is indistinguishable from a contract with nothing on it. That
+// is how the portal went on showing a plan made against contracts that were
+// no longer there.
+//
+// These two ask the question directly, in bulk: one query for every contract
+// id on the page, one for every service id. Per-line checking is what makes
+// workflow 04 take minutes; this is two more round trips however many lines
+// there are, so it can run on every page load.
+const fetchLiveContracts = node({
+  type: 'n8n-nodes-base.httpRequest',
+  version: 4.5,
+  config: {
+    name: 'Fetch Live Contracts',
+    executeOnce: true,
+    position: [180, -160],
+    onError: 'continueRegularOutput',
+    parameters: {
+      method: 'POST',
+      url: 'https://webservices31.autotask.net/atservicesrest/v1.0/Contracts/query',
+      authentication: 'genericCredentialType',
+      genericAuthType: 'httpCustomAuth',
+      sendBody: true,
+      specifyBody: 'json',
+      jsonBody: expr('{{ JSON.stringify({ MaxRecords: 500, Filter: (() => { const ids = [...new Set($("Fetch Lines").all().map((i) => i.json.autotask_contract_id).filter((v) => v))]; return ids.length ? [{ op: "in", field: "id", value: ids }] : [{ op: "eq", field: "id", value: 0 }]; })() }) }}'),
+      options: {}
+    },
+    credentials: { httpCustomAuth: newCredential('KantannaAutotask') }
+  },
+  output: [{ items: [], pageDetails: { count: 0 } }]
+});
+
+const fetchLiveServiceDefs = node({
+  type: 'n8n-nodes-base.httpRequest',
+  version: 4.5,
+  config: {
+    name: 'Fetch Live Service Defs',
+    executeOnce: true,
+    position: [260, -160],
+    onError: 'continueRegularOutput',
+    parameters: {
+      method: 'POST',
+      url: 'https://webservices31.autotask.net/atservicesrest/v1.0/Services/query',
+      authentication: 'genericCredentialType',
+      genericAuthType: 'httpCustomAuth',
+      sendBody: true,
+      specifyBody: 'json',
+      jsonBody: expr('{{ JSON.stringify({ MaxRecords: 500, Filter: (() => { const ids = [...new Set($("Fetch Lines").all().map((i) => i.json.autotask_service_id).filter((v) => v))]; return ids.length ? [{ op: "in", field: "id", value: ids }] : [{ op: "eq", field: "id", value: 0 }]; })() }) }}'),
+      options: {}
+    },
+    credentials: { httpCustomAuth: newCredential('KantannaAutotask') }
+  },
+  output: [{ items: [], pageDetails: { count: 0 } }]
+});
+
 const fetchLiveServices = node({
   type: 'n8n-nodes-base.httpRequest',
   version: 4.5,
@@ -878,6 +935,8 @@ export default workflow('kantanna-csp-02-portal', '02 · CSP Pricing Portal')
   .to(authedPortal.onTrue(fetchLines).onFalse(signinTemplate))
   .add(fetchLines)
   .to(fetchMappings)
+  .to(fetchLiveContracts)
+  .to(fetchLiveServiceDefs)
   .to(fetchLiveServices)
   .to(fetchBillingItems)
   .to(fetchInvoices)

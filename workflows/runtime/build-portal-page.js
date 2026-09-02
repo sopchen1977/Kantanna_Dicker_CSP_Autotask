@@ -9,13 +9,32 @@ try {
   mappings = $('Fetch Mappings').all().map((i) => i.json).filter((j) => j.tenant_name);
 } catch (e) { /* table empty */ }
 
+// Did a query actually ANSWER, or did it fail? Everything below turns on
+// that difference. An empty result means "nothing there", which is a fact
+// worth acting on; a failed request means "we do not know", and treating the
+// second as the first is how a page tells you a live contract is about to be
+// created. Same rule the sync's decisions follow.
+const MAX_RECORDS = 500;
+function queryItems(name) {
+  try {
+    const j = $(name).first().json;
+    if (!j || j.error || !Array.isArray(j.items)) return null;
+    return j.items;
+  } catch (e) { return null; }
+}
+// Stronger than "did it answer": did it answer in FULL. Every query asks for
+// at most MAX_RECORDS, so a result sitting on that cap may have been cut off,
+// and a row missing from a truncated list has not been shown to be absent.
+// Nothing is invalidated on a list that might not be the whole list.
+function complete(items) {
+  return items !== null && items.length < MAX_RECORDS ? items : null;
+}
+
 // Overlay what Autotask holds right now. Anything edited directly in
 // Autotask therefore shows on a plain page refresh, without waiting for a
 // sync. If the query failed the overlay is simply empty.
-let live = [];
-try {
-  live = ($('Fetch Live Services').first().json.items) || [];
-} catch (e) { /* Autotask unreachable - fall back to the stored values */ }
+const liveServices = queryItems('Fetch Live Services');
+const live = liveServices || [];
 
 // Same conversion as the sync's CS Decision: the query returns only the
 // internal-currency price, scaled by this instance's currency factor, which
@@ -37,14 +56,17 @@ for (const c of live) byCsId[String(c.id)] = c;
 // What Autotask has already approved & posted, per contract service. A
 // BillingItem exists only once a charge has been through Approve & Post.
 // invoiceID is 0 until the posting reaches an invoice.
-let billing = [];
-try {
-  billing = ($('Fetch Billing Items').first().json.items) || [];
-} catch (e) { /* Autotask unreachable - the stored value stands */ }
-let invoices = [];
-try {
-  invoices = ($('Fetch Invoices').first().json.items) || [];
-} catch (e) { /* no invoices to resolve */ }
+const billing = queryItems('Fetch Billing Items') || [];
+const invoices = queryItems('Fetch Invoices') || [];
+
+// Which of the contracts and services we hold ids for are still THERE. null
+// means the question could not be asked, and nothing is invalidated on the
+// strength of a failed request.
+const liveContracts = complete(queryItems('Fetch Live Contracts'));
+const liveServiceDefs = complete(queryItems('Fetch Live Service Defs'));
+const knownServices = complete(liveServices);
+const contractIds = liveContracts && new Set(liveContracts.map((c) => String(c.id)));
+const serviceIds = liveServiceDefs && new Set(liveServiceDefs.map((c) => String(c.id)));
 
 const invoiceById = {};
 for (const v of invoices) invoiceById[String(v.id)] = v;
@@ -126,6 +148,75 @@ lines = lines.map((l) => {
     out.billing_last_invoice_id = post.invoice_id || '';
     out.billing_last_invoice_number = inv && inv.invoiceNumber != null ? String(inv.invoiceNumber) : '';
     out.billing_last_invoice_date = inv ? String(inv.invoiceDateTime || '').slice(0, 10) : '';
+  }
+  return out;
+});
+
+// Bring the stored plan back into line with what Autotask actually holds.
+//
+// The plan_* columns are written by workflow 04, which runs at the end of an
+// import and behind Check Autotask - not on a page load, because it is four
+// queries A LINE and takes minutes. So between runs the world moves: delete a
+// contract in Autotask and the page went on reporting the plan made against
+// it, which is worse than reporting nothing.
+//
+// This does not re-plan. It only draws the conclusions that follow with
+// certainty from a thing no longer existing - exactly the ones 04 draws from
+// an empty query - and clears the detail it cannot honestly restore.
+lines = lines.map((l) => {
+  const out = Object.assign({}, l);
+  const hadContract = out.autotask_contract_id;
+  const hadService = out.autotask_service_id;
+
+  // The service is a separate record from the contract: deleting a contract
+  // does not delete the service, and vice versa. They are checked apart.
+  if (serviceIds && hadService && !serviceIds.has(String(hadService))) {
+    out.autotask_service_id = '';
+    out.plan_service_action = 'create';
+  }
+
+  // No contract means no contract service either - it lived on the contract -
+  // and no units, because a service that is about to be added starts at zero.
+  const contractGone = contractIds && hadContract && !contractIds.has(String(hadContract));
+  // The contract may still stand while the service was taken off it. Only
+  // conclude that from a ContractServices query that actually answered.
+  const csGone = !contractGone && knownServices && out.autotask_contract_service_id
+    && !knownServices.some((c) => String(c.id) === String(out.autotask_contract_service_id));
+
+  if (contractGone || csGone) {
+    if (contractGone) {
+      out.autotask_contract_id = '';
+      out.plan_contract_action = 'create';
+      out.plan_contract_end = '';
+    }
+    out.autotask_contract_service_id = '';
+    out.plan_cs_action = 'create';
+    out.contract_price = '';
+    out.contract_invoice_description = '';
+    out.plan_current_units = 0;
+    // The dated adjustments were worked out against a unit history that is
+    // gone. What replaces them is units-decision's job, not this file's, so
+    // they are cleared rather than guessed - the chip still says the service
+    // will be added, and Check Autotask fills the dates back in.
+    out.plan_units = '[]';
+    out.plan_units_summary = '';
+    // Nothing has been approved & posted against a contract that no longer
+    // exists, so neither may the page claim it.
+    out.billing_last = '';
+    out.billing_last_date = '';
+    out.billing_last_amount = '';
+    out.billing_last_qty = '';
+    out.billing_last_rows = '';
+    out.billing_last_posted_on = '';
+    out.billing_last_invoice_id = '';
+    out.billing_last_invoice_number = '';
+    out.billing_last_invoice_date = '';
+    out.sync_status = 'pending';
+    out.sync_message = contractGone
+      ? 'The contract this line was synced to no longer exists in Autotask.'
+      : 'This service is no longer on its Autotask contract.';
+    out.plan_summary = (out.plan_service_action === 'create' ? 'create service; ' : '')
+      + (contractGone ? 'create contract; ' : '') + 'add to contract';
   }
   return out;
 });

@@ -623,8 +623,13 @@ assert.strictEqual(portalLines(noLive)[0].contract_price, 34.55);
 const unmatched = Object.assign({}, portalNodes, { 'Fetch Live Services': [{ json: { items: [
   { id: 9999, invoiceDescription: 'someone else' },
 ] } }] });
-assert.strictEqual(portalLines(unmatched)[0].contract_invoice_description, 'Thing - sub SUB-A',
+assert.notStrictEqual(portalLines(unmatched)[0].contract_invoice_description, 'someone else',
   'another contract service must not bleed into this line');
+// It does not bleed - and the query answered in full without listing 8001, so
+// that contract service is genuinely no longer on the contract and the page
+// says so rather than going on showing what it used to charge.
+assert.strictEqual(portalLines(unmatched)[0].plan_cs_action, 'create');
+assert.strictEqual(portalLines(unmatched)[0].autotask_contract_service_id, '');
 
 // A description edited in Autotask beats a stale portal override. The
 // override the portal last pushed is recorded in contract_invoice_description,
@@ -741,5 +746,87 @@ const otherOnly = portalLines(withBilling([
 ]))[0];
 assert.strictEqual(otherOnly.billing_last_date, undefined,
   'another service\'s postings must not attach to this line');
+
+
+// -- A refresh re-checks that the contracts and services still EXIST --------
+// The three live queries all filter on the stored autotask_contract_id, so a
+// deleted contract comes back as no rows - identical to a contract with
+// nothing on it. Asking directly is what lets a page load notice.
+const planned = Object.assign({}, storedLine, {
+  autotask_service_id: 9001,
+  plan_service_action: 'ok', plan_contract_action: 'ok', plan_cs_action: 'ok',
+  plan_units: '[{"change":6,"date":"2026-07-13"}]', plan_units_summary: '+6 @2026-07-13',
+  plan_current_units: 259, plan_target_units: 275, plan_checked_at: '2026-08-31T02:14:00.000Z',
+  billing_last: '2026-07-31 · $9500.00 · posted', billing_last_date: '2026-07-31',
+  sync_status: 'synced',
+});
+const liveNodes = (over) => Object.assign({
+  'Fetch Lines': [{ json: planned }],
+  'Fetch Mappings': [{ json: { tenant_name: 'Galilee Solicitors', autotask_company_id: 405 } }],
+  'Fetch Live Contracts': [{ json: { items: [{ id: 7001 }] } }],
+  'Fetch Live Service Defs': [{ json: { items: [{ id: 9001 }] } }],
+  'Fetch Live Services': [{ json: { items: [{ id: 8001, serviceID: 9001, adjustedPrice: 34.55 }] } }],
+  'Fetch Billing Items': [{ json: { items: [] } }],
+  'Fetch Invoices': [{ json: { items: [] } }],
+}, over);
+
+// Everything still there: the stored plan is left exactly as it was.
+const still = portalLines(liveNodes({}))[0];
+assert.strictEqual(still.plan_contract_action, 'ok', 'a contract that exists is left alone');
+assert.strictEqual(still.autotask_contract_id, 7001);
+assert.strictEqual(still.plan_units_summary, '+6 @2026-07-13', 'the dated steps survive');
+
+// The contract was deleted in Autotask.
+const gone = portalLines(liveNodes({ 'Fetch Live Contracts': [{ json: { items: [] } }],
+  'Fetch Live Services': [{ json: { items: [] } }] }))[0];
+assert.strictEqual(gone.plan_contract_action, 'create', 'a deleted contract reads as "will be created"');
+assert.strictEqual(gone.plan_cs_action, 'create', 'and its contract service will be added back');
+assert.strictEqual(gone.autotask_contract_id, '', 'the dead id is dropped');
+assert.strictEqual(gone.autotask_contract_service_id, '');
+assert.strictEqual(gone.plan_service_action, 'ok', 'the SERVICE is a separate record and still exists');
+assert.strictEqual(gone.plan_current_units, 0, 'a service about to be added holds no units');
+assert.strictEqual(gone.plan_units, '[]', 'steps worked out against a dead history are cleared, not guessed');
+assert.strictEqual(gone.billing_last, '', 'nothing is posted against a contract that does not exist');
+assert.strictEqual(gone.contract_price, '');
+
+// The contract stands but the service was taken off it.
+const csGone = portalLines(liveNodes({ 'Fetch Live Services': [{ json: { items: [] } }] }))[0];
+assert.strictEqual(csGone.plan_contract_action, 'ok', 'the contract is still there');
+assert.strictEqual(csGone.autotask_contract_id, 7001);
+assert.strictEqual(csGone.plan_cs_action, 'create', 'but the service goes back on it');
+assert.strictEqual(csGone.autotask_contract_service_id, '');
+
+// The Autotask Service itself was deleted; the contract is untouched.
+const svcGone = portalLines(liveNodes({ 'Fetch Live Service Defs': [{ json: { items: [] } }] }))[0];
+assert.strictEqual(svcGone.plan_service_action, 'create', 'a deleted service is recreated');
+assert.strictEqual(svcGone.autotask_service_id, '');
+assert.strictEqual(svcGone.plan_contract_action, 'ok', 'without disturbing the contract');
+
+// -- A query that FAILED is never read as "deleted" -------------------------
+// This is the whole safety property. Autotask returning 500 must leave the
+// page saying what it knew, not announcing that every contract is about to be
+// created.
+const failed = portalLines(liveNodes({
+  'Fetch Live Contracts': [{ json: { error: { message: 'Autotask 500' } } }],
+  'Fetch Live Service Defs': [{ json: { error: { message: 'Autotask 500' } } }],
+  'Fetch Live Services': [{ json: { error: { message: 'Autotask 500' } } }],
+}))[0];
+assert.strictEqual(failed.plan_contract_action, 'ok', 'a failed query must not invalidate the contract');
+assert.strictEqual(failed.plan_cs_action, 'ok', 'nor the contract service');
+assert.strictEqual(failed.plan_service_action, 'ok', 'nor the service');
+assert.strictEqual(failed.autotask_contract_id, 7001, 'and must not drop the ids');
+assert.strictEqual(failed.plan_units_summary, '+6 @2026-07-13');
+assert.strictEqual(failed.billing_last, '2026-07-31 · $9500.00 · posted');
+
+// A result sitting on the 500-row cap may have been cut off, so a row missing
+// from it proves nothing. Invalidating on a truncated list would report live
+// contracts as deleted the day this grows past 500 services.
+const truncated = portalLines(liveNodes({
+  'Fetch Live Services': [{ json: { items: Array.from({ length: 500 },
+    (_, i) => ({ id: 100000 + i, serviceID: 1 })) } }],
+}))[0];
+assert.strictEqual(truncated.plan_cs_action, 'ok',
+  'a truncated query must not report a live contract service as deleted');
+assert.strictEqual(truncated.autotask_contract_service_id, 8001);
 
 console.log('\nALL SYNC TESTS PASSED');
