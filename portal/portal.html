@@ -341,10 +341,9 @@
     <span class="msg" id="msg"></span>
     <a class="btn ghost" href="https://ww31.autotask.net/" target="_blank" rel="noopener"
        title="Approve &amp; Post lives under Contracts &gt; Approve &amp; Post">Autotask &#8599;</a>
-    <button class="btn ghost" onclick="location.reload()">Refresh</button>
+    <button class="btn ghost" onclick="resync(this)"
+      title="Re-read everything from Autotask and work out what a sync would do — without creating, changing or posting anything">Refresh and Resync</button>
     <button class="btn primary" onclick="saveAll(this)">Save prices</button>
-    <button class="btn ghost" onclick="checkAutotask(this)"
-      title="Read Autotask and work out what a sync would do, without doing any of it">Check Autotask</button>
     <button class="btn go" onclick="syncNow(this)">Sync to Autotask</button>
   </div>
 </header>
@@ -861,6 +860,8 @@ function render() {
     ' · <a href="#" id="signout" title="End this session on this browser">Sign out</a>';
   var so = document.getElementById('signout');
   if (so) so.onclick = function (e) { e.preventDefault(); signOut(); };
+  var note = resyncNote();
+  if (note) setMsg(note);
 
   if (!LINES.length) {
     app.innerHTML = '<div class="empty">No subscription lines yet.<br>Run the ' +
@@ -888,7 +889,7 @@ function planTile(visible) {
   var incl = visible.filter(effInclude);
   var checked = incl.filter(hasPlan);
   if (!checked.length) {
-    return { k: 'Autotask plan', v: '—', s: 'press Check Autotask' };
+    return { k: 'Autotask plan', v: '—', s: 'press Refresh and Resync' };
   }
   var todo = 0, failed = 0, unmapped = 0;
   checked.forEach(function (l) {
@@ -1478,7 +1479,7 @@ function planHtml(l) {
   if (!hasPlan(l)) {
     return planWasRun()
       ? '<div class="planline"><span class="plan flat" title="' +
-        attr('Autotask has not been checked for this line. Press Check Autotask to bring it up to date.') +
+        attr('Autotask has not been checked for this line. Press Refresh and Resync to bring it up to date.') +
         '">not checked</span></div>'
       : '';
   }
@@ -1486,7 +1487,7 @@ function planHtml(l) {
   if (st === 'needs_mapping') {
     return '<div class="planline"><span class="plan err" title="' +
       attr('This customer is not mapped to an Autotask company, so there is nothing to plan against. ' +
-        'Map it above, then press Check Autotask.') + '">needs mapping</span></div>';
+        'Map it above, then press Refresh and Resync.') + '">needs mapping</span></div>';
   }
   if (st === 'error') {
     return '<div class="planline"><span class="plan err" title="' +
@@ -1555,13 +1556,13 @@ function planDetailHtml(l) {
     return '<div class="dsec">What the sync will do</div>' +
       '<div class="dline"><span class="muted">Not known — Autotask could not be read for this ' +
       'service.</span></div><div class="dfoot">' + escapeHtml(String(l.plan_error || '')) +
-      '<br>Press Check Autotask to try again.</div>';
+      '<br>Press Refresh and Resync to try again.</div>';
   }
   if (st === 'needs_mapping') {
     return '<div class="dsec">What the sync will do</div>' +
       '<div class="dline"><span class="muted">Nothing yet — this customer is not mapped to an ' +
       'Autotask company, so there is no company to plan against.</span></div>' +
-      '<div class="dfoot">Map it in the customer header above, then press Check Autotask.</div>';
+      '<div class="dfoot">Map it in the customer header above, then press Refresh and Resync.</div>';
   }
   var rows = [];
   function step(when, tag, what) {
@@ -1589,7 +1590,7 @@ function planDetailHtml(l) {
     'this line — nothing would be posted.</span></div>');
 
   var foot = 'Read from Autotask ' + escapeHtml(String(l.plan_checked_at).slice(0, 16).replace('T', ' ')) +
-    ' UTC, without changing anything. Press Check Autotask to read it again.';
+    ' UTC, without changing anything. Press Refresh and Resync to read it again.';
   if (String(l.plan_status || '') === 'error') {
     foot = 'The check failed, so this is incomplete: ' + escapeHtml(String(l.plan_error || ''));
   }
@@ -2017,30 +2018,52 @@ function saveAll(btn) {
     .catch(function (e) { setMsg('Save failed: ' + e.message); btn.disabled = false; });
 }
 
-// The dry run: workflow 04 reads Autotask and records what a sync WOULD do,
-// writing nothing to Autotask at all. It saves the on-screen prices first for
-// the same reason the sync does - the plan is made against what is stored, so
-// a price still sitting in an input box would be planned around rather than
-// planned for.
+// Re-read everything, change nothing.
 //
-// It takes as long as a sync does (the same four queries a line, against the
-// same three-thread limit) and answers into the table rather than to this
-// page, so there is nothing to await - refresh when it has had its couple of
-// minutes. The import runs it too, so most of the time the plan is already
-// there when this page opens.
-function checkAutotask(btn) {
+// Two things are stale by different amounts and this does both. The live
+// figures - what the contract charges, what has been approved & posted,
+// whether the contract still EXISTS - are re-read by the page itself on every
+// load, so a reload is all they need. The PLAN is not: it is four Autotask
+// queries a line against a three-thread limit, minutes for a full book, which
+// is why it cannot run on a page load and why workflow 04 exists at all.
+//
+// So this starts 04 and reloads immediately rather than sitting on it. The
+// reload brings the live figures up to date at once; the plan lands in the
+// table a couple of minutes later and the reloaded page says so - see
+// resyncNote(). Prices are saved first for the reason the sync saves them:
+// the plan is made against what is stored, so a price still sitting in an
+// input box would be planned around rather than planned for.
+//
+// Nothing here writes to Autotask. 04 is workflow 03 with every write taken
+// out; pushing changes is Sync to Autotask, which asks first.
+function resync(btn) {
   btn.disabled = true;
   setMsg('Saving prices…');
   doSave()
-    .then(function (res) {
-      setMsg(savedMsg(res) + ' Checking Autotask…');
-      return fetch(BASE + '/csp-autotask-plan', { method: 'POST' });
-    })
+    .then(function () { return fetch(BASE + '/csp-autotask-plan', { method: 'POST' }); })
     .then(function () {
-      setMsg('Checking Autotask — ~2–3 minutes, nothing is being changed. Refresh after that.');
-      btn.disabled = false;
+      // Carried through the reload in the URL rather than in storage: this
+      // page is served under Content-Security-Policy: sandbox, so it sits in
+      // an opaque origin where localStorage can throw outright.
+      location.replace(location.pathname + '?resync=' + encodeURIComponent(new Date().toISOString()));
     })
-    .catch(function (e) { setMsg('Check could not start: ' + e.message); btn.disabled = false; });
+    .catch(function (e) {
+      setMsg('Could not start the re-check: ' + e.message);
+      btn.disabled = false;
+    });
+}
+
+// What to say after that reload. The re-check has finished exactly when a
+// plan_checked_at newer than the moment it started appears, so the page can
+// report that it landed rather than guessing at a duration.
+function resyncNote() {
+  var m = /[?&]resync=([^&]+)/.exec(location.search || '');
+  if (!m) return '';
+  var started = decodeURIComponent(m[1]);
+  var done = planCheckedAt();
+  if (done && done > started) return 'Autotask re-checked — the plan below is current.';
+  if (new Date() - new Date(started) > 900000) return '';
+  return 'Re-checking Autotask — the figures above are live now; the plan takes 2–3 minutes. Refresh again for it.';
 }
 
 // Sync ALWAYS saves the on-screen prices first, so what you see is what

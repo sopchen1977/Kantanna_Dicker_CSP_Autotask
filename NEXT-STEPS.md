@@ -36,7 +36,7 @@ no-op run, the pro-rata case, a failed lookup and a merged pair.
 
 **Reachable from the import.** 04 has a second trigger, *Plan From Import*
 (Execute Sub-workflow), joining the chain at `Autotask Config` — past the
-access gate and nowhere else. Workflow 01 calls it from a *Check Autotask*
+access gate and nowhere else. Workflow 01 calls it from a *Refresh and Resync*
 node after *Summarize Import*, with `waitForSubWorkflow` **off** so the
 completion page does not sit on a two-minute run, and `onError:
 continueRegularOutput` so a failed plan is a portal without a preview rather
@@ -53,7 +53,7 @@ merged product carry the plan.
 created*, *extend to 21 Sep 2026*); the same plan with its dates in the row
 drawer, above the billing history; an **Autotask plan** stat tile counting the
 changes and naming what undermines that count (reads that failed, unmapped
-customers, lines not checked). A **Check Autotask** button re-runs 04.
+customers, lines not checked). A **Refresh and Resync** button re-runs 04.
 
 Everything is read from what 04 computed rather than derived again — except
 price, deliberately, so a price typed on screen updates the preview without
@@ -103,8 +103,8 @@ rows — all `plan_status: ok`, nothing unmapped, no failed reads.
 | Workflow | What changed | State |
 |---|---|---|
 | 04 · Autotask Plan | new *Plan From Import* trigger → *Autotask Config*; `Plan Result` code | **deployed & published** |
-| 01 · Annuity Import | new *Check Autotask* Execute Workflow node between *Summarize Import* and *Import Complete* | **deployed & published** |
-| 02 · CSP Pricing Portal | the *Portal Template* node's `html` (101KB) — plan chips, contract tag, drawer section, stat tile, Check Autotask button | **deployed & published** — pasted by hand, verified byte-exact |
+| 01 · Annuity Import | new *Refresh and Resync* Execute Workflow node between *Summarize Import* and *Import Complete* | **deployed & published** |
+| 02 · CSP Pricing Portal | the *Portal Template* node's `html` (101KB) — plan chips, contract tag, drawer section, stat tile, Refresh and Resync button | **deployed & published** — pasted by hand, verified byte-exact |
 
 04 goes first because 01 calls it; that order has been followed.
 
