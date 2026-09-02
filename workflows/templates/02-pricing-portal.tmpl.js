@@ -150,62 +150,12 @@ const portalTemplate = node({
     parameters: {
       mode: 'manual',
       includeOtherFields: false,
-      // A third of the page, and the reason it is a third: n8n takes a node
-      // parameter WHOLE, and a JSON Pointer cannot address one element of
-      // the assignments array ("cannot descend into non-object"). So a
-      // 100KB field can only ever be redeployed by re-sending the entire
-      // page in a single call - more than a tool call can carry, and far
-      // more than anyone can check by eye. That is how a paste which
-      // silently replaced every newline with a space reached production.
-      //
-      // One part per NODE is what makes each part deployable on its own.
-      // The next two carry the rest and pass this through; Build Portal
-      // Page joins them off its own input. The split is at line boundaries
-      // and means nothing.
       assignments: {
-        assignments: [{ id: 'portal-html-1', name: 'html_1', type: 'string', value: __PORTAL_HTML_1__ }]
+        assignments: [{ id: 'portal-html', name: 'html', type: 'string', value: __PORTAL_HTML__ }]
       }
     }
   },
   output: [{ html: '<!DOCTYPE html>…' }]
-});
-
-const portalTemplate2 = node({
-  type: 'n8n-nodes-base.set',
-  version: 3.4,
-  config: {
-    name: 'Portal Template 2',
-    position: [490, -240],
-    executeOnce: true,
-    parameters: {
-      mode: 'manual',
-      // Keeps html_1 from the node before and adds its own, so the last node
-      // in the chain carries the whole page.
-      includeOtherFields: true,
-      assignments: {
-        assignments: [{ id: 'portal-html-2', name: 'html_2', type: 'string', value: __PORTAL_HTML_2__ }]
-      }
-    }
-  },
-  output: [{ html_1: '<!DOCTYPE html>…', html_2: '…' }]
-});
-
-const portalTemplate3 = node({
-  type: 'n8n-nodes-base.set',
-  version: 3.4,
-  config: {
-    name: 'Portal Template 3',
-    position: [520, -240],
-    executeOnce: true,
-    parameters: {
-      mode: 'manual',
-      includeOtherFields: true,
-      assignments: {
-        assignments: [{ id: 'portal-html-3', name: 'html_3', type: 'string', value: __PORTAL_HTML_3__ }]
-      }
-    }
-  },
-  output: [{ html_1: '<!DOCTYPE html>…', html_2: '…', html_3: '…</html>' }]
 });
 
 const buildPage = node({
@@ -932,8 +882,6 @@ export default workflow('kantanna-csp-02-portal', '02 · CSP Pricing Portal')
   .to(fetchBillingItems)
   .to(fetchInvoices)
   .to(portalTemplate)
-  .to(portalTemplate2)
-  .to(portalTemplate3)
   .to(buildPage)
   .to(attachToken)
   .to(respondPage)

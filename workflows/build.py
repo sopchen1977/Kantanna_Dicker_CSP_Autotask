@@ -73,30 +73,9 @@ def runtime_literal(filename: str) -> str:
     return json.dumps(code)
 
 
-PORTAL_PARTS = 3
-
-
-def portal_html_parts() -> list:
-    """The portal page, split into PORTAL_PARTS string literals.
-
-    n8n takes a node parameter whole, so a single 100KB field can only be
-    redeployed by re-sending the entire page at once - too much for one tool
-    call, and impossible to review. Split, each part deploys and diffs on its
-    own. Build Portal Page joins them back.
-
-    The split is at LINE boundaries, which keeps __DATA_PLACEHOLDER__ (and
-    every other marker) whole, and the parts are asserted to reassemble into
-    exactly the source file before anything is written.
-    """
-    text = (HERE.parent / "portal" / "portal.html").read_text()
-    lines = text.splitlines(keepends=True)
-    size = -(-len(lines) // PORTAL_PARTS)  # ceil, so the last part is the short one
-    parts = ["".join(lines[i:i + size]) for i in range(0, len(lines), size)]
-    parts += [""] * (PORTAL_PARTS - len(parts))
-    assert "".join(parts) == text, "portal split does not reassemble"
-    assert sum(p.count("__DATA_PLACEHOLDER__") for p in parts) == 1, \
-        "__DATA_PLACEHOLDER__ was split across parts"
-    return [json.dumps(p) for p in parts]
+def portal_html() -> str:
+    """The portal page, injected verbatim into the Portal Template Set node."""
+    return json.dumps((HERE.parent / "portal" / "portal.html").read_text())
 
 
 def signin_html() -> str:
@@ -136,9 +115,8 @@ def build() -> None:
         for token, filename in CODE_TOKENS.items():
             if token in text:
                 text = text.replace(token, runtime_literal(filename))
-        if "__PORTAL_HTML_1__" in text:
-            for i, part in enumerate(portal_html_parts(), start=1):
-                text = text.replace("__PORTAL_HTML_%d__" % i, part)
+        if "__PORTAL_HTML__" in text:
+            text = text.replace("__PORTAL_HTML__", portal_html())
         if "__SIGNIN_HTML__" in text:
             text = text.replace("__SIGNIN_HTML__", signin_html())
         if "__SIGNIN_CODE_HTML__" in text:

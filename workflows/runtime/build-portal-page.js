@@ -132,16 +132,6 @@ lines = lines.map((l) => {
 
 const payload = { lines: lines, mappings: mappings };
 const encoded = Buffer.from(JSON.stringify(payload)).toString('base64');
-// The page arrives in numbered parts, one per Portal Template node - see the
-// note on the first of them for why - and is joined back in order. Read off
-// this node's own input rather than by node name, because the chain hands
-// every part down to the last node: that way the number of parts can change
-// with no change here, and no name to keep in step. A node still carrying
-// the whole page in one `html` field works unchanged.
-const tpl = $input.first().json;
-let page = '';
-for (let i = 1; tpl['html_' + i] !== undefined; i++) page += tpl['html_' + i];
-if (!page) page = tpl.html || '';
-
-const html = page.replace('__DATA_PLACEHOLDER__', encoded);
+const html = $('Portal Template').first().json.html
+  .replace('__DATA_PLACEHOLDER__', encoded);
 return [{ json: { html: html } }];
